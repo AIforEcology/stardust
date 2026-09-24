@@ -11,7 +11,7 @@ import hmac
 import logging
 import threading
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from uuid import UUID
 
@@ -36,6 +36,7 @@ from .otel import (
     span_to_event,
     start_grpc_receiver,
 )
+from .fees import FeePolicy, coverage
 from .pricing_refresh import PricingRefresher, load_initial
 from .store import Store
 
@@ -141,7 +142,9 @@ def create_app(
 
     owned_http = http is None
     client = http or httpx.AsyncClient()
-    broker = Broker(client, store)
+    # Validates the rate at startup: a bad STARDUST_BROKER_FEE_PCT stops Core rather than mis-charging.
+    fees = FeePolicy(settings.broker_fee_pct, settings.broker_min_fee_usd)
+    broker = Broker(client, store, fees)
     refresher = PricingRefresher(
         get_table=lambda: engine.pricing,
         set_table=lambda t: setattr(engine, "pricing", t),
@@ -300,6 +303,11 @@ def create_app(
 
     # --- provider vetting (admin, §10.6) --------------------------------------
 
+    @app.get("/v1/broker/terms")
+    def broker_terms() -> dict:
+        """The broker fee, disclosed publicly so subscribers can show it to their users."""
+        return fees.terms()
+
     @app.get("/v1/providers")
     def list_providers() -> dict:
         return {"providers": [p.__dict__ for p in broker.providers.values() if p.listed]}
@@ -324,6 +332,34 @@ def create_app(
             return broker.delist(provider_id).__dict__
         except BrokerError as e:
             raise HTTPException(404, str(e))
+
+    @app.get("/v1/admin/broker/fees", dependencies=[Depends(require_admin)])
+    def fee_report(since: Optional[datetime] = None, until: Optional[datetime] = None) -> dict:
+        """Fees collected, provider payouts and (with a budget set) operating-cost coverage.
+        Defaults to the current calendar month (UTC)."""
+        now = datetime.now(timezone.utc)
+        start = since or now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = until or now
+        by_status = store.fee_totals(start, end)
+        # Money is committed for orders that were placed and haven't failed.
+        live = [v for k, v in by_status.items() if k != "failed"]
+        fees_usd = round(sum(v["fees_usd"] for v in live), 6)
+        report = {
+            "period": {"since": start.isoformat(), "until": end.isoformat()},
+            "fee_policy": fees.terms(),
+            "orders": sum(v["orders"] for v in live),
+            "provider_payouts_usd": round(sum(v["provider_payouts_usd"] for v in live), 6),
+            "fees_usd": fees_usd,
+            "total_billed_usd": round(sum(v["total_billed_usd"] for v in live), 6),
+            "failed_orders": by_status.get("failed", {}).get("orders", 0),
+            "by_status": by_status,
+            "operating_cost_usd": None,
+            "coverage_pct": None,
+        }
+        if settings.operating_cost_monthly_usd is not None:
+            days = max((end - start).total_seconds() / 86400, 0)
+            report.update(coverage(fees_usd, settings.operating_cost_monthly_usd, days))
+        return report
 
     @app.delete("/v1/admin/users/{user_id}/events", dependencies=[Depends(require_admin)])
     def delete_user_events(user_id: UUID) -> dict:

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from stardust_core.api import create_app
 from stardust_core.config import DEFAULT_ESC, DEFAULT_METHODOLOGY, Settings
+from stardust_core.store import SCHEMA_VERSION
 
 EVENT = {
     "source_layer": "infra_agent",
@@ -34,7 +35,7 @@ def test_health(client):
     assert {k: body[k] for k in ("ok", "methodology_version", "priced_models", "otlp_export", "otlp_grpc_receiver")} == {
         "ok": True, "methodology_version": "0.1.0", "priced_models": 3, "otlp_export": None, "otlp_grpc_receiver": None,
     }
-    assert body["database"]["schema_version"] == 1
+    assert body["database"]["schema_version"] == SCHEMA_VERSION
 
 
 def test_ingest_and_summary(client):

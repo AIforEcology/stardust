@@ -26,7 +26,7 @@ from .models import EnrichedEvent
 log = logging.getLogger(__name__)
 
 # Bump when adding a migration; migrations run in order on open.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _MIGRATIONS: List[str] = [
     # v1
@@ -76,6 +76,13 @@ _MIGRATIONS: List[str] = [
         data          TEXT NOT NULL
     );
     CREATE INDEX orders_subscriber ON orders (subscriber_id, created_at);
+    """,
+    # v2: broker fees (fees.py), as columns so fee reports are plain SQL
+    """
+    ALTER TABLE orders ADD COLUMN provider_price_usd REAL;
+    ALTER TABLE orders ADD COLUMN fee_usd REAL;
+    ALTER TABLE orders ADD COLUMN total_usd REAL;
+    CREATE INDEX orders_created ON orders (created_at);
     """,
 ]
 
@@ -309,13 +316,30 @@ class Store:
             ).rowcount
 
     def save_order(self, order_id: UUID, subscriber_id: str, status: str, created_at: datetime,
-                   data: Dict[str, Any]) -> None:
+                   data: Dict[str, Any], *, provider_price_usd: Optional[float] = None,
+                   fee_usd: Optional[float] = None, total_usd: Optional[float] = None) -> None:
         with self._lock:
             self._conn.execute(
-                """INSERT INTO orders (order_id, subscriber_id, status, created_at, data) VALUES (?, ?, ?, ?, ?)
+                """INSERT INTO orders (order_id, subscriber_id, status, created_at, data,
+                                      provider_price_usd, fee_usd, total_usd)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT (order_id) DO UPDATE SET status = excluded.status, data = excluded.data""",
-                (str(order_id), subscriber_id, status, _utc(created_at), _json(data)),
+                (str(order_id), subscriber_id, status, _utc(created_at), _json(data),
+                 provider_price_usd, fee_usd, total_usd),
             )
+
+    def fee_totals(self, since: datetime, until: datetime) -> Dict[str, Dict[str, Any]]:
+        """Order counts and money per fulfillment status, for orders created in [since, until)."""
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT status, COUNT(*) AS orders,
+                          COALESCE(SUM(provider_price_usd), 0) AS provider_payouts_usd,
+                          COALESCE(SUM(fee_usd), 0) AS fees_usd,
+                          COALESCE(SUM(total_usd), 0) AS total_billed_usd
+                   FROM orders WHERE created_at >= ? AND created_at < ? GROUP BY status""",
+                (_utc(since), _utc(until)),
+            ).fetchall()
+        return {r["status"]: {k: r[k] for k in r.keys() if k != "status"} for r in rows}
 
     def load_order(self, order_id: UUID) -> Optional[Dict[str, Any]]:
         with self._lock:
