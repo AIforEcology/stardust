@@ -37,16 +37,18 @@ def indicator_code(co2e_g: float, cost_usd: Optional[float], total_tokens: Optio
 
 
 def aggregate_code(co2e_g: List[float], cost_usd: List[Optional[float]], tokens: List[Optional[int]], cfg: dict) -> Optional[str]:
-    """Session/dashboard code (§5.2): grade on pooled g/1k tokens, cost and volume on the per-operation mean."""
-    n = len(co2e_g)
-    if n == 0:
+    """Session/dashboard code (§5.2) from per-event values."""
+    known = [c for c in cost_usd if c is not None]
+    return aggregate_code_from_totals(sum(co2e_g), len(co2e_g), sum(t or 0 for t in tokens), sum(known), len(known), cfg)
+
+
+def aggregate_code_from_totals(co2e_g: float, events: int, total_tokens: int, known_cost_usd: float,
+                               known_cost_events: int, cfg: dict) -> Optional[str]:
+    """Session/dashboard code from totals (what SQL returns): grade on pooled g/1k tokens,
+    cost and volume on the per-operation mean."""
+    if events == 0:
         return None
-    total_tokens = sum(t or 0 for t in tokens)
-    known_costs = [c for c in cost_usd if c is not None]
-    mean_cost = sum(known_costs) / len(known_costs) if known_costs else None
+    mean_cost = known_cost_usd / known_cost_events if known_cost_events else None
     # Without tokens, grade the mean operation so a long session isn't penalised for its length.
-    grade = impact_grade(sum(co2e_g), total_tokens, cfg) if total_tokens else impact_grade(sum(co2e_g) / n, None, cfg)
-    return (
-        f"{grade}"
-        f"{cost_tier(mean_cost, cfg)}-{volume_class(round(total_tokens / n), cfg)}"
-    )
+    grade = impact_grade(co2e_g, total_tokens, cfg) if total_tokens else impact_grade(co2e_g / events, None, cfg)
+    return f"{grade}{cost_tier(mean_cost, cfg)}-{volume_class(round(total_tokens / events), cfg)}"

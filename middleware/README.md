@@ -8,7 +8,7 @@ The service in the middle (spec §9.1, §10.4). It receives usage events from su
 python3 -m venv ~/.venvs/stardust   # see the note below about USB drives
 ~/.venvs/stardust/bin/pip install -e "middleware[dev]" -e "providers-service[dev]"
 ~/.venvs/stardust/bin/python middleware/scripts/update_pricing.py   # downloads litellm's pricing file
-cd middleware && ~/.venvs/stardust/bin/uvicorn stardust_core.api:app --port 8080
+cd middleware && ~/.venvs/stardust/bin/uvicorn stardust_core.main:app --port 8080
 ```
 
 Tests: `~/.venvs/stardust/bin/pytest middleware providers-service`
@@ -22,7 +22,8 @@ Tests: `~/.venvs/stardust/bin/pytest middleware providers-service`
 | `POST` | `/v1/events` | Send a usage event; returns the enriched event. A repeated `event_id` returns the original and isn't counted twice |
 | `POST` | `/v1/traces` | OTLP/HTTP trace receiver (protobuf or JSON, optionally gzipped). GenAI spans become events |
 | `GET` | `/v1/events?user_id=&limit=` | Recent enriched events |
-| `GET` | `/v1/summary?user_id=` | Totals plus an aggregate indicator code |
+| `GET` | `/v1/summary?user_id=&org_id=&since=&until=` | Totals plus an aggregate indicator code, for a user, an org or everything, over an optional time window |
+| `GET` | `/v1/summary/daily?user_id=&org_id=&since=&until=` | The same totals per UTC day, for trend charts |
 | `GET` | `/v1/methodology` | The exact factor set in use, for auditability |
 | `GET` | `/v1/pricing/status` | Pricing source, last refresh, last error, and models added/removed/re-priced |
 | `POST` | `/v1/remediation/quotes` | `request_quote(co2e_g, tier_preference)` |
@@ -34,6 +35,7 @@ Tests: `~/.venvs/stardust/bin/pytest middleware providers-service`
 | `POST` | `/v1/admin/providers/{id}/approve` | Vet a provider and assign its tier |
 | `POST` | `/v1/admin/providers/{id}/delist` | Remove a provider from new quotes |
 | `POST` | `/v1/admin/pricing/refresh` | Refresh pricing now |
+| `DELETE` | `/v1/admin/users/{user_id}/events` | Erase one user's events (§14.1) |
 
 Admin endpoints need `STARDUST_ADMIN_TOKEN` set on the server and sent as `X-Stardust-Admin-Token`. They are off when the variable is unset.
 
@@ -54,7 +56,13 @@ Admin endpoints need `STARDUST_ADMIN_TOKEN` set on the server and sent as `X-Sta
 | `STARDUST_OTLP_SIGNALS` | `traces,metrics` (either or both) |
 | `STARDUST_OTLP_METRICS_INTERVAL` | `60` (seconds between metric exports) |
 | `STARDUST_OTLP_HEADERS` | none. `key=value,key2=value2`, e.g. a vendor API key |
+| `STARDUST_DATABASE_PATH` | `~/Library/Application Support/stardust/core.db` on macOS (the user data directory elsewhere). Keep it on a local disk, not a network share or USB drive |
+| `STARDUST_RETENTION_DAYS` | unset (keep forever). Delete events older than this, at startup and every 6 hours |
 | `STARDUST_OTLP_GRPC_LISTEN` | unset (off). Address for the OTLP/gRPC receiver, e.g. `0.0.0.0:4317`. The HTTP receiver at `/v1/traces` is always on |
+
+## Storage
+
+Core keeps events, providers, quotes and orders in one SQLite file, with no database server to install. Retries are de-duplicated by `event_id`, even across restarts, and a hard crash loses nothing committed. [`docs/architecture/database.md`](../docs/architecture/database.md) covers the design, schema, backups, performance (about 14,000 events per second, 1.6 KB per event) and the path to PostgreSQL.
 
 ## OpenTelemetry
 
@@ -100,7 +108,6 @@ To update the committed copy itself, run `scripts/update_pricing.py --ref <SHA>`
 
 ## Not built yet
 
-- Persistent storage (v0.1 keeps events and orders in memory)
 - Live grid-intensity feed (§8.6) and Measured-tier sources (§8.1)
 - Right-sizing scores (§21) and provider-telemetry ingestion (§20)
 - Auth for subscriber endpoints

@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 import httpx
+
+from .store import Store
 
 log = logging.getLogger(__name__)
 
@@ -68,12 +70,33 @@ class Order:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+def _quote_from(d: Dict[str, Any]) -> Quote:
+    return Quote(**{**d, "quote_id": UUID(d["quote_id"]), "expires_at": datetime.fromisoformat(d["expires_at"])})
+
+
+def _order_from(d: Dict[str, Any]) -> Order:
+    return Order(**{
+        **d,
+        "remediation_order_id": UUID(d["remediation_order_id"]),
+        "quote_id": UUID(d["quote_id"]) if d.get("quote_id") else None,
+        "created_at": datetime.fromisoformat(d["created_at"]),
+    })
+
+
 class Broker:
-    def __init__(self, http: httpx.AsyncClient):
+    """Providers are cached in memory (a small set, read on every quote); quotes and orders live in the store."""
+
+    def __init__(self, http: httpx.AsyncClient, store: Store):
         self._http = http
-        self.providers: Dict[str, ProviderEntry] = {}
-        self._quotes: Dict[UUID, Quote] = {}
-        self.orders: Dict[UUID, Order] = {}
+        self._store = store
+        self.providers: Dict[str, ProviderEntry] = {d["provider_id"]: ProviderEntry(**d) for d in store.load_providers()}
+
+    def _save_provider(self, entry: ProviderEntry) -> None:
+        self._store.save_provider(entry.provider_id, entry.status, asdict(entry))
+
+    def _save_order(self, order: Order) -> None:
+        self._store.save_order(order.remediation_order_id, order.subscriber_id, order.fulfillment_status,
+                               order.created_at, asdict(order))
 
     # --- provider onboarding (admin) -----------------------------------------
 
@@ -92,6 +115,7 @@ class Broker:
         if existing and existing.base_url != base_url:
             raise BrokerError(f"provider_id {entry.provider_id!r} is already registered at another URL")
         self.providers[entry.provider_id] = entry
+        self._save_provider(entry)
         return entry
 
     def approve(self, provider_id: str, tier: str) -> ProviderEntry:
@@ -102,11 +126,13 @@ class Broker:
             # §10.6: Tier 1 requires an active Verra / Gold Standard registration.
             raise BrokerError("verified tier requires a Verra or Gold Standard certification")
         entry.tier, entry.status = tier, "approved"
+        self._save_provider(entry)
         return entry
 
     def delist(self, provider_id: str) -> ProviderEntry:
         entry = self._provider(provider_id)
         entry.status = "delisted"
+        self._save_provider(entry)
         return entry
 
     # --- Subscriber API (§10.3) ----------------------------------------------
@@ -123,9 +149,10 @@ class Broker:
         return quotes
 
     async def submit_remediation_order(self, quote_id: UUID, subscriber_id: str, payment_ref: Optional[str]) -> Order:
-        quote = self._quotes.pop(quote_id, None)
-        if quote is None:
+        raw = self._store.take_quote(quote_id)  # atomic: a quote can be used once
+        if raw is None:
             raise BrokerError("unknown or already-used quote")
+        quote = _quote_from(raw)
         if quote.expires_at < datetime.now(timezone.utc):
             raise BrokerError("quote has expired; request a new one")
         provider = self._provider(quote.provider_id)
@@ -154,13 +181,14 @@ class Broker:
         except httpx.HTTPError as e:
             log.warning("fulfill failed at %s: %s", provider.provider_id, e)
             order.fulfillment_status = "failed"
-        self.orders[order.remediation_order_id] = order
+        self._save_order(order)
         return order
 
     async def get_fulfillment_status(self, order_id: UUID) -> Order:
-        order = self.orders.get(order_id)
-        if order is None:
+        raw = self._store.load_order(order_id)
+        if raw is None:
             raise BrokerError("unknown order")
+        order = _order_from(raw)
         if order.provider_id and order.fulfillment_status in ("ordered", "fulfilling"):
             provider = self._provider(order.provider_id)
             try:
@@ -169,6 +197,7 @@ class Broker:
                 order.certificate_ref = status.get("certificate_ref") or order.certificate_ref
             except httpx.HTTPError as e:
                 log.warning("status poll failed at %s: %s", provider.provider_id, e)
+            self._save_order(order)
         return order
 
     # --- internals ------------------------------------------------------------
@@ -189,7 +218,7 @@ class Broker:
             provider_tier=p.tier or "emerging",
             expires_at=datetime.now(timezone.utc) + QUOTE_TTL,
         )
-        self._quotes[q.quote_id] = q
+        self._store.save_quote(q.quote_id, q.expires_at, asdict(q))
         return q
 
     def _provider(self, provider_id: str) -> ProviderEntry:
