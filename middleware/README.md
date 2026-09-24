@@ -15,6 +15,21 @@ Tests: `~/.venvs/stardust/bin/pytest middleware providers-service`
 
 > **exFAT / USB drives:** macOS writes `._*` files on exFAT volumes, and Python virtualenvs break when one lands next to a `.pth` file. Keep the virtualenv on an APFS disk (like `~/.venvs`).
 
+## Run at login (macOS)
+
+```bash
+middleware/scripts/install-macos-service.sh
+```
+
+This installs Core as a login service (a LaunchAgent, `org.aifore.stardust-core`) on `http://127.0.0.1:8080`:
+
+- **Runs from its own copy:** Core, its settings files and the price list are installed into `~/Library/Application Support/stardust/`, next to the database. The service never reads the repository, so it works even if the repo is on an external drive (macOS blocks login services from removable volumes).
+- **Starts at login and restarts if it crashes.** Logs go to `~/Library/Logs/stardust/core.log`.
+- **Update** after changing Core by running the script again. It rebuilds the copy and restarts the service. Your data is kept.
+- **Remove** with `middleware/scripts/install-macos-service.sh --uninstall`. This stops the service but keeps your data.
+
+To set other options, such as `STARDUST_OTLP_ENDPOINT`, put them in `~/Library/Application Support/stardust/service.env`, one `KEY=VALUE` per line, and re-run the script. Don't edit the plist directly: the script rewrites it on every run.
+
 ## API
 
 | Method | Path | Purpose |
