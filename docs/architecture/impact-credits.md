@@ -74,7 +74,7 @@ flowchart LR
 | `retire(serials, beneficiary, claim_period, purpose)` | Retire in the subscriber's name |
 | `verify_serial(serial)` | Check a serial against the public registry |
 
-Many registries have no open write API. Early connectors retire through an account holder (AIforE or a licensed partner) and move to API automation where registries allow it.
+Many registries have no open write API. Early connectors record retirements performed by the provider, by the buyer's own registry account, or by a licensed partner, and move to API automation where registries allow it. AIforE doesn't hold credits for others (see [operating model](#operating-model-technology-and-connection-not-financial-brokerage)).
 
 ### Lifecycle emissions (§8.8)
 
@@ -128,7 +128,7 @@ Carbon splits into components that are always reported separately, each with its
 | 3 | **Net Impact Ledger (read-only)** | `GET /v1/ledger`: footprint per dimension, with retired credits from existing carbon orders and residuals. Nothing summed across dimensions | Summary, orders, broker |
 | 4 | **Provider SDK categories** | `REN`, `WRR`, `HRC`, `RCY`; `quote(quantity, unit)` alongside `quote(co2e_g)`; §22.4 telemetry schema as a new record type | Existing carbon providers work unmodified (category defaults to carbon) |
 | 5 | **Impact-vector quotes** | `request_quote` optionally takes `{co2e_g, kwh, water_l, heat_kwh_th, materials_kg}` plus matching preferences and returns a basket; like-for-like enforced; fees apply per line. Orders gain the §22.5 fields (migration v4) | `co2e_g`-only requests and responses |
-| 6 | **Connector interface + manual connector** | The connector interface, and an "account-holder" connector where an AIforE admin records retirements (serials, registry, retirement reference) done by hand in the registry. The ledger shows them | No automated registry calls yet |
+| 6 | **Connector interface + manual connector** | The connector interface, and a manual connector where an admin records retirements (serials, registry, retirement reference) that the provider, buyer or a licensed partner performed in the registry. Stardust verifies them where a read API exists. The ledger shows them | No automated registry calls yet |
 | 7 | **Real connectors, one at a time** | Starting with the registry that grants API access first. Hourly matching once a granular-certificate registry is connected | Other connectors |
 | 8 | **Publish the measurement framework** (§22.7) | Schemas, units and mappings (SCI, GHG Protocol, ISO/IEC 30134, VWBA, EnergyTag) as a standalone document for public comment | Code |
 
