@@ -1,18 +1,24 @@
 // Content script for AI chat web apps. Watches for finished assistant replies and
-// reports *character counts only* as estimated tokens. No message text leaves the
-// page (spec §14.1). Does nothing unless the user opted in to this site.
+// reports *character counts only* as estimated tokens, plus the selected model where the
+// page shows it. No message text leaves the page (spec §14.1). Does nothing unless the
+// user opted in to this site.
 
+import { accountTurn, fingerprint, hiddenCharsEstimate, remember } from "./context.ts";
 import { estimateTokens } from "./estimate.ts";
-import { siteForHost } from "./sites.ts";
+import { siteForHost, type SiteAdapter } from "./sites.ts";
 import type { UsageMessage } from "./types.ts";
 
 const POLL_MS = 1000;
-/** A reply counts as finished once its length is unchanged for this many polls. */
+/** A reply counts as finished once its length is unchanged for this many polls (and it isn't streaming). */
 const STABLE_POLLS = 2;
+const TOTALS_KEY = "conversationChars";
 
 const site = siteForHost(location.hostname);
 
 const reported = new WeakSet<Element>();
+// Replies already reported this page session, by conversation + content fingerprint, so a
+// reply the page unmounts and re-renders (virtualized transcripts) isn't counted twice.
+const reportedPrints = new Set<string>();
 const lastLength = new WeakMap<Element, { len: number; stable: number }>();
 let baselined = false;
 
@@ -24,13 +30,70 @@ function precedes(a: Element, b: Element): boolean {
   return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
 
+function conversationKey(): string {
+  return `${site!.id}:${location.pathname}`;
+}
+
+function isStreaming(adapter: SiteAdapter, reply: Element): boolean {
+  if (!adapter.streamingAttr) return false;
+  return reply.closest(`[${adapter.streamingAttr}]`)?.getAttribute(adapter.streamingAttr) === "true";
+}
+
+function selectedModel(adapter: SiteAdapter): string | undefined {
+  if (!adapter.modelSelector || !adapter.parseModel) return undefined;
+  const el = document.querySelector(adapter.modelSelector);
+  const label = el?.getAttribute("aria-label") || el?.textContent || "";
+  return adapter.parseModel(label);
+}
+
+/** Context before `userTurn` for a conversation we have no running total for: count what's rendered, estimate the rest. */
+function measuredContextBefore(adapter: SiteAdapter, userTurn: Element | undefined, reply: Element): number {
+  const boundary = userTurn ?? reply;
+  const turns = Array.from(document.querySelectorAll(`${adapter.assistantSelector}, ${adapter.userSelector}`));
+  const earlier = turns.filter((t) => t !== reply && t !== userTurn && precedes(t, boundary));
+  const renderedChars = earlier.reduce((n, t) => n + textLength(t), 0);
+  if (!adapter.spacerSelector) return renderedChars;
+
+  const rendered = turns.filter((t) => t !== reply);
+  const ratioChars = rendered.reduce((n, t) => n + textLength(t), 0);
+  const ratioPx = rendered.reduce((n, t) => n + t.getBoundingClientRect().height, 0);
+  const spacerPx = Array.from(document.querySelectorAll(adapter.spacerSelector))
+    .filter((s) => precedes(s, boundary))
+    .reduce((n, s) => n + s.getBoundingClientRect().height, 0);
+  return renderedChars + hiddenCharsEstimate(spacerPx, ratioChars, ratioPx);
+}
+
+async function report(adapter: SiteAdapter, reply: Element, replyChars: number): Promise<void> {
+  const users = Array.from(document.querySelectorAll(adapter.userSelector)).filter((u) => precedes(u, reply));
+  const userTurn = users.at(-1);
+  const userChars = userTurn ? textLength(userTurn) : 0;
+
+  const key = conversationKey();
+  const totals = ((await chrome.storage.local.get(TOTALS_KEY))[TOTALS_KEY] ?? {}) as Record<string, number>;
+  const prior = totals[key] ?? measuredContextBefore(adapter, userTurn, reply);
+  const { inputChars, nextContextChars } = accountTurn(prior, userChars, replyChars);
+  await chrome.storage.local.set({ [TOTALS_KEY]: remember(totals, key, nextContextChars) });
+
+  const msg: UsageMessage = {
+    type: "stardust:usage",
+    siteId: adapter.id,
+    model: selectedModel(adapter),
+    tokensIn: estimateTokens(inputChars),
+    tokensOut: estimateTokens(replyChars),
+  };
+  void chrome.runtime.sendMessage(msg);
+}
+
 function tick(): void {
   if (!site || document.visibilityState !== "visible") return;
   const replies = Array.from(document.querySelectorAll(site.assistantSelector));
 
   // Don't report conversation history that was already on the page when we loaded.
   if (!baselined) {
-    replies.forEach((r) => reported.add(r));
+    for (const r of replies) {
+      reported.add(r);
+      reportedPrints.add(`${conversationKey()}|${fingerprint((r.textContent ?? "").trim())}`);
+    }
     baselined = true;
     return;
   }
@@ -41,21 +104,13 @@ function tick(): void {
     const prev = lastLength.get(reply);
     const stable = prev && prev.len === len ? prev.stable + 1 : 0;
     lastLength.set(reply, { len, stable });
-    if (len === 0 || stable < STABLE_POLLS) continue;
+    if (len === 0 || stable < STABLE_POLLS || isStreaming(site, reply)) continue;
 
     reported.add(reply);
-    // Chat apps resend the whole visible conversation as context each turn, so input
-    // is every earlier message. System prompts and hidden context are not visible.
-    const turns = Array.from(document.querySelectorAll(`${site.assistantSelector}, ${site.userSelector}`));
-    const contextChars = turns.filter((t) => t !== reply && precedes(t, reply)).reduce((n, t) => n + textLength(t), 0);
-
-    const msg: UsageMessage = {
-      type: "stardust:usage",
-      siteId: site.id,
-      tokensIn: estimateTokens(contextChars),
-      tokensOut: estimateTokens(len),
-    };
-    void chrome.runtime.sendMessage(msg);
+    const print = `${conversationKey()}|${fingerprint((reply.textContent ?? "").trim())}`;
+    if (reportedPrints.has(print)) continue; // the same reply, re-rendered
+    reportedPrints.add(print);
+    void report(site, reply, len);
   }
 }
 
