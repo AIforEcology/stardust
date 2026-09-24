@@ -132,10 +132,96 @@ Carbon splits into components that are always reported separately, each with its
 | 7 | **Real connectors, one at a time** | Starting with the registry that grants API access first. Hourly matching once a granular-certificate registry is connected | Other connectors |
 | 8 | **Publish the measurement framework** (§22.7) | Schemas, units and mappings (SCI, GHG Protocol, ISO/IEC 30134, VWBA, EnergyTag) as a standalone document for public comment | Code |
 
-Steps 1–4 are safe to build now. Steps 5–7 depend on open questions only AIforE can settle (§19):
+Steps 1–4 are safe to build now. Steps 5–7 depended on open questions only AIforE can settle (§19). The first answers and research are in [Decisions and findings](#decisions-and-findings-september-2026) below:
 
 - **Legal review** of brokering environmental commodities across markets as a nonprofit.
 - **Account holder:** which registries grant programmatic access, and whether AIforE or a licensed partner holds the account.
 - **Programs:** which water and heat programs to accept first.
 
 The manual connector (step 6) lets the ledger and the retirement flow be built and tested before any of those are settled.
+
+## Decisions and findings (September 2026)
+
+### Operating model: technology and connection, not financial brokerage
+
+AIforE's intent is to **provide technology and connect credits, not broker them in a financial sense**. That translates into design rules for Stardust. These are engineering constraints that follow from the intent, not legal advice, and the final structure should be confirmed with counsel experienced in environmental markets and nonprofit law.
+
+| Rule | What it means in Stardust | Status today |
+|---|---|---|
+| **Never take title** | Credits go from the provider's registry account straight to the buyer's, or are retired directly in the buyer's name. AIforE never holds credit inventory | Consistent: the broker routes orders to providers and holds nothing. The spec's phrase "purchases from Provider inventory" (§22.5) should read "the Subscriber purchases from the Provider" |
+| **Never hold or move money** | Buyers pay providers directly. Stardust stores only an opaque payment reference | Already true (`payment_ref`, §18.2) |
+| **Don't set prices** | Providers quote their own prices; Stardust displays and compares them | Already true |
+| **Retire through the seller or a licensed account holder** | Where a registry requires a KYC'd account holder, the provider, the buyer's own account or a licensed partner performs the retirement. Stardust records and verifies the reference | Planned (connector step 6) |
+| **Fees for technology, not commissions** | A percentage of each credit transaction is the classic shape of a brokerage commission. Fees framed and structured as payment for software and verification services fit the intent better. Counsel should confirm the structure, including unrelated-business-income treatment for a 501(c)(3) | **Open:** the fee in AIforEcology/stardust#10 is a per-order percentage named "broker fee". See below |
+| **Stay out of derivatives and trading** | Stardust supports spot purchase-and-retire for a buyer's own claims, not resale, futures or trading | Consistent |
+
+For context: the CFTC approved guidance on listing voluntary carbon credit *derivatives* in September 2024 and withdrew it in September 2025. Staying with retire-only spot transactions keeps Stardust away from that area.
+
+**The fee question (#10):** before merging, decide between:
+- (a) keeping the percentage but renaming it a **technology fee**, charged under a technology-services agreement separately from the credit price
+- (b) a **subscription or per-API-call** fee for subscribers
+- (c) a **provider-paid** listing and MRV-data fee
+
+The code supports (a) with a rename; (b) and (c) are small changes. The disclosure and coverage reporting apply to all three.
+
+### Registry programmatic access
+
+Checked against registry documentation and announcements in September 2026. APIs change quickly, so recheck before building each connector.
+
+| Registry | Dimension | Programmatic access | Can transfer / retire by API? | Recommended use |
+|---|---|---|---|---|
+| **M-RETS** (CleanCounts) | Electricity (RECs, hourly certificates); renewable thermal | REST API mirroring nearly all UI functions, with a sandbox for registered organizations | **Yes** | **First write connector.** Also issues hourly certificates (first hourly retirement in 2021) and Renewable Thermal Certificates |
+| **Puro.earth** | Carbon (engineered removals, CORCs) | Public Registry API (read); Puro Connect API for sales-channel partners covering accounts, transfers and retirements | **Yes**, as a partner | Durable-removal connector via partnership |
+| **Isometric** | Carbon (durable removals) | Documented registry API. Organization-authenticated (client secret plus JWT); public registry data | Read confirmed; write needs confirming with Isometric | Durable-removal connector and verification |
+| **Evident** (I-REC) | Electricity outside US/EU | REST API integration available to registry users; Xpansiv Connect | **Yes**, for registry users | International RECs |
+| **S&P Global Environmental Registry** | Water (tracks BEF Water Restoration Certificates); also carbon and biodiversity | Public view includes an API for retired credits | Read: yes. Write: account holders | Verify WRC retirements |
+| **Gold Standard** (new Impact Registry, Trovio) | Carbon; Water Benefit Certificates | API-first registry planned for **Q4 2026**: issuance, transfer and retirement via API, with KYC | **Planned** | Connector after launch |
+| **Verra** (new registry, S&P Global) | Carbon | New registry launched **27 July 2026**; transaction APIs "over the next several phases", no date | **Not yet** | Manual retirement plus verification until the APIs ship |
+| **ACR, CAR** (APX) | Carbon | Public data export; no transaction API found | No | Manual, plus OffsetsDB verification |
+| **PJM-GATS** | Electricity | API exists, but GATS doesn't allow retirements through it | **No** (retire in the UI) | Manual |
+| **WREGIS** | Electricity (Western US, including Washington) | No public API documentation found; ask the WREGIS help desk | Unknown | Manual; ask WECC |
+| **CarbonPlan OffsetsDB** | Carbon (ACR, ART, CAR, Cercarbono, Gold Standard, Isometric, Verra) | Open data and API, updated daily | Read-only | **Independent `verify_serial` across carbon registries**, with no account needed |
+
+**Suggested connector order:**
+1. **OffsetsDB, read-only verification.** It needs no accounts, contracts or legal decisions, and immediately lets Stardust check that a claimed carbon retirement exists.
+2. **M-RETS.** Programmatic transfer and retirement for RECs, hourly matching, and renewable thermal certificates, all with a sandbox.
+3. **Puro.earth or Isometric** for durable carbon removal, through a partnership.
+4. **S&P Global Environmental Registry, read-only**, to verify water certificate retirements.
+5. **Gold Standard** after its Q4 2026 launch.
+6. **Verra** when its transaction APIs ship.
+
+Everything else starts with the manual connector (step 6).
+
+### First water and heat programs
+
+**Water: start with BEF Water Restoration Certificates, accounted with WRI VWBA.**
+- **Right fit for AIforE:** BEF (Bonneville Environmental Foundation) is a nonprofit restoring freshwater ecosystems, mostly in the western US. That matches AIforE's mission, its Pacific Northwest home, and the data-center regions where US AI workloads draw water, which serves the "same or stressed watershed" matching rule (§22.1).
+- **Verifiable:** projects are verified by third parties (Watercourse Engineering or the National Fish and Wildlife Foundation) and registered on S&P Global's Environmental Registry, which publishes retired credits through an API. Stardust can verify a retirement without handling the sale.
+- **Consistent with "connect, don't broker":** buyers purchase directly from BEF or its established retail partners, and Stardust records and verifies the retirement.
+- **Simple unit:** 1 certificate = 1,000 gallons ≈ 3,785 liters, a direct conversion from Stardust's `water_ml`.
+- **Accounting:** report water benefit with WRI Volumetric Water Benefit Accounting, the method widely used for corporate "water positive" commitments. BEF supplies the instrument; VWBA supplies the accounting.
+- **Later:** Gold Standard Water Benefit Certificates (1 certificate = 1 m³; projects must also advance at least three Sustainable Development Goals, often water-access projects outside the US). They suit international subscribers once Gold Standard's API registry launches.
+
+**Heat: measure and disclose first; credit only where a recognized instrument exists.**
+- **No US credit for waste heat:** there's no US credit market for data-center waste heat. White certificates (France CEE, Italy TEE) are EU-only and jurisdiction-specific. US activity is policy-driven so far: Virginia's first data-center heat-reuse bill (HB323), New York's thermal energy networks law, and Washington State's Industrial Symbiosis Program grants.
+- **Phase 1: disclose, no credit.** Record heat exported (`HEX`) and Energy Reuse Factor (`ERF`, ISO/IEC 30134-6) from heat-recovery providers and prosumers, and show them in the Net Impact Ledger as **disclosed benefit without a credit claim**. This keeps "one benefit, one claim" intact and gives data-center operators a reporting format, which is itself a contribution to the §22.7 standard.
+- **Credits, where eligible:** accept **M-RETS Renewable Thermal Certificates** where recovered heat qualifies. M-RETS issues these for recovered steam from electric generators and for sewer and wastewater heat recovery. This reuses the M-RETS connector, so it adds no new integration.
+- **Displaced fossil heating:** accept carbon credits from verified waste-heat-recovery projects under existing carbon methodologies, counted in the **carbon** dimension (like for like), not as heat.
+- **Defer white certificates** until an EU partner or subscriber needs them.
+
+### Sources
+
+- M-RETS API: [mrets.org/api](https://www.mrets.org/api/); certificate retirement: [M-RETS Help Center](https://mrets.github.io/Help/certificates_retiring_certificates); renewable thermal tracking: [CleanCounts](https://cleancounts.org/solutions/renewable-thermal-tracking/); hourly certificates: [EnergyTag](https://energytag.org/hourly-matching-exists-today-you-just-have-to-look/)
+- Puro.earth APIs: [Registry API and MyPuro API announcement](https://puro.earth/our-blog/Puro-earth-Launches-Game-Changing-Registry-API-MyPuro-API)
+- Isometric: [Registry API reference](https://docs.isometric.com/api-reference/registry/retirement-credit-batches), [API article](https://isometric.com/writing-articles/increasing-transparency-in-carbon-markets-with-isometrics-api)
+- Evident / I-REC: [Guidance for API integration](https://www.trackingstandard.org/guidance-for-api-integration-with-evident-registry-for-i-rece/)
+- S&P Global Environmental Registry: [product page](https://prod.azure.ihsmarkit.com/commodityinsights/en/ci/products/environmental-registry.html), [public reports](https://mer.markit.com/)
+- Gold Standard Impact Registry: [announcement](https://www.goldstandard.org/news/gold-standard-connects-carbon-markets-with-next-generation-impact-registry); Water Benefit Certificates: [Gold Standard](https://www.goldstandard.org/articles/gold-standard-water-benefit-certificates)
+- Verra registry: [launch announcement](https://verra.org/verra-launches-next-generation-registry-with-sp-global-energy/), [S&P Global press release](https://press.spglobal.com/2025-08-21-Verra-and-S-P-Global-Commodity-Insights-to-Advance-Carbon-Market-Integration-with-Next-Generation-Registry)
+- ACR / CAR on APX: [APX carbon registries](https://apx.com/carbon-registries/)
+- PJM-GATS hourly certificates and API limits: [info sheet](https://www.pjm-eis.com/-/media/DotCom/pjm-eis/rec-creation/hourly-certification-info-sheet.pdf)
+- WREGIS: [WECC](https://www.wecc.org/program-areas/wregis)
+- CarbonPlan OffsetsDB: [methods](https://carbonplan.org/research/offsets-db-methods), [offsets-db-api](https://github.com/carbonplan/offsets-db-api)
+- BEF Water Restoration Certificates: [BEF](https://www.b-e-f.org/programs/water-restoration-certificates/), [FAQs](https://www.b-e-f.org/faqs/)
+- Data-center heat reuse policy: [EESI](https://www.eesi.org/articles/view/thermal-energy-networks-turn-data-center-waste-heat-into-a-hot-commodity), [David Gardiner and Associates tracker](https://www.dgardiner.com/data-center-heat-reuse-policy-overview-and-tracker/)
+- CFTC voluntary carbon credit derivatives guidance: [approved Sept 2024](https://www.cftc.gov/PressRoom/PressReleases/8969-24), [withdrawn Sept 2025](https://www.cftc.gov/PressRoom/PressReleases/9119-25)
