@@ -10,7 +10,8 @@ The open standard shared by every part of Stardust (spec §17.1). Anyone can emi
 | [`remediation.schema.json`](remediation.schema.json) | Provider registration, catalog, quotes and orders | §10.2–§10.5 |
 | [`provider-telemetry.schema.json`](provider-telemetry.schema.json) | Carbon-capture provider telemetry, keyed by 3-letter field codes | §20 |
 | [`otel-attributes.md`](otel-attributes.md) | How Stardust maps onto OpenTelemetry: `gen_ai.*` in, `gen_ai.*` + `stardust.*` out | §11 |
-| [`factors/methodology-v0.1.json`](factors/methodology-v0.1.json) | Versioned factors: energy per token, grid intensity and mix, water, indicator thresholds, right-sizing weights | §5.1, §8, §21.4 |
+| [`factors/methodology-v0.2.json`](factors/methodology-v0.2.json) | **Current.** Versioned factors: energy per token, grid intensity and mix, water (on-site and off-site), heat, indicator thresholds, right-sizing weights | §5.1, §8, §21.4, §22 |
+| [`factors/methodology-v0.1.json`](factors/methodology-v0.1.json) | The previous factor set, kept so events recorded with it can be audited. Same numbers, without heat | §5.1, §8, §21.4 |
 
 ## Methodology v0.1 is a draft
 

@@ -50,7 +50,28 @@
     },
     "water_ml": {
       "type": "number",
-      "minimum": 0
+      "minimum": 0,
+      "description": "Total water: water_onsite_ml + water_offsite_ml."
+    },
+    "water_onsite_ml": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Cooling water consumed at the data center (WUE). Null on events recorded before methodology 0.2."
+    },
+    "water_offsite_ml": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Water consumed generating the electricity used. Null on events recorded before methodology 0.2."
+    },
+    "heat_rejected_wh": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Heat from the electricity used, which IT equipment turns almost entirely into heat. Methodology 0.2+."
+    },
+    "heat_recovered_wh": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Heat reused: energy_wh x the reported energy_reuse_factor. Null (unknown, not zero) when no factor was reported."
     },
     "particulate_mg": {
       "type": [

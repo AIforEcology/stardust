@@ -82,7 +82,14 @@ class Methodology:
         co2e_g = energy_wh / 1000 * grid.intensity_g_per_kwh
         water = self.cfg["water"]
         # Wh → kWh (/1000) and L → mL (*1000) cancel out.
-        water_ml = energy_wh * (water["onsite_wue_l_per_kwh"]["value"] + water["generation_l_per_kwh"]["value"])
+        water_onsite_ml = energy_wh * water["onsite_wue_l_per_kwh"]["value"]
+        water_offsite_ml = energy_wh * water["generation_l_per_kwh"]["value"]
+        # Heat needs methodology 0.2+; older factor files leave it out rather than guess.
+        heat = self.cfg.get("heat")
+        heat_rejected_wh = energy_wh * heat["rejected_fraction_of_energy"]["value"] if heat else None
+        # Reported, not modeled: without the facility's ERF, recovered heat is unknown, not zero.
+        erf = event.energy_reuse_factor
+        heat_recovered_wh = energy_wh * erf if heat and erf is not None else None
 
         cost = self.pricing.cost_usd(event.provider, event.model, event.tokens_in, event.tokens_out, event.tokens_cached_in)
         esc, share, diversified = self.energy_source(grid)
@@ -94,7 +101,11 @@ class Methodology:
             energy_wh=energy_wh,
             grid_intensity_g_per_kwh=grid.intensity_g_per_kwh,
             co2e_g=co2e_g,
-            water_ml=water_ml,
+            water_ml=water_onsite_ml + water_offsite_ml,
+            water_onsite_ml=water_onsite_ml,
+            water_offsite_ml=water_offsite_ml,
+            heat_rejected_wh=heat_rejected_wh,
+            heat_recovered_wh=heat_recovered_wh,
             confidence_tier=confidence,
             indicator_code=indicator.indicator_code(co2e_g, cost, event.total_tokens, self.cfg["indicator"]),
             energy_source_code=esc,

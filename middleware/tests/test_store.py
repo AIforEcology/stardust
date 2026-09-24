@@ -73,6 +73,11 @@ def test_summary_filters_and_daily_totals(pricing_file, tmp_path):
         assert s["cost_unknown_events"] == 1
         assert s["indicator_code"] == "C3-S"
 
+        assert s["water_onsite_ml"] + s["water_offsite_ml"] == pytest.approx(s["water_ml"])
+        assert s["water_unsplit_ml"] == 0
+        assert s["heat_rejected_wh"] == pytest.approx(s["energy_wh"])
+        assert (s["heat_recovered_wh"], s["heat_recovered_events"]) == (None, 0)  # unknown, not zero
+
         days = c.get("/v1/summary/daily", params={"user_id": USER}).json()["days"]
         assert [(d["day"], d["events"]) for d in days] == [("2026-09-20", 1), ("2026-09-21", 1), ("2026-09-22", 1)]
 
@@ -167,3 +172,38 @@ def test_default_path_is_outside_the_repo():
     path = default_database_path()
     assert path.name == "core.db" and path.parent.name == "stardust"
     assert "stardust/middleware" not in str(path)
+
+
+def test_heat_recovered_is_summed_only_where_reported(pricing_file, tmp_path):
+    with TestClient(create_app(settings(pricing_file, tmp_path / "core.db"))) as c:
+        a = c.post("/v1/events", json=event(energy_reuse_factor=0.4)).json()
+        c.post("/v1/events", json=event())
+        s = c.get("/v1/summary").json()
+        assert s["heat_recovered_events"] == 1
+        assert s["heat_recovered_wh"] == pytest.approx(a["energy_wh"] * 0.4)
+        assert c.get("/v1/summary/daily").json()["days"][0]["heat_recovered_wh"] == pytest.approx(a["energy_wh"] * 0.4)
+
+
+def test_v2_events_migrate_to_v3(tmp_path):
+    from stardust_core.store import _MIGRATIONS
+
+    db = tmp_path / "core.db"
+    conn = sqlite3.connect(db)
+    for script in _MIGRATIONS[:2]:
+        for statement in script.split(";"):
+            if statement.strip():
+                conn.execute(statement)
+    conn.execute("PRAGMA user_version=2")
+    conn.execute("""INSERT INTO events (event_id, ts, source_layer, provider, model, energy_wh, co2e_g, water_ml,
+                        confidence_tier, indicator_code, data)
+                    VALUES ('e1', '2026-09-20T00:00:00+00:00', 'infra_agent', 'anthropic', 'm', 2.0, 1.0, 9.88,
+                        'modeled', 'C3-S', '{}')""")
+    conn.commit()
+    conn.close()
+
+    store = Store(db)
+    assert store.stats()["schema_version"] == SCHEMA_VERSION == 3
+    a = store.aggregate()
+    assert a.heat_rejected_wh == 2.0             # back-filled from energy
+    assert a.water_ml == 9.88 and a.water_onsite_ml == 0  # old water stays whole, reported as unsplit
+    assert (a.heat_recovered_wh, a.heat_recovered_events) == (None, 0)

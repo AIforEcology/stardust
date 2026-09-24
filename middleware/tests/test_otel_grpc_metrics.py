@@ -136,6 +136,15 @@ def test_metrics_accumulate_by_dimension(pricing_file):
     assert anth["stardust.esc.code"] == "NGP"
     assert "stardust.user_id" not in anth and "stardust.event_id" not in anth  # keep cardinality bounded
 
+    # Water splits by scope and still sums to the total; heat recovered only where an ERF was reported.
+    water = {}
+    for a, v in m["stardust.water"]:
+        water[a["stardust.water.scope"]] = water.get(a["stardust.water.scope"], 0) + v
+    anth_wh = 2 * 0.425
+    assert water["onsite"] > 0 and water["offsite"] > 0
+    assert sum(v for a, v in m["stardust.heat.rejected"] if a["gen_ai.provider.name"] == "anthropic") == pytest.approx(anth_wh)
+    assert "stardust.heat.recovered" not in m
+
 
 def test_duplicate_events_do_not_inflate_metrics(pricing_file):
     reader = InMemoryMetricReader()

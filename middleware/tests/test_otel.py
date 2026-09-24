@@ -183,6 +183,13 @@ def test_mapping_details():
     e = span_to_event(OtlpSpan(**base, attributes=genai_attrs(**{"stardust.user_id": uid, "stardust.source_layer": "chat_plugin"})))
     assert (str(e.user_id), e.source_layer.value) == (uid, "chat_plugin")
 
+    # A facility's Energy Reuse Factor rides along as a span or resource attribute; bad values are ignored.
+    e = span_to_event(OtlpSpan(**base, resource={"stardust.facility.energy_reuse_factor": 0.25}, attributes=genai_attrs()))
+    assert e.energy_reuse_factor == 0.25
+    for bad in (1.5, "lots", True):
+        e = span_to_event(OtlpSpan(**base, attributes=genai_attrs(**{"stardust.facility.energy_reuse_factor": bad})))
+        assert e.energy_reuse_factor is None
+
     with pytest.raises(ValueError):
         span_to_event(OtlpSpan(**base, attributes=genai_attrs(**{"gen_ai.usage.output_tokens": True})))
 

@@ -60,7 +60,7 @@ Admin endpoints need `STARDUST_ADMIN_TOKEN` set on the server and sent as `X-Sta
 
 | Variable | Default |
 |---|---|
-| `STARDUST_METHODOLOGY_FILE` | `schema/factors/methodology-v0.1.json` |
+| `STARDUST_METHODOLOGY_FILE` | `schema/factors/methodology-v0.2.json` |
 | `STARDUST_PRICING_FILE` | `middleware/data/model_prices_and_context_window.json` (vendored, pinned copy) |
 | `STARDUST_PRICING_REFRESH` | `once`: refresh at startup. Or a number of hours (e.g. `24`) to repeat, or `off` |
 | `STARDUST_PRICING_REF` | `main` (litellm git ref to fetch; a commit SHA pins it) |
