@@ -12,6 +12,8 @@ export interface SiteAdapter {
   assistantSelector: string;
   /** Matches each user turn, in document order. */
   userSelector: string;
+  /** Within a user turn, the parts holding the typed text (excludes hidden labels); all matches are summed. */
+  userTextSelector?: string;
   /** Ancestor attribute that is "true" while a reply is still streaming. */
   streamingAttr?: string;
   /** Placeholders a virtualized transcript uses for turns it hasn't rendered. */
@@ -20,6 +22,8 @@ export interface SiteAdapter {
   modelSelector?: string;
   /** Turn the model element's label into an API model id; undefined if unrecognized. */
   parseModel?: (label: string) => string | undefined;
+  /** The model that produced a specific reply, when the page records it per message (preferred). */
+  replyModel?: (reply: Element) => string | undefined;
   /** Whether the selectors were checked against the live site (and when). */
   verified?: string;
 }
@@ -30,6 +34,22 @@ export function parseClaudeModel(label: string): string | undefined {
   return m ? `claude-${m[1].toLowerCase()}-${m[2].replace(".", "-")}` : undefined;
 }
 
+/** ChatGPT's data-message-model-slug uses hyphens where API ids use dots: "gpt-5-6" → "gpt-5.6". */
+export function parseChatGPTSlug(slug: string | null | undefined): string | undefined {
+  if (!slug) return undefined;
+  return slug.trim().toLowerCase().replace(/^gpt-(\d+)-(\d+)(?=$|-)/, "gpt-$1.$2");
+}
+
+/**
+ * Gemini shows a mode ("Open mode picker, currently Flash"), not a model version. It maps to a
+ * family name that sets the size tier; with no exact version there's no price, so cost stays unknown.
+ */
+export function parseGeminiMode(label: string): string | undefined {
+  const m = label.match(/currently\s+(.+?)\s*$/i);
+  if (!m) return undefined;
+  return `gemini-${m[1].trim().toLowerCase().replace(/\s+/g, "-")}`;
+}
+
 export const SITES: SiteAdapter[] = [
   {
     id: "chatgpt",
@@ -38,6 +58,8 @@ export const SITES: SiteAdapter[] = [
     hosts: ["chatgpt.com", "chat.openai.com"],
     assistantSelector: '[data-message-author-role="assistant"]',
     userSelector: '[data-message-author-role="user"]',
+    replyModel: (reply) => parseChatGPTSlug(reply.getAttribute("data-message-model-slug")),
+    verified: "2026-09-24",
   },
   {
     id: "claude",
@@ -57,8 +79,14 @@ export const SITES: SiteAdapter[] = [
     name: "Gemini",
     provider: "google",
     hosts: ["gemini.google.com"],
-    assistantSelector: "model-response",
+    // model-response also wraps UI text; message-content is the answer itself.
+    assistantSelector: "model-response message-content",
+    // user-query carries a hidden "You said …" copy of the message for screen readers.
     userSelector: "user-query",
+    userTextSelector: ".query-text-line",
+    modelSelector: '[data-test-id="bard-mode-menu-button"]',
+    parseModel: parseGeminiMode,
+    verified: "2026-09-24",
   },
 ];
 
