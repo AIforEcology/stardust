@@ -15,6 +15,9 @@ def ev(**kw):
 
 @pytest.mark.parametrize("model,tier", [
     ("claude-opus-4-1", "frontier"),
+    ("claude-fable-5-1", "frontier"),
+    ("claude-opus-5-5", "frontier"),
+    ("claude-sonnet-5", "mid"),
     ("claude-sonnet-4-5", "mid"),
     ("claude-haiku-4-5", "small"),
     ("gpt-4o", "frontier"),

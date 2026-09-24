@@ -7,7 +7,7 @@
     "$comment": "MTR (§21.2). Patterns are case-insensitive regexes over the model name, checked in order; the first match wins. Size words must be whole name segments (so \"gemini\" is not \"mini\").",
     "patterns": [
       { "pattern": "(^|[-_/.])(haiku|mini|nano|flash|flash-lite|lite|small|[1-8]b)($|[-_/.])", "tier": "small" },
-      { "pattern": "opus|ultra|-pro($|[-_/.])|(^|[-_/.])(gpt-5|gpt-4o|gpt-4\\.1|o1|o3|o4|405b|70b)($|[-_/.])", "tier": "frontier" },
+      { "pattern": "opus|fable|ultra|-pro($|[-_/.])|(^|[-_/.])(gpt-5|gpt-4o|gpt-4\\.1|o1|o3|o4|405b|70b)($|[-_/.])", "tier": "frontier" },
       { "pattern": "sonnet|gpt-4|gemini|mistral|llama|command", "tier": "mid" }
     ],
     "unknown_tier_uses": "frontier",

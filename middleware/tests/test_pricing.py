@@ -9,6 +9,7 @@ def test_lookup_direct_and_prefixed(pricing_file):
     t = PricingTable.load(pricing_file)
     assert t.lookup("anthropic", "claude-test-opus").output_per_token == 5e-05
     assert t.lookup("anthropic", "CLAUDE-TEST-HAIKU").input_per_token == 1e-06  # via anthropic/ prefix
+    assert t.lookup("anthropic", "claude-test-legacy").input_per_token == 2e-05  # via dated Bedrock key
     assert t.lookup("openai", "claude-test-haiku") is None
 
 
@@ -17,7 +18,7 @@ def test_invalid_entries_are_dropped(pricing_file):
     assert t.lookup("x", "broken-model") is None
     assert t.lookup("x", "absurd-model") is None
     assert t.lookup("x", "sample_spec") is None
-    assert len(t) == 2
+    assert len(t) == 3
 
 
 def test_cost(pricing_file):

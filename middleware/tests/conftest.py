@@ -12,6 +12,7 @@ TEST_PRICES = {
     "sample_spec": {"input_cost_per_token": 0, "output_cost_per_token": 0},
     "claude-test-opus": {"input_cost_per_token": 1e-05, "output_cost_per_token": 5e-05},
     "anthropic/claude-test-haiku": {"input_cost_per_token": 1e-06, "output_cost_per_token": 5e-06},
+    "anthropic.claude-test-legacy-20250805-v1:0": {"input_cost_per_token": 2e-05, "output_cost_per_token": 8e-05},
     "broken-model": {"input_cost_per_token": "free", "output_cost_per_token": 1e-06},
     "absurd-model": {"input_cost_per_token": 50.0, "output_cost_per_token": 1e-06},
 }

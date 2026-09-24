@@ -31,7 +31,7 @@ def client(pricing_file):
 
 def test_health(client):
     body = client.get("/healthz").json()
-    assert body == {"ok": True, "methodology_version": "0.1.0", "priced_models": 2}
+    assert body == {"ok": True, "methodology_version": "0.1.0", "priced_models": 3}
 
 
 def test_ingest_and_summary(client):

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
@@ -17,8 +18,9 @@ from .config import load_json
 log = logging.getLogger(__name__)
 
 # litellm prefixes some keys with a routing provider; map Stardust provider slugs to them.
+# "anthropic." (Bedrock) is last: some older Claude models are only listed there.
 _PROVIDER_PREFIXES = {
-    "anthropic": ["anthropic/"],
+    "anthropic": ["anthropic/", "anthropic."],
     "openai": ["openai/"],
     "google": ["gemini/", "vertex_ai/"],
 }
@@ -37,6 +39,7 @@ class PricingTable:
     def __init__(self, prices: Dict[str, Price], source: str):
         self._prices = prices
         self.source = source
+        self._dated_cache: Dict[str, Optional[Price]] = {}
 
     def __len__(self) -> int:
         return len(self._prices)
@@ -69,11 +72,25 @@ class PricingTable:
         model = model.lower()
         if model in self._prices:
             return self._prices[model]
-        for prefix in _PROVIDER_PREFIXES.get(provider.lower(), [f"{provider.lower()}/"]):
+        prefixes = ["", *_PROVIDER_PREFIXES.get(provider.lower(), [f"{provider.lower()}/"])]
+        for prefix in prefixes[1:]:
             hit = self._prices.get(prefix + model)
             if hit:
                 return hit
+        # Fall back to a dated snapshot, e.g. "claude-opus-4-1" → "anthropic.claude-opus-4-1-20250805-v1:0".
+        for prefix in prefixes:
+            hit = self._dated(prefix + model)
+            if hit:
+                return hit
         return None
+
+    def _dated(self, name: str) -> Optional[Price]:
+        if name not in self._dated_cache:
+            pattern = re.compile(re.escape(name) + r"-\d{8}(-v\d+(:\d+)?)?$")
+            matches = sorted(k for k in self._prices if pattern.match(k))
+            # Latest snapshot wins.
+            self._dated_cache[name] = self._prices[matches[-1]] if matches else None
+        return self._dated_cache[name]
 
     def cost_usd(self, provider: str, model: str, tokens_in: Optional[int], tokens_out: Optional[int]) -> Optional[float]:
         if tokens_in is None and tokens_out is None:
