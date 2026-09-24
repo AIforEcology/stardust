@@ -42,3 +42,20 @@ test("fingerprints identify identical replies only", () => {
   assert.notEqual(fingerprint("hello world"), fingerprint("hello worle"));
   assert.match(fingerprint("abc"), /^3:/);
 });
+
+import { parseChatGPTSlug, parseGeminiMode } from "../src/sites.ts";
+
+test("ChatGPT model slugs map to API ids", () => {
+  assert.equal(parseChatGPTSlug("gpt-5-6"), "gpt-5.6"); // seen live 2026-09-24
+  assert.equal(parseChatGPTSlug("gpt-4-1-mini"), "gpt-4.1-mini");
+  assert.equal(parseChatGPTSlug("gpt-5-mini"), "gpt-5-mini"); // not a version number: unchanged
+  assert.equal(parseChatGPTSlug("gpt-4o"), "gpt-4o");
+  assert.equal(parseChatGPTSlug(null), undefined);
+});
+
+test("Gemini modes map to a family name", () => {
+  assert.equal(parseGeminiMode("Open mode picker, currently Flash"), "gemini-flash"); // seen live 2026-09-24
+  assert.equal(parseGeminiMode("Open mode picker, currently Pro"), "gemini-pro");
+  assert.equal(parseGeminiMode("Open mode picker, currently Deep Think"), "gemini-deep-think");
+  assert.equal(parseGeminiMode("Mode picker"), undefined);
+});
