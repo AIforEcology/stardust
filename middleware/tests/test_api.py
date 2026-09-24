@@ -33,7 +33,7 @@ def client(pricing_file):
 def test_health(client):
     body = client.get("/healthz").json()
     assert {k: body[k] for k in ("ok", "methodology_version", "priced_models", "otlp_export", "otlp_grpc_receiver")} == {
-        "ok": True, "methodology_version": "0.1.0", "priced_models": 3, "otlp_export": None, "otlp_grpc_receiver": None,
+        "ok": True, "methodology_version": "0.2.0", "priced_models": 3, "otlp_export": None, "otlp_grpc_receiver": None,
     }
     assert body["database"]["schema_version"] == SCHEMA_VERSION
 
@@ -68,7 +68,7 @@ def test_cached_tokens(client):
 
 
 def test_methodology_endpoint(client):
-    assert client.get("/v1/methodology").json()["version"] == "0.1.0"
+    assert client.get("/v1/methodology").json()["version"] == "0.2.0"
 
 
 def test_donation_links_out_only(client):

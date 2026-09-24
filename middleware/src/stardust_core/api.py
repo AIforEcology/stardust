@@ -255,6 +255,13 @@ def create_app(
             "energy_wh": a.energy_wh,
             "co2e_g": a.co2e_g,
             "water_ml": a.water_ml,
+            "water_onsite_ml": a.water_onsite_ml,
+            "water_offsite_ml": a.water_offsite_ml,
+            # Water from events recorded before the split (methodology 0.2).
+            "water_unsplit_ml": max(a.water_ml - a.water_onsite_ml - a.water_offsite_ml, 0.0),
+            "heat_rejected_wh": a.heat_rejected_wh,
+            "heat_recovered_wh": a.heat_recovered_wh,
+            "heat_recovered_events": a.heat_recovered_events,
             "indicator_code": indicator.aggregate_code_from_totals(
                 a.co2e_g, a.events, a.tokens_in + a.tokens_out, a.cost_usd, a.cost_known_events, cfg["indicator"]
             ),

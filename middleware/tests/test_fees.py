@@ -138,7 +138,7 @@ def test_v1_database_migrates_to_v2_keeping_orders(tmp_path):
     conn.close()
 
     store = Store(db)
-    assert store.stats()["schema_version"] == SCHEMA_VERSION == 2
+    assert store.stats()["schema_version"] == SCHEMA_VERSION
     assert store.load_order(uuid.UUID(oid)) == {}  # old order still readable
     totals = store.fee_totals(datetime(2000, 1, 1, tzinfo=timezone.utc), datetime(2100, 1, 1, tzinfo=timezone.utc))
     assert totals["fulfilled"]["orders"] == 1 and totals["fulfilled"]["fees_usd"] == 0  # pre-fee order: no fee

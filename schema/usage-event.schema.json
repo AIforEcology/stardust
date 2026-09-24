@@ -97,6 +97,15 @@
             "null"
           ]
         },
+        "energy_reuse_factor": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "The facility's Energy Reuse Factor (ISO/IEC 30134-6), when its operator reports it. Core then reports heat_recovered_wh. OTel: stardust.facility.energy_reuse_factor."
+        },
         "user_id": {
           "type": [
             "string",

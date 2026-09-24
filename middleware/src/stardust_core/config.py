@@ -18,7 +18,7 @@ from .store import default_database_path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
-DEFAULT_METHODOLOGY = _REPO_ROOT / "schema" / "factors" / "methodology-v0.1.json"
+DEFAULT_METHODOLOGY = _REPO_ROOT / "schema" / "factors" / "methodology-v0.2.json"
 DEFAULT_ESC = _REPO_ROOT / "schema" / "esc.json"
 DEFAULT_PRICING = _REPO_ROOT / "middleware" / "data" / "model_prices_and_context_window.json"
 DEFAULT_PRICING_CACHE = _REPO_ROOT / "middleware" / "data" / "cache" / "model_prices_and_context_window.json"
