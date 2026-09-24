@@ -2,7 +2,7 @@
 
 **The AIforE Subscriber Plugin.** Stardust is open-source metering for AI and cloud usage. Wherever a token is generated or a query runs, it records what was used, what it cost, and what it cost the planet (electricity, CO₂e, water). It shows the result as a compact code such as `B2-M`, and it can route residual emissions to vetted carbon-removal providers.
 
-A project of [AI for Ecology](https://aifore.org). See the [v0.9 spec and summary](docs/).
+A project of [AI for Ecology](https://aifore.org). See the [spec (v1.2) and summary](docs/).
 
 ## How it fits together
 
@@ -30,6 +30,10 @@ A project of [AI for Ecology](https://aifore.org). See the [v0.9 spec and summar
 ## Status: v0.1 scaffold
 
 This is the Phase 1 foundation (§16). The methodology factors are a **draft**, and some are placeholders awaiting review (see [`schema/README.md`](schema/README.md)). Core stores its data in a single SQLite file (see [the database design](docs/architecture/database.md)), and the extension's figures are estimates.
+
+## Where it's going
+
+Spec v1.2 extends Stardust beyond carbon to **five impact dimensions** (carbon, electricity, water, heat and materials), matched like for like with renewable energy certificates, water restoration certificates, heat-reuse and recycling credits through registry and market connectors. It also splits carbon into lifecycle components (inference, facility, training, embodied hardware). The architecture and the step-by-step plan for building this without disrupting what already runs are in [`docs/architecture/impact-credits.md`](docs/architecture/impact-credits.md).
 
 ## Quick start
 
