@@ -2,11 +2,21 @@ import asyncio
 import json
 
 import anthropic
-import httpx
+import anthropic._base_client
 import openai
+import openai._base_client
 import pytest
 
 from stardust_sdk import instrument
+
+
+def _http_module(base_client):
+    """The HTTP library a vendor SDK is built on: httpx, or httpx2 in newer SDKs (anthropic >= 1.0)."""
+    return getattr(base_client, "httpx2", None) or base_client.httpx
+
+
+AHTTP = _http_module(anthropic._base_client)
+OHTTP = _http_module(openai._base_client)
 
 ANTHROPIC_MESSAGE = {
     "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-sonnet-5",
@@ -38,20 +48,20 @@ ANTHROPIC_STREAM = sse([
 ])
 
 
-def handler_for(json_body=None, stream_body=None):
-    def handler(request: httpx.Request) -> httpx.Response:
+def handler_for(http, json_body=None, stream_body=None):
+    def handler(request):
         body = json.loads(request.content)
         if body.get("stream"):
-            return httpx.Response(200, content=stream_body, headers={"content-type": "text/event-stream"})
-        return httpx.Response(200, json=json_body)
+            return http.Response(200, content=stream_body, headers={"content-type": "text/event-stream"})
+        return http.Response(200, json=json_body)
     return handler
 
 
 def anthropic_client(async_=False):
-    transport = httpx.MockTransport(handler_for(ANTHROPIC_MESSAGE, ANTHROPIC_STREAM))
+    transport = AHTTP.MockTransport(handler_for(AHTTP, ANTHROPIC_MESSAGE, ANTHROPIC_STREAM))
     if async_:
-        return anthropic.AsyncAnthropic(api_key="test", http_client=httpx.AsyncClient(transport=transport))
-    return anthropic.Anthropic(api_key="test", http_client=httpx.Client(transport=transport))
+        return anthropic.AsyncAnthropic(api_key="test", http_client=AHTTP.AsyncClient(transport=transport))
+    return anthropic.Anthropic(api_key="test", http_client=AHTTP.Client(transport=transport))
 
 
 ARGS = dict(model="claude-sonnet-5", max_tokens=10, messages=[{"role": "user", "content": "hi"}])
@@ -110,8 +120,8 @@ def test_openai_chat_and_stream(stardust, core):
         {**chunk, "choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}},
         "[DONE]",
     ], named=False)
-    transport = httpx.MockTransport(handler_for(chat, stream))
-    client = instrument(openai.OpenAI(api_key="test", http_client=httpx.Client(transport=transport)), stardust, region="eastus")
+    transport = OHTTP.MockTransport(handler_for(OHTTP, chat, stream))
+    client = instrument(openai.OpenAI(api_key="test", http_client=OHTTP.Client(transport=transport)), stardust, region="eastus")
 
     msgs = [{"role": "user", "content": "hi"}]
     client.chat.completions.create(model="gpt-4o", messages=msgs)
@@ -127,8 +137,8 @@ def test_openai_chat_and_stream(stardust, core):
 def test_openai_stream_without_usage_records_nothing(stardust, core):
     chunk = {"id": "c1", "object": "chat.completion.chunk", "created": 1, "model": "gpt-4o",
              "choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": "stop"}]}
-    transport = httpx.MockTransport(handler_for(None, sse([chunk, "[DONE]"], named=False)))
-    client = instrument(openai.OpenAI(api_key="test", http_client=httpx.Client(transport=transport)), stardust)
+    transport = OHTTP.MockTransport(handler_for(OHTTP, None, sse([chunk, "[DONE]"], named=False)))
+    client = instrument(openai.OpenAI(api_key="test", http_client=OHTTP.Client(transport=transport)), stardust)
     for _ in client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}], stream=True):
         pass
     assert stardust.flush(2)
