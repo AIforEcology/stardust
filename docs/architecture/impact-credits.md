@@ -152,17 +152,16 @@ AIforE's intent is to **provide technology and connect credits, not broker them 
 | **Never hold or move money** | Buyers pay providers directly. Stardust stores only an opaque payment reference | Already true (`payment_ref`, §18.2) |
 | **Don't set prices** | Providers quote their own prices; Stardust displays and compares them | Already true |
 | **Retire through the seller or a licensed account holder** | Where a registry requires a KYC'd account holder, the provider, the buyer's own account or a licensed partner performs the retirement. Stardust records and verifies the reference | Planned (connector step 6) |
-| **Fees for technology, not commissions** | A percentage of each credit transaction is the classic shape of a brokerage commission. Fees framed and structured as payment for software and verification services fit the intent better. Counsel should confirm the structure, including unrelated-business-income treatment for a 501(c)(3) | **Open:** the fee in AIforEcology/stardust#10 is a per-order percentage named "broker fee". See below |
+| **Fees for technology, not commissions** | A percentage of each credit transaction is the classic shape of a brokerage commission. Fees framed and structured as payment for software and verification services fit the intent better. Counsel should confirm the structure, including unrelated-business-income treatment for a 501(c)(3) | **Decided:** a **tech operations fee**, disclosed as its own line. See below |
 | **Stay out of derivatives and trading** | Stardust supports spot purchase-and-retire for a buyer's own claims, not resale, futures or trading | Consistent |
 
 For context: the CFTC approved guidance on listing voluntary carbon credit *derivatives* in September 2024 and withdrew it in September 2025. Staying with retire-only spot transactions keeps Stardust away from that area.
 
-**The fee question (#10):** before merging, decide between:
-- (a) keeping the percentage but renaming it a **technology fee**, charged under a technology-services agreement separately from the credit price
-- (b) a **subscription or per-API-call** fee for subscribers
-- (c) a **provider-paid** listing and MRV-data fee
+**The fee (decided September 2026):** the per-order percentage from AIforEcology/stardust#10 is now the **tech operations fee** (`STARDUST_TECH_OPS_FEE_PCT`, default 8%; `GET /v1/fees/terms`). It pays for Stardust's technology and its operation, is shown separately from the provider's price, and the provider receives its price in full. To keep it clear of the "never hold or move money" rule, it should be invoiced by AIforE under a technology-services agreement, not deducted from the credit payment. Still for counsel: confirm that structure and its unrelated-business-income treatment.
 
-The code supports (a) with a rename; (b) and (c) are small changes. The disclosure and coverage reporting apply to all three.
+Alternatives, if counsel prefers them, are small code changes and keep the same disclosure and coverage reporting:
+- a **subscription or per-API-call** fee for subscribers
+- a **provider-paid** listing and MRV-data fee
 
 ### Registry programmatic access
 

@@ -154,12 +154,12 @@
           "type": "number",
           "minimum": 0,
           "maximum": 100,
-          "description": "AIforE's broker fee rate at quote time."
+          "description": "AIforE's tech operations fee rate at quote time."
         },
         "fee_usd": {
           "type": "number",
           "minimum": 0,
-          "description": "AIforE's broker fee, disclosed separately (covers broker operating costs)."
+          "description": "AIforE's tech operations fee, disclosed separately from the provider's price (pays for Stardust's technology and operation)."
         },
         "total_usd": {
           "type": "number",
