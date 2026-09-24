@@ -28,6 +28,14 @@ def test_cost(pricing_file):
     assert t.cost_usd("anthropic", "not-priced", 10, 10) is None
 
 
+def test_cached_input_uses_cache_rate(pricing_file):
+    t = PricingTable.load(pricing_file)
+    # 1000 input of which 800 cached: 200 × 1e-05 + 800 × 1e-06 + 100 × 5e-05
+    assert t.cost_usd("anthropic", "claude-test-opus", 1000, 100, 800) == pytest.approx(0.0078)
+    # No cache price listed: cached tokens bill as input
+    assert t.cost_usd("anthropic", "claude-test-haiku", 1000, 0, 800) == t.cost_usd("anthropic", "claude-test-haiku", 1000, 0)
+
+
 def test_missing_file_is_empty(tmp_path: Path):
     assert len(PricingTable.load(tmp_path / "nope.json")) == 0
 

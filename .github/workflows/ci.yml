@@ -20,14 +20,29 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e "middleware[dev]" -e "providers-service[dev]"
-      - run: pytest middleware providers-service
+      - run: pip install -e "middleware[dev]" -e "providers-service[dev]" -e "subscriber-client/sdk-python[dev]"
+      - run: pytest middleware providers-service subscriber-client/sdk-python
 
   browser-extension:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: subscriber-client/browser-extension
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  sdk-js:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: subscriber-client/sdk-js
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

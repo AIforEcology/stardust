@@ -56,6 +56,13 @@ def test_rejects_content_and_unknown_fields(client):
     assert client.post("/v1/events", json={**EVENT, "tokens_in": -1}).status_code == 422
 
 
+def test_cached_tokens(client):
+    r = client.post("/v1/events", json={**EVENT, "tokens_cached_in": 400})
+    assert r.status_code == 200
+    assert r.json()["cost_usd"] == pytest.approx(100 * 1e-05 + 400 * 1e-06 + 500 * 5e-05)
+    assert client.post("/v1/events", json={**EVENT, "tokens_cached_in": 501}).status_code == 422
+
+
 def test_methodology_endpoint(client):
     assert client.get("/v1/methodology").json()["version"] == "0.1.0"
 

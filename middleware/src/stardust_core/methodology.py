@@ -84,7 +84,7 @@ class Methodology:
         # Wh → kWh (/1000) and L → mL (*1000) cancel out.
         water_ml = energy_wh * (water["onsite_wue_l_per_kwh"]["value"] + water["generation_l_per_kwh"]["value"])
 
-        cost = self.pricing.cost_usd(event.provider, event.model, event.tokens_in, event.tokens_out)
+        cost = self.pricing.cost_usd(event.provider, event.model, event.tokens_in, event.tokens_out, event.tokens_cached_in)
         esc, share, diversified = self.energy_source(grid)
 
         return EnrichedEvent(
