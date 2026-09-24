@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AIforEcology/stardust/schema/remediation.schema.json",
+  "title": "Stardust remediation contracts",
+  "description": "Shapes exchanged between subscribers, the Remediation Broker (middleware) and providers. Spec §10.2–§10.5.",
+  "$defs": {
+    "provider_tier": {
+      "enum": ["verified", "emerging", "engineered"],
+      "description": "Assigned by the broker at registration, never self-declared (§10.2.1)."
+    },
+    "remediation_category": {
+      "enum": ["reforestation", "blue_carbon", "dac", "biochar", "mangrove_seagrass", "other"]
+    },
+    "provider_registration": {
+      "type": "object",
+      "required": ["provider_id", "name", "category", "certification"],
+      "additionalProperties": false,
+      "properties": {
+        "provider_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$" },
+        "name": { "type": "string" },
+        "category": { "$ref": "#/$defs/remediation_category" },
+        "certification": {
+          "type": "object",
+          "properties": {
+            "standard": { "enum": ["verra", "gold_standard", "puro_earth", "isometric", "none"] },
+            "registry_id": { "type": ["string", "null"] }
+          },
+          "required": ["standard"]
+        },
+        "base_url": { "type": ["string", "null"], "format": "uri", "description": "Where the broker reaches the provider's HTTP adapter." }
+      }
+    },
+    "catalog_item": {
+      "type": "object",
+      "required": ["project_id", "name", "region", "capacity_t_co2e", "price_usd_per_t"],
+      "properties": {
+        "project_id": { "type": "string" },
+        "name": { "type": "string" },
+        "region": { "type": "string" },
+        "capacity_t_co2e": { "type": "number", "minimum": 0 },
+        "price_usd_per_t": { "type": "number", "minimum": 0 }
+      }
+    },
+    "quote": {
+      "type": "object",
+      "required": ["quote_id", "provider_id", "project_id", "co2e_g", "price_usd", "fulfillment_days", "provider_tier", "expires_at"],
+      "properties": {
+        "quote_id": { "type": "string", "format": "uuid" },
+        "provider_id": { "type": "string" },
+        "project_id": { "type": "string" },
+        "co2e_g": { "type": "number", "exclusiveMinimum": 0 },
+        "price_usd": { "type": "number", "minimum": 0 },
+        "fulfillment_days": { "type": "integer", "minimum": 0 },
+        "provider_tier": { "$ref": "#/$defs/provider_tier" },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "remediation_order": {
+      "type": "object",
+      "description": "§10.5 data model additions.",
+      "required": ["remediation_order_id", "subscriber_id", "co2e_g_offset", "fulfillment_status"],
+      "properties": {
+        "remediation_order_id": { "type": "string", "format": "uuid" },
+        "quote_id": { "type": ["string", "null"], "format": "uuid" },
+        "provider_id": { "type": ["string", "null"], "description": "Null for a donation order." },
+        "subscriber_id": { "type": "string" },
+        "provider_tier": { "oneOf": [{ "$ref": "#/$defs/provider_tier" }, { "type": "null" }] },
+        "co2e_g_offset": { "type": "number", "minimum": 0 },
+        "payment_ref": { "type": ["string", "null"], "description": "Opaque reference to a payment made elsewhere; Stardust never processes payment (§18.2)." },
+        "fulfillment_status": { "enum": ["quoted", "ordered", "fulfilling", "fulfilled", "failed"] },
+        "certificate_ref": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

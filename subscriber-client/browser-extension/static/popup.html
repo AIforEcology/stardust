@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Stardust</title>
+  <style>
+    :root { --bg: #0d1411; --panel: #16201b; --text: #e8f1ec; --muted: #8aa397; --accent: #4AE87A; --line: #23312a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; width: 320px; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    header h1 { margin: 0; font-size: 14px; color: var(--accent); letter-spacing: .02em; }
+    section { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+    h2 { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    #code { font: 700 26px/1 ui-monospace, monospace; color: var(--accent); }
+    #code[data-grade="C"] { color: #e6cf2e; } #code[data-grade="D"] { color: #f0a030; }
+    #code[data-grade="E"] { color: #f07a3a; } #code[data-grade="F"] { color: #f0564a; }
+    #sji { font: 10px ui-monospace, monospace; color: var(--muted); word-break: break-all; margin-top: 4px; }
+    .row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+    .row span:first-child { color: var(--muted); }
+    .row span:last-child { text-align: right; }
+    label.switch { display: flex; justify-content: space-between; align-items: center; }
+    input[type=url] { width: 100%; padding: 5px 6px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; }
+    button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    .note { color: var(--muted); font-size: 11px; margin: 6px 0 0; }
+    footer { padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header><h1>Stardust</h1><button id="test" title="Send a sample event to check the connection">Test</button></header>
+
+  <section id="site">
+    <label class="switch"><span>Measure <strong id="site-name"></strong></span><input type="checkbox" id="site-toggle" /></label>
+    <p class="note">Only character counts are sent, never your messages.</p>
+  </section>
+
+  <section>
+    <h2>Last reply</h2>
+    <div id="code">–</div>
+    <div id="sji"></div>
+    <div id="breakdown" class="note">No measured replies in this tab yet.</div>
+  </section>
+
+  <section>
+    <h2>Your total</h2>
+    <div id="summary" class="note">Loading…</div>
+  </section>
+
+  <section>
+    <h2>Stardust Core</h2>
+    <form id="api-form"><input type="url" id="api" required /></form>
+    <p class="note">Browser figures are estimates: chat sites don't show the model or token counts.</p>
+  </section>
+
+  <footer>
+    <a href="https://github.com/AIforEcology/stardust" target="_blank" rel="noopener">Open source</a>
+    <a href="https://aifore.org" target="_blank" rel="noopener">Support AIforE</a>
+  </footer>
+  <script src="popup.js"></script>
+</body>
+</html>

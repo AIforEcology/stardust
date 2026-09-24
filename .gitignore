@@ -10,3 +10,8 @@ __pycache__/
 .venv/
 target/
 *.log
+
+# macOS resource forks (exFAT/USB volumes)
+._*
+*.egg-info/
+.pytest_cache/
