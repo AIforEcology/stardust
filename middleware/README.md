@@ -45,14 +45,14 @@ To set other options, such as `STARDUST_OTLP_ENDPOINT`, put them in `~/Library/A
 | `POST` | `/v1/remediation/orders` | `submit_remediation_order(quote_id, payment_ref)` |
 | `GET` | `/v1/remediation/orders/{id}` | `get_fulfillment_status(order_id)` |
 | `POST` | `/v1/donations` | `request_donation()`: returns AIforE's donation link; Core never handles money |
-| `GET` | `/v1/broker/terms` | The broker fee, publicly disclosed |
+| `GET` | `/v1/fees/terms` | The tech operations fee, publicly disclosed (`/v1/broker/terms` still works) |
 | `GET` | `/v1/providers` | Approved providers |
 | `POST` | `/v1/admin/providers` | Register a provider by URL (stays pending) |
 | `POST` | `/v1/admin/providers/{id}/approve` | Vet a provider and assign its tier |
 | `POST` | `/v1/admin/providers/{id}/delist` | Remove a provider from new quotes |
 | `POST` | `/v1/admin/pricing/refresh` | Refresh pricing now |
 | `DELETE` | `/v1/admin/users/{user_id}/events` | Erase one user's events (§14.1) |
-| `GET` | `/v1/admin/broker/fees?since=&until=` | Fees collected, provider payouts and operating-cost coverage (default: this month) |
+| `GET` | `/v1/admin/fees?since=&until=` | Tech operations fees, provider payouts and operating-cost coverage (default: this month; `/v1/admin/broker/fees` still works) |
 
 Admin endpoints need `STARDUST_ADMIN_TOKEN` set on the server and sent as `X-Stardust-Admin-Token`. They are off when the variable is unset.
 
@@ -73,23 +73,23 @@ Admin endpoints need `STARDUST_ADMIN_TOKEN` set on the server and sent as `X-Sta
 | `STARDUST_OTLP_SIGNALS` | `traces,metrics` (either or both) |
 | `STARDUST_OTLP_METRICS_INTERVAL` | `60` (seconds between metric exports) |
 | `STARDUST_OTLP_HEADERS` | none. `key=value,key2=value2`, e.g. a vendor API key |
-| `STARDUST_BROKER_FEE_PCT` | `8`. AIforE's fee on routed remediation orders, in percent (0–100) |
-| `STARDUST_BROKER_MIN_FEE_USD` | `0` (none). Minimum fee per order |
+| `STARDUST_TECH_OPS_FEE_PCT` | `8`. AIforE's tech operations fee on remediation orders, in percent (0–100). The old name `STARDUST_BROKER_FEE_PCT` still works |
+| `STARDUST_TECH_OPS_MIN_FEE_USD` | `0` (none). Minimum fee per order. The old name `STARDUST_BROKER_MIN_FEE_USD` still works |
 | `STARDUST_OPERATING_COST_MONTHLY_USD` | unset. Monthly operating budget; the fee report then shows how much of it fees covered |
 | `STARDUST_DATABASE_PATH` | `~/Library/Application Support/stardust/core.db` on macOS (the user data directory elsewhere). Keep it on a local disk, not a network share or USB drive |
 | `STARDUST_RETENTION_DAYS` | unset (keep forever). Delete events older than this, at startup and every 6 hours |
 | `STARDUST_OTLP_GRPC_LISTEN` | unset (off). Address for the OTLP/gRPC receiver, e.g. `0.0.0.0:4317`. The HTTP receiver at `/v1/traces` is always on |
 
-## Broker fees
+## Tech operations fee
 
-AIforE keeps a disclosed fee on each remediation order routed through the broker, to cover the cost of running it (provider vetting, hosting, verification). The rest goes to the provider. Donations to AIforE are separate and carry no fee (§18).
+AIforE provides technology and connects buyers with credit providers. It doesn't broker credits in a financial sense: it never buys, sells or holds them, and it doesn't set their prices (see the [operating model](../docs/architecture/impact-credits.md#operating-model-technology-and-connection-not-financial-brokerage)). The **tech operations fee** pays for that technology and its operation: software, hosting, provider vetting and verification. It's a separate line from the provider's price, which the provider sets and receives in full. Donations to AIforE are separate and carry no fee (§18).
 
-- **Rate:** `STARDUST_BROKER_FEE_PCT`, default **8%**, so 92% of each order reaches the provider. It's a starting point; set it from actual operating costs. An optional minimum fee per order exists (`STARDUST_BROKER_MIN_FEE_USD`) but is off by default, because pooled retail orders can be fractions of a cent.
-- **Disclosure:** every quote shows `price_usd` (the provider's price), `fee_pct`, `fee_usd` and `total_usd`. `GET /v1/broker/terms` states the policy publicly.
+- **Rate:** `STARDUST_TECH_OPS_FEE_PCT`, default **8%** of the provider's price. It's a starting point; set it from actual operating costs. An optional minimum fee per order exists (`STARDUST_TECH_OPS_MIN_FEE_USD`) but is off by default, because pooled retail orders can be fractions of a cent.
+- **Disclosure:** every quote shows `price_usd` (the provider's price), `fee_pct`, `fee_usd` and `total_usd`. `GET /v1/fees/terms` states the policy publicly.
 - **Rate at quote time applies:** the fee on a quote is the one charged, and each order stores the price, fee and total it was placed at. Changing the rate never rewrites past orders.
-- **Showing fees cover costs:** `GET /v1/admin/broker/fees` reports order count, provider payouts, fees and total billed for any period (default: the current month; failed orders excluded). With `STARDUST_OPERATING_COST_MONTHLY_USD` set, it also reports the prorated budget and `coverage_pct`, the share of operating costs the fees covered.
+- **Showing fees cover costs:** `GET /v1/admin/fees` reports order count, provider payouts, fees and total billed for any period (default: the current month; failed orders excluded). With `STARDUST_OPERATING_COST_MONTHLY_USD` set, it also reports the prorated budget and `coverage_pct`, the share of operating costs the fees covered.
 
-A $20 removal order at 8%: the provider receives $20.00, AIforE's fee is $1.60, the subscriber pays $21.60.
+A $20 removal order at 8%: the provider receives $20.00, AIforE's tech operations fee is $1.60, the subscriber pays $21.60 in total.
 
 On the macOS login service, set these in `service.env` and re-run the install script.
 

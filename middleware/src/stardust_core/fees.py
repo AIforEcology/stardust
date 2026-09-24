@@ -1,9 +1,11 @@
-"""Broker fee policy (resolves spec §19's open question on broker fees).
+"""Tech operations fee policy (resolves spec §19's open question on fees).
 
-AIforE retains a disclosed percentage of each remediation order routed through the broker
-to cover the cost of operating it (provider vetting, hosting, verification). The rest goes
-to the provider. The rate is configuration (STARDUST_BROKER_FEE_PCT), and each quote and
-order records the rate that applied, so changing it never rewrites past orders.
+AIforE provides technology and connects buyers with credit providers; it doesn't broker
+credits in a financial sense (docs/architecture/impact-credits.md, "Operating model"). The
+tech operations fee pays for that technology and its operation: software, hosting, provider
+vetting and verification. It's shown as a separate line from the provider's price, which the
+provider sets and receives in full. The rate is configuration (STARDUST_TECH_OPS_FEE_PCT),
+and each quote and order records the rate that applied, so changing it never rewrites past orders.
 """
 
 from __future__ import annotations
@@ -25,9 +27,9 @@ class FeePolicy:
 
     def __post_init__(self) -> None:
         if not 0 <= self.pct <= 100:
-            raise ValueError(f"broker fee must be between 0 and 100 percent, got {self.pct}")
+            raise ValueError(f"tech operations fee must be between 0 and 100 percent, got {self.pct}")
         if self.min_usd < 0:
-            raise ValueError(f"minimum broker fee can't be negative, got {self.min_usd}")
+            raise ValueError(f"minimum tech operations fee can't be negative, got {self.min_usd}")
 
     def fee_for(self, provider_price_usd: float) -> float:
         """AIforE's fee on top of a provider's price. Nothing is charged on a free quote."""
@@ -38,11 +40,13 @@ class FeePolicy:
     def terms(self) -> Dict[str, Any]:
         """Public disclosure of the fee, for subscribers to show their users."""
         return {
+            "name": "Tech operations fee",
             "fee_pct": self.pct,
             "min_fee_usd": self.min_usd,
             "recipient": "AIforE",
-            "purpose": "Covers the cost of operating the remediation broker: provider vetting, hosting and verification.",
-            "applies_to": "Remediation orders routed through the broker. Not donations, which go to AIforE directly.",
+            "purpose": "Pays for the technology and its operation: software, hosting, provider vetting and verification.",
+            "not_a_commission": "AIforE never buys, sells, holds or takes title to credits and doesn't set their prices. The provider sets its price and receives it in full.",
+            "applies_to": "Remediation orders placed through Stardust. Not donations, which go to AIforE directly.",
             "rate_locking": "Each quote shows the provider price, the fee and the total. The fee on a quote is the one charged.",
         }
 

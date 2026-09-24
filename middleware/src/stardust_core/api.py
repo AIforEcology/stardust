@@ -142,8 +142,8 @@ def create_app(
 
     owned_http = http is None
     client = http or httpx.AsyncClient()
-    # Validates the rate at startup: a bad STARDUST_BROKER_FEE_PCT stops Core rather than mis-charging.
-    fees = FeePolicy(settings.broker_fee_pct, settings.broker_min_fee_usd)
+    # Validates the rate at startup: a bad STARDUST_TECH_OPS_FEE_PCT stops Core rather than mis-charging.
+    fees = FeePolicy(settings.tech_ops_fee_pct, settings.tech_ops_min_fee_usd)
     broker = Broker(client, store, fees)
     refresher = PricingRefresher(
         get_table=lambda: engine.pricing,
@@ -310,9 +310,10 @@ def create_app(
 
     # --- provider vetting (admin, §10.6) --------------------------------------
 
-    @app.get("/v1/broker/terms")
-    def broker_terms() -> dict:
-        """The broker fee, disclosed publicly so subscribers can show it to their users."""
+    @app.get("/v1/fees/terms")
+    @app.get("/v1/broker/terms", include_in_schema=False)  # old path, kept for existing clients
+    def fee_terms() -> dict:
+        """The tech operations fee, disclosed publicly so subscribers can show it to their users."""
         return fees.terms()
 
     @app.get("/v1/providers")
@@ -340,7 +341,8 @@ def create_app(
         except BrokerError as e:
             raise HTTPException(404, str(e))
 
-    @app.get("/v1/admin/broker/fees", dependencies=[Depends(require_admin)])
+    @app.get("/v1/admin/fees", dependencies=[Depends(require_admin)])
+    @app.get("/v1/admin/broker/fees", dependencies=[Depends(require_admin)], include_in_schema=False)  # old path
     def fee_report(since: Optional[datetime] = None, until: Optional[datetime] = None) -> dict:
         """Fees collected, provider payouts and (with a budget set) operating-cost coverage.
         Defaults to the current calendar month (UTC)."""

@@ -67,6 +67,11 @@ def parse_signals(value: str) -> Tuple[str, ...]:
     return signals
 
 
+def _env(name: str, old_name: str, default: Any) -> Any:
+    """A variable that was renamed: the new name wins, the old one still works."""
+    return os.environ.get(name) or os.environ.get(old_name) or default
+
+
 @dataclass(frozen=True)
 class Settings:
     methodology_path: Path
@@ -91,9 +96,9 @@ class Settings:
     database_path: Optional[str] = None
     # Delete events older than this many days (§14.1); None = keep forever.
     retention_days: Optional[int] = None
-    # AIforE's disclosed fee on routed remediation orders, in percent (fees.py).
-    broker_fee_pct: float = DEFAULT_FEE_PCT
-    broker_min_fee_usd: float = 0.0
+    # AIforE's disclosed tech operations fee on remediation orders, in percent (fees.py).
+    tech_ops_fee_pct: float = DEFAULT_FEE_PCT
+    tech_ops_min_fee_usd: float = 0.0
     # Monthly operating budget, so the fee report can show how much of it fees covered.
     operating_cost_monthly_usd: Optional[float] = None
 
@@ -118,8 +123,8 @@ class Settings:
             otlp_grpc_listen=os.environ.get("STARDUST_OTLP_GRPC_LISTEN") or None,
             database_path=os.environ.get("STARDUST_DATABASE_PATH") or str(default_database_path()),
             retention_days=int(os.environ["STARDUST_RETENTION_DAYS"]) if os.environ.get("STARDUST_RETENTION_DAYS") else None,
-            broker_fee_pct=float(os.environ.get("STARDUST_BROKER_FEE_PCT", DEFAULT_FEE_PCT)),
-            broker_min_fee_usd=float(os.environ.get("STARDUST_BROKER_MIN_FEE_USD", "0")),
+            tech_ops_fee_pct=float(_env("STARDUST_TECH_OPS_FEE_PCT", "STARDUST_BROKER_FEE_PCT", DEFAULT_FEE_PCT)),
+            tech_ops_min_fee_usd=float(_env("STARDUST_TECH_OPS_MIN_FEE_USD", "STARDUST_BROKER_MIN_FEE_USD", "0")),
             operating_cost_monthly_usd=(
                 float(os.environ["STARDUST_OPERATING_COST_MONTHLY_USD"])
                 if os.environ.get("STARDUST_OPERATING_COST_MONTHLY_USD") else None

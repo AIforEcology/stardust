@@ -77,7 +77,7 @@ _MIGRATIONS: List[str] = [
     );
     CREATE INDEX orders_subscriber ON orders (subscriber_id, created_at);
     """,
-    # v2: broker fees (fees.py), as columns so fee reports are plain SQL
+    # v2: tech operations fees (fees.py), as columns so fee reports are plain SQL
     """
     ALTER TABLE orders ADD COLUMN provider_price_usd REAL;
     ALTER TABLE orders ADD COLUMN fee_usd REAL;

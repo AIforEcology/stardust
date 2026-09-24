@@ -15,3 +15,7 @@ Section references in the code (like `§8.4`) point to the spec. v1.2 kept every
 
 - [`architecture/database.md`](architecture/database.md): how Stardust Core stores data. It covers why SQLite, the schema, write and read paths, durability, privacy controls, performance, operations, migrations and the path to PostgreSQL.
 - [`architecture/impact-credits.md`](architecture/impact-credits.md): the v1.2 extension from carbon to five impact dimensions (carbon, electricity, water, heat, materials) and lifecycle emissions. It covers the target architecture, how it maps onto today's code, and the incremental, non-destructive build plan.
+
+## Operations
+
+- [`TODO.md`](TODO.md): open work, and the recurring checklists, including the **weekly tech operations fee review**.

@@ -74,7 +74,7 @@ These hold the Remediation Broker's state (spec §10).
 |---|---|---|---|
 | `providers` | `provider_id` | `status` | Vetting status and assigned tier. Loaded into memory at startup, because the set is small and read on every quote |
 | `quotes` | `quote_id` | `expires_at` (indexed) | Deleted when used or expired |
-| `orders` | `order_id` | `subscriber_id`, `status`, `created_at`, `provider_price_usd`, `fee_usd`, `total_usd` (indexed by subscriber and by `created_at`) | Updated as fulfillment progresses. The money columns are fixed from the quote at order time and feed the broker fee report |
+| `orders` | `order_id` | `subscriber_id`, `status`, `created_at`, `provider_price_usd`, `fee_usd`, `total_usd` (indexed by subscriber and by `created_at`) | Updated as fulfillment progresses. The money columns are fixed from the quote at order time and feed the tech operations fee report |
 
 ## How writes work
 
@@ -161,7 +161,7 @@ For continuous off-site backup, [Litestream](https://litestream.io) streams the 
 2. On startup, Core runs every migration newer than the file's `user_version`, each in its own transaction, and records the new version.
 3. Core refuses to open a database with a **newer** schema than it understands, so an older build can't damage data written by a newer one.
 
-Example: v2 added the broker-fee columns to `orders` with three `ALTER TABLE … ADD COLUMN` statements and an index. Existing orders keep NULL in the new columns, and the fee report counts them as fee-free.
+Example: v2 added the fee columns to `orders` with three `ALTER TABLE … ADD COLUMN` statements and an index. Existing orders keep NULL in the new columns, and the fee report counts them as fee-free.
 
 v3 added the water split and heat columns to `events` the same way, and back-filled `heat_rejected_wh`, which equals energy by definition. The water split isn't back-filled: `/v1/summary` reports older events' water as `water_unsplit_ml` instead of guessing.
 

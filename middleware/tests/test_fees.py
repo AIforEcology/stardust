@@ -67,8 +67,10 @@ def test_quote_discloses_price_fee_and_total(pricing_file, tmp_path):
     c = core(pricing_file, tmp_path / "core.db")
     [q] = c.post("/v1/remediation/quotes", json={"co2e_g": 1_000_000}).json()["quotes"]  # 1 t at $20/t
     assert (q["price_usd"], q["fee_pct"], q["fee_usd"], q["total_usd"]) == (20.0, 8.0, 1.6, 21.6)
-    terms = c.get("/v1/broker/terms").json()
+    terms = c.get("/v1/fees/terms").json()
     assert terms["fee_pct"] == 8.0 and terms["recipient"] == "AIforE"
+    assert terms["name"] == "Tech operations fee"
+    assert c.get("/v1/broker/terms").json() == terms  # old path still answers
     c.__exit__(None, None, None)
 
 
@@ -79,7 +81,7 @@ def test_order_keeps_the_fee_it_was_quoted_at(pricing_file, tmp_path):
     c.__exit__(None, None, None)
 
     # The rate changes to 12% before the order is placed: the quoted 8% still applies.
-    c = core(pricing_file, db, broker_fee_pct=12.0)
+    c = core(pricing_file, db, tech_ops_fee_pct=12.0)
     order = c.post("/v1/remediation/orders", json={"quote_id": q["quote_id"], "subscriber_id": "app"}).json()
     assert (order["provider_price_usd"], order["fee_pct"], order["fee_usd"], order["total_usd"]) == (20.0, 8.0, 1.6, 21.6)
     [new] = c.post("/v1/remediation/quotes", json={"co2e_g": 1_000_000}).json()["quotes"]
@@ -93,8 +95,9 @@ def test_fee_report_shows_coverage(pricing_file, tmp_path):
         [q] = c.post("/v1/remediation/quotes", json={"co2e_g": co2e}).json()["quotes"]
         c.post("/v1/remediation/orders", json={"quote_id": q["quote_id"], "subscriber_id": "app"})
 
+    assert c.get("/v1/admin/fees").status_code == 401
     assert c.get("/v1/admin/broker/fees").status_code == 401
-    r = c.get("/v1/admin/broker/fees", headers=ADMIN, params={
+    r = c.get("/v1/admin/fees", headers=ADMIN, params={
         "since": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
         "until": datetime.now(timezone.utc).replace(hour=23, minute=59, second=59).isoformat(),
     }).json()
@@ -108,7 +111,7 @@ def test_fee_report_shows_coverage(pricing_file, tmp_path):
     assert r["coverage_pct"] == pytest.approx(5.6 / (100 / (365.25 / 12)) * 100, abs=0.2)
 
     # Default window: the current calendar month.
-    month = c.get("/v1/admin/broker/fees", headers=ADMIN).json()
+    month = c.get("/v1/admin/fees", headers=ADMIN).json()
     assert month["period"]["since"].endswith("-01T00:00:00+00:00")
     assert month["orders"] == 3
     c.__exit__(None, None, None)
@@ -116,7 +119,7 @@ def test_fee_report_shows_coverage(pricing_file, tmp_path):
 
 def test_invalid_fee_setting_stops_core(pricing_file, tmp_path):
     settings = Settings(DEFAULT_METHODOLOGY, DEFAULT_ESC, pricing_file, "x", None,
-                        database_path=str(tmp_path / "core.db"), broker_fee_pct=150.0)
+                        database_path=str(tmp_path / "core.db"), tech_ops_fee_pct=150.0)
     with pytest.raises(ValueError, match="between 0 and 100"):
         create_app(settings)
 
