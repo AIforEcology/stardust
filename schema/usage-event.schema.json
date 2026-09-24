@@ -64,6 +64,14 @@
           ],
           "minimum": 0
         },
+        "tokens_cached_in": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Input tokens served from the provider's prompt cache. Included in tokens_in, and priced at the cache-read rate."
+        },
         "tokens_estimated": {
           "type": "boolean",
           "default": false,

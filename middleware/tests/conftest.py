@@ -10,7 +10,7 @@ from stardust_core.pricing import PricingTable
 # Test-only prices, deliberately round. Not real provider pricing.
 TEST_PRICES = {
     "sample_spec": {"input_cost_per_token": 0, "output_cost_per_token": 0},
-    "claude-test-opus": {"input_cost_per_token": 1e-05, "output_cost_per_token": 5e-05},
+    "claude-test-opus": {"input_cost_per_token": 1e-05, "output_cost_per_token": 5e-05, "cache_read_input_token_cost": 1e-06},
     "anthropic/claude-test-haiku": {"input_cost_per_token": 1e-06, "output_cost_per_token": 5e-06},
     "anthropic.claude-test-legacy-20250805-v1:0": {"input_cost_per_token": 2e-05, "output_cost_per_token": 8e-05},
     "broken-model": {"input_cost_per_token": "free", "output_cost_per_token": 1e-06},
