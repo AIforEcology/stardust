@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 
 import httpx
 
+from .fees import FeePolicy
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -54,6 +55,14 @@ class Quote:
     fulfillment_days: int
     provider_tier: str
     expires_at: datetime
+    # price_usd is the provider's price; AIforE's fee is shown separately (fees.py).
+    fee_pct: float = 0.0
+    fee_usd: float = 0.0
+    total_usd: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.total_usd is None:
+            self.total_usd = round(self.price_usd + self.fee_usd, 6)
 
 
 @dataclass
@@ -68,6 +77,11 @@ class Order:
     fulfillment_status: str = "ordered"
     certificate_ref: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # Fixed from the quote at order time, so later fee changes never rewrite it.
+    provider_price_usd: Optional[float] = None
+    fee_pct: Optional[float] = None
+    fee_usd: Optional[float] = None
+    total_usd: Optional[float] = None
 
 
 def _quote_from(d: Dict[str, Any]) -> Quote:
@@ -86,9 +100,10 @@ def _order_from(d: Dict[str, Any]) -> Order:
 class Broker:
     """Providers are cached in memory (a small set, read on every quote); quotes and orders live in the store."""
 
-    def __init__(self, http: httpx.AsyncClient, store: Store):
+    def __init__(self, http: httpx.AsyncClient, store: Store, fees: FeePolicy = FeePolicy()):
         self._http = http
         self._store = store
+        self.fees = fees
         self.providers: Dict[str, ProviderEntry] = {d["provider_id"]: ProviderEntry(**d) for d in store.load_providers()}
 
     def _save_provider(self, entry: ProviderEntry) -> None:
@@ -96,7 +111,8 @@ class Broker:
 
     def _save_order(self, order: Order) -> None:
         self._store.save_order(order.remediation_order_id, order.subscriber_id, order.fulfillment_status,
-                               order.created_at, asdict(order))
+                               order.created_at, asdict(order), provider_price_usd=order.provider_price_usd,
+                               fee_usd=order.fee_usd, total_usd=order.total_usd)
 
     # --- provider onboarding (admin) -----------------------------------------
 
@@ -145,7 +161,7 @@ class Broker:
         ]
         results = await asyncio.gather(*(self._quote_one(p, co2e_g) for p in candidates))
         quotes = [q for q in results if q is not None]
-        quotes.sort(key=lambda q: q.price_usd)
+        quotes.sort(key=lambda q: q.total_usd or 0)
         return quotes
 
     async def submit_remediation_order(self, quote_id: UUID, subscriber_id: str, payment_ref: Optional[str]) -> Order:
@@ -167,6 +183,10 @@ class Broker:
             provider_tier=provider.tier,  # recorded at order time (§10.5)
             co2e_g_offset=quote.co2e_g,
             payment_ref=payment_ref,
+            provider_price_usd=quote.price_usd,
+            fee_pct=quote.fee_pct,
+            fee_usd=quote.fee_usd,
+            total_usd=quote.total_usd,
         )
         try:
             result = await self._post(provider.base_url, "/fulfill", {
@@ -208,12 +228,15 @@ class Broker:
         except httpx.HTTPError as e:
             log.warning("quote failed at %s: %s", p.provider_id, e)
             return None
+        price = float(r["price_usd"])
         q = Quote(
             quote_id=uuid4(),
             provider_id=p.provider_id,
             project_id=r["project_id"],
             co2e_g=co2e_g,
-            price_usd=float(r["price_usd"]),
+            price_usd=price,
+            fee_pct=self.fees.pct,
+            fee_usd=self.fees.fee_for(price),
             fulfillment_days=int(r["fulfillment_days"]),
             provider_tier=p.tier or "emerging",
             expires_at=datetime.now(timezone.utc) + QUOTE_TTL,

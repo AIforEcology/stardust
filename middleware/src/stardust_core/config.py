@@ -13,6 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from .fees import DEFAULT_FEE_PCT
 from .store import default_database_path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -90,6 +91,11 @@ class Settings:
     database_path: Optional[str] = None
     # Delete events older than this many days (§14.1); None = keep forever.
     retention_days: Optional[int] = None
+    # AIforE's disclosed fee on routed remediation orders, in percent (fees.py).
+    broker_fee_pct: float = DEFAULT_FEE_PCT
+    broker_min_fee_usd: float = 0.0
+    # Monthly operating budget, so the fee report can show how much of it fees covered.
+    operating_cost_monthly_usd: Optional[float] = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -112,6 +118,12 @@ class Settings:
             otlp_grpc_listen=os.environ.get("STARDUST_OTLP_GRPC_LISTEN") or None,
             database_path=os.environ.get("STARDUST_DATABASE_PATH") or str(default_database_path()),
             retention_days=int(os.environ["STARDUST_RETENTION_DAYS"]) if os.environ.get("STARDUST_RETENTION_DAYS") else None,
+            broker_fee_pct=float(os.environ.get("STARDUST_BROKER_FEE_PCT", DEFAULT_FEE_PCT)),
+            broker_min_fee_usd=float(os.environ.get("STARDUST_BROKER_MIN_FEE_USD", "0")),
+            operating_cost_monthly_usd=(
+                float(os.environ["STARDUST_OPERATING_COST_MONTHLY_USD"])
+                if os.environ.get("STARDUST_OPERATING_COST_MONTHLY_USD") else None
+            ),
         )
 
 
