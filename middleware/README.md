@@ -8,7 +8,7 @@ The service in the middle (spec §9.1, §10.4). It receives usage events from su
 python3 -m venv ~/.venvs/stardust   # see the note below about USB drives
 ~/.venvs/stardust/bin/pip install -e "middleware[dev]" -e "providers-service[dev]"
 ~/.venvs/stardust/bin/python middleware/scripts/update_pricing.py   # downloads litellm's pricing file
-cd middleware && ~/.venvs/stardust/bin/uvicorn stardust_core.api:app --port 8080
+cd middleware && ~/.venvs/stardust/bin/uvicorn stardust_core.main:app --port 8080
 ```
 
 Tests: `~/.venvs/stardust/bin/pytest middleware providers-service`

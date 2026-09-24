@@ -1,6 +1,6 @@
 """Stardust Core HTTP API.
 
-Run with ``uvicorn stardust_core.api:app``. Data is kept in a SQLite file (see
+Run with ``uvicorn stardust_core.main:app``. Data is kept in a SQLite file (see
 docs/architecture/database.md); STARDUST_DATABASE_PATH chooses where.
 """
 
@@ -339,5 +339,3 @@ def create_app(
 
     return app
 
-
-app = create_app()

@@ -37,7 +37,7 @@ This is the Phase 1 foundation (§16). The methodology factors are a **draft**, 
 python3 -m venv ~/.venvs/stardust
 ~/.venvs/stardust/bin/pip install -e "middleware[dev]" -e "providers-service[dev]"
 ~/.venvs/stardust/bin/pytest middleware providers-service
-cd middleware && ~/.venvs/stardust/bin/uvicorn stardust_core.api:app --port 8080
+cd middleware && ~/.venvs/stardust/bin/uvicorn stardust_core.main:app --port 8080
 ```
 
 Then build and load the [browser extension](subscriber-client/browser-extension/).
