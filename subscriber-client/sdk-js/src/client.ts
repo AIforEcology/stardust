@@ -2,10 +2,16 @@
 // Recording never blocks or throws in the caller's code path (spec §15), and events are
 // buffered and retried with backoff while Core is unreachable (§15 offline resilience).
 
+import type { Tracer } from "@opentelemetry/api";
+
 import { extract, type Provider, type Usage } from "./extract.ts";
+import { Call, type CallHost, DEFAULT_OPERATION, eventIdForSpan, type TraceIds } from "./otel.ts";
 
 export interface StardustOptions {
-  apiBase?: string;
+  /** Stardust Core URL. `null` sends nothing directly (with `tracer`: spans only, via your collector). */
+  apiBase?: string | null;
+  /** An OpenTelemetry tracer: each metered call also becomes a GenAI client span. */
+  tracer?: Tracer;
   userId?: string;
   orgId?: string;
   /** Default processing region, e.g. "us-east-1" (OTel cloud.region). */
@@ -32,8 +38,9 @@ function isoWithOffset(d: Date): string {
   );
 }
 
-export class Stardust {
-  readonly url: string;
+export class Stardust implements CallHost {
+  readonly url: string | null;
+  readonly tracer?: Tracer;
   dropped = 0;
   private readonly opts: StardustOptions;
   private readonly fetchImpl: typeof fetch;
@@ -47,7 +54,9 @@ export class Stardust {
 
   constructor(opts: StardustOptions = {}) {
     this.opts = { enabled: true, maxBuffer: 10_000, timeoutMs: 5_000, ...opts };
-    this.url = `${(opts.apiBase ?? "http://localhost:8080").replace(/\/+$/, "")}/v1/events`;
+    if (opts.apiBase === null && !opts.tracer) throw new Error("Stardust needs apiBase, tracer, or both");
+    this.url = opts.apiBase === null ? null : `${(opts.apiBase ?? "http://localhost:8080").replace(/\/+$/, "")}/v1/events`;
+    this.tracer = opts.tracer;
     this.fetchImpl = opts.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
@@ -55,23 +64,52 @@ export class Stardust {
     return this.buffer.length + (this.sending ? 1 : 0);
   }
 
-  record(usage: Usage, options: { region?: string; timestamp?: Date } = {}): void {
-    if (!this.opts.enabled || this.closed) return;
+  get enabled(): boolean {
+    return Boolean(this.opts.enabled) && !this.closed;
+  }
+
+  /** Record one operation's usage. With a tracer, this also emits a (zero-length) span. */
+  record(usage: Usage, options: { region?: string; operation?: string } = {}): void {
+    if (!this.enabled) return;
+    const operation = options.operation ?? DEFAULT_OPERATION[usage.provider] ?? "chat";
+    this.startCall(usage.provider, operation, usage.model, options.region).finish(usage);
+  }
+
+  /** Begin metering a call; used by instrument(). `Call.finish(usage)` completes it. */
+  startCall(provider: Provider | string, operation: string, model?: string, region?: string): Call {
+    return new Call(this, provider, operation, model, region ?? this.opts.region);
+  }
+
+  /** @internal */
+  spanAttributes(region?: string): Record<string, unknown> {
+    return {
+      "cloud.region": region,
+      "stardust.source_layer": "infra_agent",
+      "stardust.user_id": this.opts.userId,
+      "stardust.org_id": this.opts.orgId,
+    };
+  }
+
+  /** @internal Queue a usage event for Core, if direct sending is on. */
+  queueUsage(usage: Usage, region: string | undefined, ids: TraceIds | undefined): void {
+    if (!this.url || !this.enabled) return;
     const event: UsageEvent = {
-      event_id: crypto.randomUUID(),
+      event_id: ids ? eventIdForSpan(...ids) : crypto.randomUUID(),
       source_layer: "infra_agent",
       provider: usage.provider,
       model: usage.model,
-      timestamp: isoWithOffset(options.timestamp ?? new Date()),
+      timestamp: isoWithOffset(new Date()),
       tokens_in: usage.tokensIn,
       tokens_out: usage.tokensOut,
       tokens_estimated: false,
     };
     const optional: UsageEvent = {
       tokens_cached_in: usage.tokensCachedIn,
-      region: options.region ?? this.opts.region,
+      region: region ?? this.opts.region,
       user_id: this.opts.userId,
       org_id: this.opts.orgId,
+      otel_trace_id: ids?.[0],
+      otel_span_id: ids?.[1],
     };
     for (const [k, v] of Object.entries(optional)) if (v != null) event[k] = v;
 
@@ -125,7 +163,7 @@ export class Stardust {
   }
 
   private kick(now = false): void {
-    if (this.sending || this.closed) return;
+    if (this.sending || this.closed || !this.url) return;
     if (this.timer) {
       if (!now) return;
       clearTimeout(this.timer);
@@ -168,7 +206,7 @@ export class Stardust {
   private async send(event: UsageEvent): Promise<boolean> {
     let res: Response;
     try {
-      res = await this.fetchImpl(this.url, {
+      res = await this.fetchImpl(this.url!, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(event),

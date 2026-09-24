@@ -45,6 +45,9 @@ class UsageEvent(BaseModel):
     storage_delta_bytes: Optional[int] = None
     user_id: Optional[UUID] = None
     org_id: Optional[UUID] = None
+    # Trace context of the span that made the AI call, when the caller uses OpenTelemetry (§11.3).
+    otel_trace_id: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    otel_span_id: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{16}$")
 
     @model_validator(mode="after")
     def _cached_within_input(self) -> "UsageEvent":

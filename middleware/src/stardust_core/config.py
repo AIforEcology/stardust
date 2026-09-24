@@ -47,6 +47,23 @@ def parse_headers(value: str) -> Tuple[Tuple[str, str], ...]:
     return tuple(pairs)
 
 
+def parse_protocol(value: str) -> str:
+    v = value.strip().lower()
+    if v in ("http", "http/protobuf"):
+        return "http/protobuf"
+    if v == "grpc":
+        return "grpc"
+    raise ValueError(f"STARDUST_OTLP_PROTOCOL must be http/protobuf or grpc, got {value!r}")
+
+
+def parse_signals(value: str) -> Tuple[str, ...]:
+    signals = tuple(s.strip().lower() for s in value.split(",") if s.strip())
+    unknown = set(signals) - {"traces", "metrics"}
+    if unknown:
+        raise ValueError(f"STARDUST_OTLP_SIGNALS supports traces and metrics, got {sorted(unknown)}")
+    return signals
+
+
 @dataclass(frozen=True)
 class Settings:
     methodology_path: Path
@@ -59,9 +76,14 @@ class Settings:
     pricing_url: str = DEFAULT_PRICING_URL
     pricing_ref: str = "main"
     pricing_cache_path: Optional[Path] = None
-    # OTLP/HTTP traces URL to export enriched spans to (e.g. http://collector:4318/v1/traces); None = off.
+    # OTLP export: base endpoint (e.g. http://collector:4318 for HTTP, http://collector:4317 for gRPC); None = off.
     otlp_endpoint: Optional[str] = None
     otlp_headers: Tuple[Tuple[str, str], ...] = ()
+    otlp_protocol: str = "http/protobuf"
+    otlp_signals: Tuple[str, ...] = ("traces", "metrics")
+    otlp_metrics_interval_s: float = 60.0
+    # OTLP/gRPC receiver listen address (e.g. 0.0.0.0:4317); None = off. The HTTP receiver is always on.
+    otlp_grpc_listen: Optional[str] = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -78,6 +100,10 @@ class Settings:
             pricing_cache_path=Path(os.environ.get("STARDUST_PRICING_CACHE", DEFAULT_PRICING_CACHE)),
             otlp_endpoint=os.environ.get("STARDUST_OTLP_ENDPOINT") or None,
             otlp_headers=parse_headers(os.environ.get("STARDUST_OTLP_HEADERS", "")),
+            otlp_protocol=parse_protocol(os.environ.get("STARDUST_OTLP_PROTOCOL", "http/protobuf")),
+            otlp_signals=parse_signals(os.environ.get("STARDUST_OTLP_SIGNALS", "traces,metrics")),
+            otlp_metrics_interval_s=float(os.environ.get("STARDUST_OTLP_METRICS_INTERVAL", "60")),
+            otlp_grpc_listen=os.environ.get("STARDUST_OTLP_GRPC_LISTEN") or None,
         )
 
 

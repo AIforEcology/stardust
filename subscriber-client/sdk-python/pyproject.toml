@@ -12,8 +12,10 @@ requires-python = ">=3.9"
 dependencies = []  # stdlib only: an SDK shouldn't pull dependencies into your app
 
 [project.optional-dependencies]
+# Emit OpenTelemetry GenAI spans: Stardust(otel=True)
+otel = ["opentelemetry-api>=1.20"]
 # Only needed to run the tests against the real vendor response types.
-dev = ["pytest>=8", "anthropic>=0.40", "openai>=1.50", "google-genai>=1.0"]
+dev = ["pytest>=8", "anthropic>=0.40", "openai>=1.50", "google-genai>=1.0", "opentelemetry-sdk>=1.20"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

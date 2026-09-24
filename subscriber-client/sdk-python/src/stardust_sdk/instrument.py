@@ -12,6 +12,11 @@ Covered:
   ``stream_options={"include_usage": True}``; the SDK doesn't add it for you.
 - google-genai ``Client``: ``models.generate_content`` / ``generate_content_stream``
   and the ``client.aio`` equivalents
+
+With ``Stardust(otel=...)`` each call also gets an OpenTelemetry GenAI client span that
+starts with the call and ends when the response (or the stream's last chunk) arrives.
+Don't combine that with another GenAI instrumentation of the same client, or each call
+is traced (and metered) twice.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from typing import Any, Callable, Dict, Optional
 
 from .client import Stardust
 from .extract import Usage, _get, _int, from_anthropic, from_gemini, from_openai
+from .otel import Call
 
 log = logging.getLogger("stardust_sdk")
 
@@ -95,14 +101,12 @@ class _GeminiAcc(_Accumulator):
 class _StreamProxy:
     """Pass-through wrapper around a vendor stream that records usage when it ends."""
 
-    def __init__(self, stream: Any, acc: _Accumulator, done: Callable[[Optional[Usage]], None]):
-        self._stream, self._acc, self._done = stream, acc, done
-        self._finished = False
+    def __init__(self, stream: Any, acc: _Accumulator, call: Call):
+        self._stream, self._acc, self._call = stream, acc, call
 
-    def _finish(self) -> None:
-        if not self._finished:
-            self._finished = True
-            self._done(self._acc.usage())
+    def _finish(self, error: Optional[BaseException] = None) -> None:
+        # Usage seen so far is recorded even if the stream broke: those tokens were billed.
+        self._call.finish(self._acc.usage(), error)
 
     def _feed(self, event: Any) -> None:
         try:
@@ -115,6 +119,9 @@ class _StreamProxy:
             for event in self._stream:
                 self._feed(event)
                 yield event
+        except Exception as e:
+            self._finish(e)
+            raise
         finally:
             self._finish()
 
@@ -134,6 +141,9 @@ class _StreamProxy:
             async for event in self._stream:
                 self._feed(event)
                 yield event
+        except Exception as e:
+            self._finish(e)
+            raise
         finally:
             self._finish()
 
@@ -158,37 +168,44 @@ class _StreamProxy:
 # --- wrapping -------------------------------------------------------------------------
 
 
-def _wrap(owner: Any, attr: str, stardust: Stardust, provider: str, acc_cls: type,
+def _wrap(owner: Any, attr: str, stardust: Stardust, provider: str, operation: str, acc_cls: type,
           extractor: Callable[[Any, Optional[str]], Optional[Usage]], region: Optional[str],
           always_stream: bool = False) -> bool:
     original = getattr(owner, attr, None)
     if original is None or getattr(original, _INSTRUMENTED, False):
         return False
 
-    def record(usage: Optional[Usage]) -> None:
-        if usage is not None:
-            stardust.record_usage(usage, region=region)
-
-    def handle(result: Any, kwargs: Dict[str, Any]) -> Any:
+    def handle(result: Any, kwargs: Dict[str, Any], call: Call) -> Any:
         model = kwargs.get("model")
         try:
             if always_stream or kwargs.get("stream") is True:
-                return _StreamProxy(result, acc_cls(provider, model), record)
-            record(extractor(result, model))
+                return _StreamProxy(result, acc_cls(provider, model), call)
+            call.finish(extractor(result, model))
         except Exception:  # noqa: BLE001 - metering must never break the caller
             log.exception("Stardust metering failed")
+            call.finish(None)
         return result
 
     # Check the result, not the function: async vendor methods are often plain functions
     # (behind decorators) that return an awaitable.
     @functools.wraps(original)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        result = original(*args, **kwargs)
+        call = stardust.start_call(provider, operation, kwargs.get("model"), region)
+        try:
+            result = original(*args, **kwargs)
+        except BaseException as e:
+            call.fail(e)
+            raise
         if inspect.isawaitable(result):
             async def finish() -> Any:
-                return handle(await result, kwargs)
+                try:
+                    value = await result
+                except BaseException as e:
+                    call.fail(e)
+                    raise
+                return handle(value, kwargs, call)
             return finish()
-        return handle(result, kwargs)
+        return handle(result, kwargs, call)
 
     setattr(wrapper, _INSTRUMENTED, True)
     setattr(owner, attr, wrapper)
@@ -213,17 +230,21 @@ def instrument(client: Any, stardust: Stardust, *, region: Optional[str] = None)
     wrapped = 0
 
     if module.startswith("anthropic"):
-        wrapped += _wrap(_path(client, "messages"), "create", stardust, "anthropic", _AnthropicAcc, from_anthropic, region)
+        wrapped += _wrap(_path(client, "messages"), "create", stardust, "anthropic", "chat", _AnthropicAcc,
+                         from_anthropic, region)
     elif module.startswith("openai"):
-        wrapped += _wrap(_path(client, "chat", "completions"), "create", stardust, "openai", _OpenAIAcc, from_openai, region)
-        wrapped += _wrap(_path(client, "responses"), "create", stardust, "openai", _OpenAIAcc, from_openai, region)
+        wrapped += _wrap(_path(client, "chat", "completions"), "create", stardust, "openai", "chat", _OpenAIAcc,
+                         from_openai, region)
+        wrapped += _wrap(_path(client, "responses"), "create", stardust, "openai", "chat", _OpenAIAcc,
+                         from_openai, region)
     elif module.startswith("google"):
         for models in (_path(client, "models"), _path(client, "aio", "models")):
             if models is None:
                 continue
-            wrapped += _wrap(models, "generate_content", stardust, "google", _GeminiAcc, from_gemini, region)
-            wrapped += _wrap(models, "generate_content_stream", stardust, "google", _GeminiAcc, from_gemini, region,
-                             always_stream=True)
+            wrapped += _wrap(models, "generate_content", stardust, "google", "generate_content", _GeminiAcc,
+                             from_gemini, region)
+            wrapped += _wrap(models, "generate_content_stream", stardust, "google", "generate_content", _GeminiAcc,
+                             from_gemini, region, always_stream=True)
     else:
         raise TypeError(f"Stardust can't instrument {type(client).__name__} from {module!r}")
 

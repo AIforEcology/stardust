@@ -2,7 +2,7 @@
 
 How Stardust data maps onto OpenTelemetry (spec §11). Where OTel's GenAI semantic conventions already define a usage attribute, Stardust uses it (§11.1). Everything environmental goes under the `stardust.*` namespace until the Green Software Foundation's SCI-for-OpenTelemetry conventions are ratified (§11.2); the plan is to migrate to their names then.
 
-Stardust Core **receives** OTLP/HTTP traces at `POST /v1/traces` and **exports** a `stardust.impact` span for every enriched event.
+Stardust Core **receives** OTLP traces over HTTP (`POST /v1/traces`) and gRPC, and **exports** a `stardust.impact` span per enriched event plus aggregated metrics, over HTTP or gRPC. The Stardust SDKs can also **emit** standard GenAI spans themselves.
 
 ## What Core reads from incoming spans
 
@@ -53,6 +53,37 @@ One `stardust.impact` span (kind `INTERNAL`) per enriched event, from resource `
 | `stardust.grid.mix.<ESC>` | double | Share of each source in the mix, e.g. `stardust.grid.mix.NGP` |
 | `stardust.model.tier` | string | `small` / `mid` / `frontier` / `unknown` |
 | `stardust.methodology.version` | string | Factor set used, for auditability |
+
+## Trace context on direct events
+
+Events sent straight to `POST /v1/events` can carry `otel_trace_id` (32 lowercase hex) and `otel_span_id` (16 lowercase hex). Core then exports its `stardust.impact` span into that trace. The SDKs set these, and set `event_id` to the same UUIDv5 of the trace and span ids that the receiver uses. An event that reaches Core both directly and through a collector is therefore counted once.
+
+## Spans the SDKs emit
+
+With OpenTelemetry on (`Stardust(otel=True)` in Python, `new Stardust({ tracer })` in JS), each metered call is a GenAI client span following the semantic conventions:
+
+| | |
+|---|---|
+| Name | `{gen_ai.operation.name} {model}`, e.g. `chat claude-sonnet-5` or `generate_content gemini-2.5-flash` |
+| Kind | `CLIENT`, timed from the call to the response or the stream's last chunk |
+| Attributes | `gen_ai.operation.name`, `gen_ai.provider.name` (`anthropic`, `openai`, `gcp.gemini`), `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens` (includes cached), `gen_ai.usage.output_tokens`, `gen_ai.usage.cache_read.input_tokens`, `cloud.region`, `stardust.source_layer`, `stardust.user_id`, `stardust.org_id` |
+| Errors | Status `ERROR`, `error.type`, and an `exception` event |
+
+## Metrics Core emits
+
+Monotonic counters, exported every `STARDUST_OTLP_METRICS_INTERVAL` seconds (cumulative temporality unless the exporter's standard `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` says otherwise):
+
+| Metric | Unit | Extra attributes |
+|---|---|---|
+| `stardust.ai.requests` | `{request}` | `stardust.cost.known` |
+| `stardust.ai.tokens` | `{token}` | `gen_ai.token.type` = `input` (includes cached) / `output` |
+| `stardust.ai.tokens.cached` | `{token}` | |
+| `stardust.cost` | `USD` | only operations with a known price |
+| `stardust.energy` | `Wh` | |
+| `stardust.co2e` | `g` | |
+| `stardust.water` | `mL` | |
+
+Every metric carries `gen_ai.provider.name`, `gen_ai.request.model`, `cloud.region` (`unknown` if not set), `stardust.source_layer`, `stardust.model.tier`, `stardust.impact.confidence_tier`, `stardust.esc.code` and `stardust.indicator.grade` (A–F), plus `stardust.org_id` when present. User and event ids are never metric attributes.
 
 ## Loop safety
 
