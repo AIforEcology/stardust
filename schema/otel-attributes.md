@@ -42,7 +42,12 @@ One `stardust.impact` span (kind `INTERNAL`) per enriched event, from resource `
 | `stardust.cost.usd` | double | Cost; **omitted** when unknown |
 | `stardust.impact.energy_wh` | double | Electricity |
 | `stardust.impact.co2e_g` | double | Greenhouse gases, CO₂e |
-| `stardust.impact.water_ml` | double | Water |
+| `stardust.impact.water_ml` | double | Water, total |
+| `stardust.impact.water_onsite_ml` | double | Cooling water at the data center |
+| `stardust.impact.water_offsite_ml` | double | Water used to generate the electricity |
+| `stardust.impact.heat_rejected_wh` | double | Heat from the electricity used |
+| `stardust.impact.heat_recovered_wh` | double | Heat reused; **omitted** unless the facility reported an Energy Reuse Factor |
+| `stardust.facility.energy_reuse_factor` | double | The facility's ERF (ISO/IEC 30134-6), 0–1. Core also **reads** it from incoming GenAI spans or their resource, so an operator can set it once as a resource attribute |
 | `stardust.impact.confidence_tier` | string | `measured` / `modeled` / `estimated` (§8) |
 | `stardust.indicator.code` | string | e.g. `B2-M` (§5.1) |
 | `stardust.esc.code` | string | Energy Source Code (§5.3.1) |
@@ -81,7 +86,9 @@ Monotonic counters, exported every `STARDUST_OTLP_METRICS_INTERVAL` seconds (cum
 | `stardust.cost` | `USD` | only operations with a known price |
 | `stardust.energy` | `Wh` | |
 | `stardust.co2e` | `g` | |
-| `stardust.water` | `mL` | |
+| `stardust.water` | `mL` | `stardust.water.scope` = `onsite` / `offsite` (sum both for the total) |
+| `stardust.heat.rejected` | `Wh` | |
+| `stardust.heat.recovered` | `Wh` | only operations with a reported Energy Reuse Factor |
 
 Every metric carries `gen_ai.provider.name`, `gen_ai.request.model`, `cloud.region` (`unknown` if not set), `stardust.source_layer`, `stardust.model.tier`, `stardust.impact.confidence_tier`, `stardust.esc.code` and `stardust.indicator.grade` (A–F), plus `stardust.org_id` when present. User and event ids are never metric attributes.
 

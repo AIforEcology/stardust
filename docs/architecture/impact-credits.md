@@ -2,7 +2,7 @@
 
 The architecture for spec v1.2 §22 (renewable energy, water, heat recovery and materials credits) and §8.8 (lifecycle emissions): what they add to Stardust, how they fit the existing Core, and the incremental, non-destructive plan for building them.
 
-**Status:** designed, not yet built. Today Stardust meters the carbon, electricity and water footprint of AI usage, and its broker handles carbon remediation only. Each step below changes that without breaking anything already running.
+**Status:** step 2 is partly built (water split and heat, methodology 0.2); the rest is designed, not yet built. Today Stardust meters the carbon, electricity, water and heat footprint of AI usage, and its broker handles carbon remediation only. Each step below changes that without breaking anything already running.
 
 ## What v1.2 adds
 
@@ -95,8 +95,8 @@ Carbon splits into components that are always reported separately, each with its
 |---|---|---|
 | Carbon footprint | `co2e_g` on every event (= `OPE`) | `FAC`, `TRA` and `EMB` components |
 | Electricity footprint | `energy_wh` on every event | Hourly bucketing and market zone for matching |
-| Water footprint | `water_ml` on every event | Watershed for place-based matching |
-| Heat footprint | Not measured | Waste heat is roughly the electricity consumed; needs a method in the factor config |
+| Water footprint | `water_ml` on every event, split into `water_onsite_ml` (cooling) and `water_offsite_ml` (electricity generation) | Watershed for place-based matching; per-grid generation water |
+| Heat footprint | `heat_rejected_wh` on every event; `heat_recovered_wh` when the facility reports its Energy Reuse Factor | Metered heat export from providers (§22.4 `HEX`) |
 | Materials footprint | Not measured (`ewaste_mg` reserved in the schema) | From `EMB` inputs |
 | Provider categories | Carbon remediation categories, §20 carbon-capture telemetry | `REN`, `WRR`, `HRC`, `RCY` and the §22.4 fields |
 | Broker quotes | `request_quote(co2e_g)` → carbon quotes | Impact-vector baskets, one quote per dimension |
@@ -124,11 +124,11 @@ Carbon splits into components that are always reported separately, each with its
 |---|---|---|---|
 | 0 | **Docs** (this change) | Spec v1.2 in `docs/`; this architecture doc | All code |
 | 1 | **Contract tests** | Golden tests for the current API and schemas | All behavior |
-| 2 | **Measure every dimension** | Events gain optional `heat_wh_th`, `materials_mg` and lifecycle components (`fac_g`, `tra_g`, `emb_g`) from `methodology-v0.2`; hour and market-zone fields for matching. Schema migration v3 (add columns) | `co2e_g` keeps meaning operational carbon; v0.1 events unchanged |
+| 2 | **Measure every dimension** | **Done (methodology 0.2, migration v3):** water split into on-site and off-site; heat rejected, and heat recovered from a reported ERF; OTel attributes and metrics. **Still to do:** `materials_mg` and lifecycle components (`fac_g`, `tra_g`, `emb_g`); hour and market-zone fields for matching (a later migration) | `co2e_g` keeps meaning operational carbon; v0.1 events unchanged |
 | 3 | **Net Impact Ledger (read-only)** | `GET /v1/ledger`: footprint per dimension, with retired credits from existing carbon orders and residuals. Nothing summed across dimensions | Summary, orders, broker |
 | 4 | **Provider SDK categories** | `REN`, `WRR`, `HRC`, `RCY`; `quote(quantity, unit)` alongside `quote(co2e_g)`; §22.4 telemetry schema as a new record type | Existing carbon providers work unmodified (category defaults to carbon) |
-| 5 | **Impact-vector quotes** | `request_quote` optionally takes `{co2e_g, kwh, water_l, heat_kwh_th, materials_kg}` plus matching preferences and returns a basket; like-for-like enforced; fees apply per line. Orders gain the §22.5 fields (migration v4) | `co2e_g`-only requests and responses |
-| 6 | **Connector interface + manual connector** | The connector interface, and a manual connector where an admin records retirements (serials, registry, retirement reference) that the provider, buyer or a licensed partner performed in the registry. Stardust verifies them where a read API exists. The ledger shows them | No automated registry calls yet |
+| 5 | **Impact-vector quotes** | `request_quote` optionally takes `{co2e_g, kwh, water_l, heat_kwh_th, materials_kg}` plus matching preferences and returns a basket; like-for-like enforced; fees apply per line. Orders gain the §22.5 fields (a later migration) | `co2e_g`-only requests and responses |
+| 6 | **Connector interface + manual connector** | The connector interface, and an "account-holder" connector where an AIforE admin records retirements (serials, registry, retirement reference) done by hand in the registry. The ledger shows them | No automated registry calls yet |
 | 7 | **Real connectors, one at a time** | Starting with the registry that grants API access first. Hourly matching once a granular-certificate registry is connected | Other connectors |
 | 8 | **Publish the measurement framework** (§22.7) | Schemas, units and mappings (SCI, GHG Protocol, ISO/IEC 30134, VWBA, EnergyTag) as a standalone document for public comment | Code |
 

@@ -26,7 +26,7 @@ from .models import EnrichedEvent
 log = logging.getLogger(__name__)
 
 # Bump when adding a migration; migrations run in order on open.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _MIGRATIONS: List[str] = [
     # v1
@@ -84,6 +84,15 @@ _MIGRATIONS: List[str] = [
     ALTER TABLE orders ADD COLUMN total_usd REAL;
     CREATE INDEX orders_created ON orders (created_at);
     """,
+    # v3: water split and heat (spec v1.2 §22). Older events keep NULL in the water split and
+    # heat recovered; heat rejected is back-filled because it equals their energy.
+    """
+    ALTER TABLE events ADD COLUMN water_onsite_ml REAL;
+    ALTER TABLE events ADD COLUMN water_offsite_ml REAL;
+    ALTER TABLE events ADD COLUMN heat_rejected_wh REAL;
+    ALTER TABLE events ADD COLUMN heat_recovered_wh REAL;
+    UPDATE events SET heat_rejected_wh = energy_wh;
+    """,
 ]
 
 
@@ -122,6 +131,11 @@ class Aggregate:
     energy_wh: float
     co2e_g: float
     water_ml: float
+    water_onsite_ml: float  # over events with the split (methodology 0.2+)
+    water_offsite_ml: float
+    heat_rejected_wh: float
+    heat_recovered_wh: Optional[float]  # None when no event reported an Energy Reuse Factor
+    heat_recovered_events: int
 
 
 class Store:
@@ -191,15 +205,18 @@ class Store:
             cur = self._conn.execute(
                 """INSERT INTO events (event_id, ts, user_id, org_id, source_layer, provider, model, region,
                        tokens_in, tokens_out, tokens_cached_in, cost_usd, energy_wh, co2e_g, water_ml,
+                       water_onsite_ml, water_offsite_ml, heat_rejected_wh, heat_recovered_wh,
                        confidence_tier, indicator_code, data)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT (event_id) DO NOTHING""",
                 (
                     str(e.event_id), _utc(e.timestamp),
                     str(e.user_id) if e.user_id else None, str(e.org_id) if e.org_id else None,
                     e.source_layer.value, e.provider, e.model, e.region,
                     e.tokens_in, e.tokens_out, e.tokens_cached_in, e.cost_usd,
-                    e.energy_wh, e.co2e_g, e.water_ml, e.confidence_tier.value, e.indicator_code,
+                    e.energy_wh, e.co2e_g, e.water_ml,
+                    e.water_onsite_ml, e.water_offsite_ml, e.heat_rejected_wh, e.heat_recovered_wh,
+                    e.confidence_tier.value, e.indicator_code,
                     e.model_dump_json(),
                 ),
             )
@@ -229,7 +246,12 @@ class Store:
                           COUNT(cost_usd) AS cost_known_events,
                           COALESCE(SUM(energy_wh), 0) AS energy_wh,
                           COALESCE(SUM(co2e_g), 0) AS co2e_g,
-                          COALESCE(SUM(water_ml), 0) AS water_ml
+                          COALESCE(SUM(water_ml), 0) AS water_ml,
+                          COALESCE(SUM(water_onsite_ml), 0) AS water_onsite_ml,
+                          COALESCE(SUM(water_offsite_ml), 0) AS water_offsite_ml,
+                          COALESCE(SUM(heat_rejected_wh), 0) AS heat_rejected_wh,
+                          SUM(heat_recovered_wh) AS heat_recovered_wh,
+                          COUNT(heat_recovered_wh) AS heat_recovered_events
                    FROM events {where}""",
                 args,
             ).fetchone()
@@ -244,7 +266,11 @@ class Store:
                 f"""SELECT substr(ts, 1, 10) AS day, COUNT(*) AS events,
                           COALESCE(SUM(tokens_in), 0) AS tokens_in, COALESCE(SUM(tokens_out), 0) AS tokens_out,
                           COALESCE(SUM(cost_usd), 0) AS cost_usd, COALESCE(SUM(energy_wh), 0) AS energy_wh,
-                          COALESCE(SUM(co2e_g), 0) AS co2e_g, COALESCE(SUM(water_ml), 0) AS water_ml
+                          COALESCE(SUM(co2e_g), 0) AS co2e_g, COALESCE(SUM(water_ml), 0) AS water_ml,
+                          COALESCE(SUM(water_onsite_ml), 0) AS water_onsite_ml,
+                          COALESCE(SUM(water_offsite_ml), 0) AS water_offsite_ml,
+                          COALESCE(SUM(heat_rejected_wh), 0) AS heat_rejected_wh,
+                          SUM(heat_recovered_wh) AS heat_recovered_wh
                    FROM events {where} GROUP BY day ORDER BY day""",
                 args,
             ).fetchall()

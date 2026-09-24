@@ -43,6 +43,8 @@ class UsageEvent(BaseModel):
     compute_seconds: Optional[float] = Field(default=None, ge=0)
     bytes_transferred: Optional[int] = Field(default=None, ge=0)
     storage_delta_bytes: Optional[int] = None
+    # Facility Energy Reuse Factor (ISO/IEC 30134-6), 0–1, when the operator reports it (§22).
+    energy_reuse_factor: Optional[float] = Field(default=None, ge=0, le=1)
     user_id: Optional[UUID] = None
     org_id: Optional[UUID] = None
     # Trace context of the span that made the AI call, when the caller uses OpenTelemetry (§11.3).
@@ -69,6 +71,13 @@ class EnrichedEvent(UsageEvent):
     grid_intensity_g_per_kwh: float
     co2e_g: float
     water_ml: float
+    # water_ml split: cooling water at the data center, and water used to generate its electricity.
+    # None only on events recorded before methodology 0.2.
+    water_onsite_ml: Optional[float] = None
+    water_offsite_ml: Optional[float] = None
+    # Heat from the operation's electricity; recovered is None unless the facility reports its ERF.
+    heat_rejected_wh: Optional[float] = None
+    heat_recovered_wh: Optional[float] = None
     particulate_mg: Optional[float] = None
     ewaste_mg: Optional[float] = None
     confidence_tier: ConfidenceTier

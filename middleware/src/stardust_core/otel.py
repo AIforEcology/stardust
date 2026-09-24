@@ -67,6 +67,7 @@ STARDUST_EVENT_ID = "stardust.event_id"
 STARDUST_SOURCE_LAYER = "stardust.source_layer"
 STARDUST_USER_ID = "stardust.user_id"
 STARDUST_ORG_ID = "stardust.org_id"
+STARDUST_ERF = "stardust.facility.energy_reuse_factor"
 
 # gen_ai.provider.name / gen_ai.system values → Stardust provider slugs.
 _PROVIDER_ALIASES = {
@@ -236,6 +237,15 @@ def _uuid_or_none(v: Any) -> Optional[uuid.UUID]:
         return None
 
 
+def _erf(v: Any) -> Optional[float]:
+    """A reported Energy Reuse Factor, if it's a number between 0 and 1; otherwise ignored."""
+    try:
+        f = float(v) if v is not None and not isinstance(v, bool) else None
+    except (TypeError, ValueError):
+        return None
+    return f if f is not None and 0 <= f <= 1 else None
+
+
 def is_stardust_span(span: OtlpSpan) -> bool:
     return (
         STARDUST_EVENT_ID in span.attributes
@@ -288,6 +298,7 @@ def span_to_event(span: OtlpSpan) -> Optional[UsageEvent]:
         tokens_in=tokens_in,
         tokens_out=tokens_out,
         tokens_cached_in=cache_read,
+        energy_reuse_factor=_erf(attrs.get(STARDUST_ERF)),
         user_id=_uuid_or_none(attrs.get(STARDUST_USER_ID)),
         org_id=_uuid_or_none(attrs.get(STARDUST_ORG_ID)),
     )
@@ -313,6 +324,11 @@ def event_attributes(e: EnrichedEvent) -> Dict[str, Any]:
         "stardust.impact.energy_wh": e.energy_wh,
         "stardust.impact.co2e_g": e.co2e_g,
         "stardust.impact.water_ml": e.water_ml,
+        "stardust.impact.water_onsite_ml": e.water_onsite_ml,
+        "stardust.impact.water_offsite_ml": e.water_offsite_ml,
+        "stardust.impact.heat_rejected_wh": e.heat_rejected_wh,
+        "stardust.impact.heat_recovered_wh": e.heat_recovered_wh,
+        STARDUST_ERF: e.energy_reuse_factor,
         "stardust.impact.confidence_tier": e.confidence_tier.value,
         "stardust.indicator.code": e.indicator_code,
         "stardust.esc.code": e.energy_source_code,
@@ -398,7 +414,12 @@ class ImpactMetrics:
                                          description="Cost of operations with a known price")
         self.energy = meter.create_counter("stardust.energy", unit="Wh", description="Electricity")
         self.co2e = meter.create_counter("stardust.co2e", unit="g", description="Greenhouse gases, CO2e")
-        self.water = meter.create_counter("stardust.water", unit="mL", description="Water")
+        self.water = meter.create_counter("stardust.water", unit="mL",
+                                          description="Water, by stardust.water.scope = onsite / offsite")
+        self.heat_rejected = meter.create_counter("stardust.heat.rejected", unit="Wh",
+                                                  description="Heat from the electricity used")
+        self.heat_recovered = meter.create_counter("stardust.heat.recovered", unit="Wh",
+                                                   description="Heat reused, where the facility reports its ERF")
 
     def record(self, e: EnrichedEvent) -> None:
         try:
@@ -414,7 +435,15 @@ class ImpactMetrics:
                 self.cost.add(e.cost_usd, attrs)
             self.energy.add(e.energy_wh, attrs)
             self.co2e.add(e.co2e_g, attrs)
-            self.water.add(e.water_ml, attrs)
+            if e.water_onsite_ml is not None and e.water_offsite_ml is not None:
+                self.water.add(e.water_onsite_ml, {**attrs, "stardust.water.scope": "onsite"})
+                self.water.add(e.water_offsite_ml, {**attrs, "stardust.water.scope": "offsite"})
+            else:
+                self.water.add(e.water_ml, attrs)
+            if e.heat_rejected_wh is not None:
+                self.heat_rejected.add(e.heat_rejected_wh, attrs)
+            if e.heat_recovered_wh is not None:
+                self.heat_recovered.add(e.heat_recovered_wh, attrs)
         except Exception:  # noqa: BLE001
             log.exception("Failed to record Stardust metrics")
 

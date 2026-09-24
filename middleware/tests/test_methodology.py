@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -39,6 +40,10 @@ def test_frontier_us_worked_example(engine):
     assert e.energy_wh == pytest.approx(0.425)
     assert e.co2e_g == pytest.approx(0.425 / 1000 * 367)
     assert e.water_ml == pytest.approx(0.425 * (1.8 + 3.14))
+    assert e.water_onsite_ml == pytest.approx(0.425 * 1.8)
+    assert e.water_offsite_ml == pytest.approx(0.425 * 3.14)
+    assert e.heat_rejected_wh == pytest.approx(0.425)
+    assert e.heat_recovered_wh is None  # no ERF reported: unknown, not zero
     assert e.cost_usd == pytest.approx(500 * 1e-05 + 500 * 5e-05)
     assert e.confidence_tier.value == "modeled"
     assert e.indicator_code == "C3-S"
@@ -47,7 +52,16 @@ def test_frontier_us_worked_example(engine):
     assert e.grid_style.value == "grid-blend"
     assert e.grid_majority_share_pct == 43
     assert e.grid_diversified is False
-    assert e.methodology_version == "0.1.0"
+    assert e.methodology_version == "0.2.0"
+
+
+def test_reported_energy_reuse_factor_gives_heat_recovered(engine):
+    e = engine.enrich(ev(region="us-east-1", energy_reuse_factor=0.3))
+    assert e.heat_rejected_wh == pytest.approx(0.425)
+    assert e.heat_recovered_wh == pytest.approx(0.425 * 0.3)
+    assert engine.enrich(ev(energy_reuse_factor=0)).heat_recovered_wh == 0  # reported zero stays zero
+    with pytest.raises(ValueError):
+        ev(energy_reuse_factor=1.5)
 
 
 def test_region_changes_impact_not_energy(engine):
@@ -112,3 +126,15 @@ def test_diversified_mix_flag(cfg, pricing_file):
 ])
 def test_model_tier_edge_cases(engine, model, tier):
     assert engine.model_tier(model) == tier
+
+
+def test_v01_factor_file_still_enriches_without_heat(pricing_file):
+    from stardust_core.config import load_json
+    from stardust_core.methodology import Methodology
+    from stardust_core.pricing import PricingTable
+
+    v01 = load_json(Path(__file__).resolve().parents[2] / "schema" / "factors" / "methodology-v0.1.json")
+    e = Methodology(v01, PricingTable.load(pricing_file)).enrich(ev(region="us-east-1", energy_reuse_factor=0.3))
+    assert e.methodology_version == "0.1.0"
+    assert e.water_ml == pytest.approx(0.425 * (1.8 + 3.14))  # v0.1 figures unchanged
+    assert (e.heat_rejected_wh, e.heat_recovered_wh) == (None, None)

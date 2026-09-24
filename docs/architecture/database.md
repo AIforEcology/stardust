@@ -43,7 +43,7 @@ Programmatic use (and the test suite) can pass `database_path=None` to `Settings
 
 ## Schema
 
-The schema is version 2, recorded in `PRAGMA user_version`. Every table stores its full record as JSON in a `data` column; that's the source of truth. Next to it are copies of the fields that queries filter, sort or add up, so new fields can be added to the models without a migration.
+The schema is version 3, recorded in `PRAGMA user_version`. Every table stores its full record as JSON in a `data` column; that's the source of truth. Next to it are copies of the fields that queries filter, sort or add up, so new fields can be added to the models without a migration.
 
 ### `events`
 
@@ -58,6 +58,9 @@ One row per enriched usage event (spec §7).
 | `tokens_in`, `tokens_out`, `tokens_cached_in` | INTEGER | Nullable |
 | `cost_usd` | REAL | **NULL when the price is unknown**, never 0, so totals and "unknown cost" counts stay honest |
 | `energy_wh`, `co2e_g`, `water_ml` | REAL | |
+| `water_onsite_ml`, `water_offsite_ml` | REAL | The split of `water_ml` (v3). NULL on older events |
+| `heat_rejected_wh` | REAL | v3. Back-filled from `energy_wh` for older events |
+| `heat_recovered_wh` | REAL | v3. **NULL unless the facility reported an Energy Reuse Factor**, so unknown never reads as zero |
 | `confidence_tier`, `indicator_code` | TEXT | |
 | `data` | TEXT | The complete `EnrichedEvent` JSON (SJI, grid mix, methodology version…) |
 
@@ -159,6 +162,8 @@ For continuous off-site backup, [Litestream](https://litestream.io) streams the 
 3. Core refuses to open a database with a **newer** schema than it understands, so an older build can't damage data written by a newer one.
 
 Example: v2 added the fee columns to `orders` with three `ALTER TABLE … ADD COLUMN` statements and an index. Existing orders keep NULL in the new columns, and the fee report counts them as fee-free.
+
+v3 added the water split and heat columns to `events` the same way, and back-filled `heat_rejected_wh`, which equals energy by definition. The water split isn't back-filled: `/v1/summary` reports older events' water as `water_unsplit_ml` instead of guessing.
 
 Prefer adding columns (and back-filling from `data` if needed) over rewriting tables. Since `data` holds the full record, most model changes need no migration at all.
 
