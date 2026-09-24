@@ -6,6 +6,7 @@
 import { accountTurn, fingerprint, hiddenCharsEstimate, remember } from "./context.ts";
 import { estimateTokens } from "./estimate.ts";
 import { siteForHost, type SiteAdapter } from "./sites.ts";
+import { ReplyTracker, type Turn } from "./tracker.ts";
 import type { UsageMessage } from "./types.ts";
 
 const POLL_MS = 1000;
@@ -15,12 +16,11 @@ const TOTALS_KEY = "conversationChars";
 
 const site = siteForHost(location.hostname);
 
-const reported = new WeakSet<Element>();
+// Decides which replies are new usage rather than history (see tracker.ts).
+const tracker = new ReplyTracker<Element>(STABLE_POLLS);
 // Replies already reported this page session, by conversation + content fingerprint, so a
 // reply the page unmounts and re-renders (virtualized transcripts) isn't counted twice.
 const reportedPrints = new Set<string>();
-const lastLength = new WeakMap<Element, { len: number; stable: number }>();
-let baselined = false;
 
 function textLength(el: Element): number {
   return (el.textContent ?? "").trim().length;
@@ -73,9 +73,7 @@ function measuredContextBefore(adapter: SiteAdapter, userTurn: Element | undefin
   return renderedChars + hiddenCharsEstimate(spacerPx, ratioChars, ratioPx);
 }
 
-async function report(adapter: SiteAdapter, reply: Element, replyChars: number): Promise<void> {
-  const users = Array.from(document.querySelectorAll(adapter.userSelector)).filter((u) => precedes(u, reply));
-  const userTurn = users.at(-1);
+async function report(adapter: SiteAdapter, reply: Element, replyChars: number, userTurn: Element | undefined): Promise<void> {
   const userChars = userTurn ? turnChars(adapter, userTurn) : 0;
 
   const key = conversationKey();
@@ -95,32 +93,24 @@ async function report(adapter: SiteAdapter, reply: Element, replyChars: number):
 }
 
 function tick(): void {
-  if (!site || document.visibilityState !== "visible") return;
-  const replies = Array.from(document.querySelectorAll(site.assistantSelector));
+  if (!site) return;
+  // Runs in background tabs too (Chrome throttles the timer there): a message sent before
+  // switching tabs is still matched with its reply when it finishes.
+  const turns: Turn<Element>[] = Array.from(document.querySelectorAll(`${site.assistantSelector}, ${site.userSelector}`)).map((el) => {
+    const isUser = el.matches(site.userSelector);
+    return {
+      el,
+      kind: isUser ? "user" : "reply",
+      chars: turnChars(site, el),
+      streaming: isUser ? false : isStreaming(site, el),
+    };
+  });
 
-  // Don't report conversation history that was already on the page when we loaded.
-  if (!baselined) {
-    for (const r of replies) {
-      reported.add(r);
-      reportedPrints.add(`${conversationKey()}|${fingerprint((r.textContent ?? "").trim())}`);
-    }
-    baselined = true;
-    return;
-  }
-
-  for (const reply of replies) {
-    if (reported.has(reply)) continue;
-    const len = textLength(reply);
-    const prev = lastLength.get(reply);
-    const stable = prev && prev.len === len ? prev.stable + 1 : 0;
-    lastLength.set(reply, { len, stable });
-    if (len === 0 || stable < STABLE_POLLS || isStreaming(site, reply)) continue;
-
-    reported.add(reply);
-    const print = `${conversationKey()}|${fingerprint((reply.textContent ?? "").trim())}`;
+  for (const { reply, user } of tracker.observe(turns)) {
+    const print = `${conversationKey()}|${fingerprint((reply.el.textContent ?? "").trim())}`;
     if (reportedPrints.has(print)) continue; // the same reply, re-rendered
     reportedPrints.add(print);
-    void report(site, reply, len);
+    void report(site, reply.el, reply.chars, user?.el);
   }
 }
 

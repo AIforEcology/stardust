@@ -18,6 +18,7 @@ In Chrome or Edge, open `chrome://extensions`, turn on Developer mode, click **L
 - **Finished replies only.** A reply is reported once its length stops changing and, on sites that mark it, once streaming has ended. This keeps replies that pause mid-stream from being cut short.
 - **Input includes the whole conversation.** Chat apps resend it with every message. The extension keeps a running character total per conversation, stored locally as a number per conversation ID, so each reply's input is everything before it plus the new message.
 - **Conversations the extension didn't see from the start:** some pages (claude.ai) render only the last few turns. For a conversation opened partway through, the hidden turns are estimated from the placeholder height, using the characters-per-pixel of the rendered turns.
+- **Only new usage.** Pages load history late: on open, when you scroll up (Gemini) and when you switch chats. So a reply counts only if it answers a message sent while the page was open, or if it was seen streaming. History arrives complete, together with its question, so it's never counted. See [`src/tracker.ts`](src/tracker.ts).
 - **No double counting.** A reply the page removes and re-adds is recognized by a local fingerprint and isn't reported again.
 
 ## Site status
