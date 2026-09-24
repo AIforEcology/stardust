@@ -1,0 +1,114 @@
+{
+  "$comment": "Stardust environmental methodology, versioned configuration (§8.4). Every number here is a swappable input, not a code constant. Entries marked needs_verification are placeholders pending board/technical review and must not be presented as authoritative.",
+  "version": "0.1.0",
+  "status": "draft",
+
+  "model_tiers": {
+    "$comment": "MTR (§21.2). Patterns are case-insensitive regexes over the model name, checked in order; the first match wins. Size words must be whole name segments (so \"gemini\" is not \"mini\").",
+    "patterns": [
+      { "pattern": "(^|[-_/.])(haiku|mini|nano|flash|flash-lite|lite|small|[1-8]b)($|[-_/.])", "tier": "small" },
+      { "pattern": "opus|fable|ultra|-pro($|[-_/.])|(^|[-_/.])(gpt-5|gpt-4o|gpt-4\\.1|o1|o3|o4|405b|70b)($|[-_/.])", "tier": "frontier" },
+      { "pattern": "sonnet|gpt-4|gemini|mistral|llama|command", "tier": "mid" }
+    ],
+    "unknown_tier_uses": "frontier",
+    "unknown_tier_note": "Model not identifiable: use the most conservative factor set and tag the result Estimated (§8.3)."
+  },
+
+  "token_energy_wh": {
+    "$comment": "Modeled tier (§8.2). Output-token figures anchored so ~500 output tokens on a frontier model ≈ 0.3 Wh, the Oviedo et al. (2026) median of 0.31 Wh/query and the Epoch AI (2025) ≈0.3 Wh estimate. Input-token figure anchored to the spec's derived scaling (≈2.5 Wh for 10k input tokens, §8.7.1.1). Mid/small tiers are scaled down within Epoch AI's 0.0001–0.002 Wh/token range.",
+    "small":    { "input_per_token": 0.00004,  "output_per_token": 0.0001 },
+    "mid":      { "input_per_token": 0.000125, "output_per_token": 0.0003 },
+    "frontier": { "input_per_token": 0.00025,  "output_per_token": 0.0006 },
+    "citations": [
+      "Oviedo, F. et al. Joule (2026), arXiv:2509.20241",
+      "You, J. Epoch AI, Gradient Updates (2025)",
+      "Spec v0.9 §8.7.1.1 derived scaling"
+    ],
+    "needs_verification": true
+  },
+
+  "estimated_per_query_wh": {
+    "$comment": "Estimated tier (§8.3) floor when no token counts are available at all.",
+    "value": 0.31,
+    "citation": "Oviedo, F. et al. Joule (2026), arXiv:2509.20241 — frontier median"
+  },
+
+  "grids": {
+    "$comment": "Static annual-average grid factors (§8.5). The live path (§8.6) replaces these with Electricity Maps / WattTime values at the job timestamp and falls back here when the feed is unavailable. Mix keys are ESCs; coal has no ESC yet (§5.3.1) so it is recorded as FPP.",
+    "global": {
+      "intensity_g_per_kwh": 480,
+      "mix": null,
+      "citation": "Ember, Global Electricity Review 2024 (2023 world average)",
+      "needs_verification": true
+    },
+    "US": {
+      "intensity_g_per_kwh": 367,
+      "mix": { "NGP": 43, "FPP": 16, "NPP": 19, "WPP": 10, "HYD": 6, "SPP": 4, "UNK": 2 },
+      "citation": "U.S. EIA, 2023 net generation by source and CO2 per kWh",
+      "needs_verification": true
+    },
+    "SE": {
+      "intensity_g_per_kwh": 40,
+      "mix": { "HYD": 39, "NPP": 29, "WPP": 21, "REP": 11 },
+      "citation": "Approximate 2023 Swedish generation mix — replace with Electricity Maps",
+      "needs_verification": true
+    },
+    "FR": {
+      "intensity_g_per_kwh": 56,
+      "mix": { "NPP": 65, "HYD": 12, "WPP": 10, "NGP": 6, "SPP": 4, "UNK": 3 },
+      "citation": "Approximate 2023 French generation mix (RTE) — replace with Electricity Maps",
+      "needs_verification": true
+    }
+  },
+
+  "region_to_grid": {
+    "$comment": "Cloud region (OTel cloud.region) → grid key. Regexes checked in order; unmatched regions use \"global\".",
+    "patterns": [
+      { "pattern": "^(eu-north-1|swedencentral|europe-north2)$", "grid": "SE" },
+      { "pattern": "^(eu-west-3|francecentral|francesouth|europe-west9)$", "grid": "FR" },
+      { "pattern": "^(us-|eastus|westus|centralus|northcentralus|southcentralus|westcentralus|us$)", "grid": "US" }
+    ],
+    "default": "global"
+  },
+
+  "provider_default_grid": {
+    "$comment": "Used when the event has no region. Hyperscaler AI inference is predominantly US-hosted today; this is an assumption, not a measurement.",
+    "anthropic": "US",
+    "openai": "US",
+    "google": "US",
+    "default": "global"
+  },
+
+  "water": {
+    "onsite_wue_l_per_kwh": {
+      "value": 1.8,
+      "citation": "Shehabi, A. et al. United States Data Center Energy Usage Report, LBNL (2016)"
+    },
+    "generation_l_per_kwh": {
+      "value": 3.14,
+      "citation": "U.S. average EWIF as used in Li, P. et al. \"Making AI Less 'Thirsty'\" (2023)",
+      "needs_verification": true
+    }
+  },
+
+  "grid_display": {
+    "diversification_threshold_pct": 25
+  },
+
+  "indicator": {
+    "$comment": "§5.1 thresholds. Placeholder static cut-offs until a rolling benchmark exists (§19). Each list is [upper bound, value] checked in order; the last entry catches everything above.",
+    "impact_grade_by_co2e_g_per_1k_tokens": [[0.05, "A"], [0.1, "B"], [0.2, "C"], [0.4, "D"], [0.8, "E"], [null, "F"]],
+    "impact_grade_by_co2e_g_no_tokens": [[0.02, "A"], [0.05, "B"], [0.1, "C"], [0.2, "D"], [0.5, "E"], [null, "F"]],
+    "cost_tier_by_usd": [[0.001, 1], [0.01, 2], [0.05, 3], [0.25, 4], [null, 5]],
+    "volume_class_by_total_tokens": [[500, "XS"], [2000, "S"], [10000, "M"], [50000, "L"], [null, "XL"]],
+    "needs_verification": true
+  },
+
+  "right_sizing": {
+    "$comment": "§21.4 default weights, not yet consumed by code.",
+    "weights": { "D-MFS": 0.40, "D-TES": 0.25, "D-UTS": 0.20, "D-CTS": 0.15 },
+    "parity_threshold": 0.95,
+    "shadow_sample_pct": [1, 2],
+    "bands": { "right_sized": 85, "opportunity": 60 }
+  }
+}

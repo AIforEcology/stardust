@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AIforEcology/stardust/schema/esc.json",
+  "title": "Energy Source Codes",
+  "description": "3-character Energy Source Codes carried in segment 2 of the Stardust Job Identifier (§5.3.1, §5.3.2). Specific codes name a fallback parent so a job is never given a narrower code than its evidence supports.",
+  "$defs": {
+    "code": {
+      "enum": ["NGP", "RNG", "OPP", "NPP", "SMR", "WEC", "HYD", "SPP", "WPP", "GPP", "FPP", "ZEP", "REP", "UNK"]
+    }
+  },
+  "codes": {
+    "NGP": { "name": "Natural gas power plant", "fallback": "FPP" },
+    "OPP": { "name": "Oil-fired power plant", "fallback": "FPP" },
+    "RNG": { "name": "Renewable natural gas / biogas power plant", "fallback": "REP" },
+    "NPP": { "name": "Nuclear power plant (conventional)", "fallback": "ZEP" },
+    "SMR": { "name": "Small modular reactor", "fallback": "ZEP" },
+    "WEC": { "name": "Wave/marine energy converter", "fallback": "REP" },
+    "HYD": { "name": "Hydroelectric power plant", "fallback": "REP" },
+    "SPP": { "name": "Solar power plant", "fallback": "REP" },
+    "WPP": { "name": "Wind power plant", "fallback": "REP" },
+    "GPP": { "name": "Geothermal power plant", "fallback": "REP" },
+    "FPP": { "name": "Fossil fuel power plant (unspecified type)", "fallback": "UNK" },
+    "ZEP": { "name": "Zero-emissions power plant (unspecified type)", "fallback": "UNK" },
+    "REP": { "name": "Renewable energy power plant (unspecified type)", "fallback": "UNK" },
+    "UNK": { "name": "Unknown", "fallback": null }
+  }
+}

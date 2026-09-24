@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AIforEcology/stardust/schema/enriched-event.schema.json",
+  "title": "Stardust enriched event",
+  "description": "A usage event after Stardust Core has applied cost, the environmental methodology and the indicator code. Spec §5, §7, §8. Environmental fields are emitted as stardust.* OTel attributes (§11.2).",
+  "type": "object",
+  "$ref": "usage-event.schema.json#/$defs/fields",
+  "required": [
+    "source_layer",
+    "provider",
+    "model",
+    "timestamp",
+    "event_id",
+    "job_sji",
+    "cost_usd",
+    "energy_wh",
+    "co2e_g",
+    "water_ml",
+    "confidence_tier",
+    "indicator_code",
+    "energy_source_code",
+    "grid_style",
+    "methodology_version"
+  ],
+  "properties": {
+    "job_sji": {
+      "type": "string",
+      "pattern": "^[0-9A-F]{8}-[A-Z]{3}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$",
+      "description": "Stardust Job Identifier: GUID shape with the 3-letter Energy Source Code in segment 2 (§5.3). Not an RFC 4122 UUID."
+    },
+    "cost_usd": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "Null when the model has no known price."
+    },
+    "energy_wh": {
+      "type": "number",
+      "minimum": 0
+    },
+    "grid_intensity_g_per_kwh": {
+      "type": "number",
+      "minimum": 0
+    },
+    "co2e_g": {
+      "type": "number",
+      "minimum": 0
+    },
+    "water_ml": {
+      "type": "number",
+      "minimum": 0
+    },
+    "particulate_mg": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Not yet modeled in methodology v0.1."
+    },
+    "ewaste_mg": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Not yet modeled in methodology v0.1."
+    },
+    "confidence_tier": {
+      "enum": [
+        "measured",
+        "modeled",
+        "estimated"
+      ]
+    },
+    "indicator_code": {
+      "type": "string",
+      "pattern": "^[A-F][1-5X]-(XS|S|M|L|XL)$",
+      "description": "[Impact Grade][Cost Tier]-[Token Volume Class], e.g. B2-M (§5.1). Cost tier X = cost unknown (v0.1 extension)."
+    },
+    "energy_source_code": {
+      "$ref": "esc.json#/$defs/code"
+    },
+    "energy_mix_breakdown": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Grid-mix percentage split keyed by ESC, where known.",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      }
+    },
+    "grid_style": {
+      "enum": [
+        "dedicated",
+        "grid-blend"
+      ]
+    },
+    "grid_majority_share_pct": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "grid_diversified": {
+      "type": "boolean",
+      "description": "True when the plurality source is below the diversification threshold (§5.3.3); display as \"mixed grid\"."
+    },
+    "model_tier": {
+      "enum": [
+        "small",
+        "mid",
+        "frontier",
+        "unknown"
+      ],
+      "description": "MTR (§21.2)."
+    },
+    "methodology_version": {
+      "type": "string",
+      "description": "Version of the factor configuration used, for auditability (§15)."
+    }
+  },
+  "unevaluatedProperties": false
+}

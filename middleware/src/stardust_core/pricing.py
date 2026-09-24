@@ -1,0 +1,123 @@
+"""Token pricing from BerriAI/litellm's model_prices_and_context_window.json (MIT), spec §9.4.
+
+The file is data, not code: it is schema-checked on load (§14.2) and entries that
+don't carry sane per-token prices are dropped rather than trusted.
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from .config import load_json
+
+log = logging.getLogger(__name__)
+
+# litellm prefixes some keys with a routing provider; map Stardust provider slugs to them.
+# "anthropic." (Bedrock) is last: some older Claude models are only listed there.
+_PROVIDER_PREFIXES = {
+    "anthropic": ["anthropic/", "anthropic."],
+    "openai": ["openai/"],
+    "google": ["gemini/", "vertex_ai/"],
+}
+
+# A per-token price above this is almost certainly a corrupted entry ($1,000 per 1k tokens).
+_MAX_SANE_PRICE_PER_TOKEN = 1.0
+
+
+@dataclass(frozen=True)
+class Price:
+    input_per_token: float
+    output_per_token: float
+
+
+class PricingTable:
+    def __init__(self, prices: Dict[str, Price], source: str):
+        self._prices = prices
+        self.source = source
+        self._dated_cache: Dict[str, Optional[Price]] = {}
+
+    def __len__(self) -> int:
+        return len(self._prices)
+
+    @classmethod
+    def empty(cls) -> "PricingTable":
+        return cls({}, source="none")
+
+    @classmethod
+    def load(cls, path: Path) -> "PricingTable":
+        if not path.exists():
+            log.warning("Pricing file %s not found; cost_usd will be null. Run scripts/update_pricing.py.", path)
+            return cls.empty()
+        table = cls.from_raw(load_json(path), source=str(path))
+        log.info("Loaded %d priced models from %s", len(table), path)
+        return table
+
+    @classmethod
+    def from_raw(cls, raw: object, source: str) -> "PricingTable":
+        if not isinstance(raw, dict):
+            raise ValueError(f"{source}: expected a JSON object keyed by model name")
+        prices: Dict[str, Price] = {}
+        for name, entry in raw.items():
+            if name == "sample_spec" or not isinstance(entry, dict):
+                continue
+            p_in = entry.get("input_cost_per_token")
+            p_out = entry.get("output_cost_per_token")
+            if not (_is_price(p_in) and _is_price(p_out)):
+                continue
+            prices[name.lower()] = Price(float(p_in), float(p_out))
+        return cls(prices, source=source)
+
+    def diff(self, newer: "PricingTable") -> Dict[str, List[str]]:
+        """Models added, removed and re-priced going from this table to ``newer``."""
+        old, new = self._prices, newer._prices
+        return {
+            "added": sorted(new.keys() - old.keys()),
+            "removed": sorted(old.keys() - new.keys()),
+            "changed": sorted(k for k in old.keys() & new.keys() if old[k] != new[k]),
+        }
+
+    def lookup(self, provider: str, model: str) -> Optional[Price]:
+        model = model.lower()
+        if model in self._prices:
+            return self._prices[model]
+        prefixes = ["", *_PROVIDER_PREFIXES.get(provider.lower(), [f"{provider.lower()}/"])]
+        for prefix in prefixes[1:]:
+            hit = self._prices.get(prefix + model)
+            if hit:
+                return hit
+        # Fall back to a dated snapshot, e.g. "claude-opus-4-1" → "anthropic.claude-opus-4-1-20250805-v1:0".
+        for prefix in prefixes:
+            hit = self._dated(prefix + model)
+            if hit:
+                return hit
+        return None
+
+    def _dated(self, name: str) -> Optional[Price]:
+        if name not in self._dated_cache:
+            pattern = re.compile(re.escape(name) + r"-\d{8}(-v\d+(:\d+)?)?$")
+            matches = sorted(k for k in self._prices if pattern.match(k))
+            # Latest snapshot wins.
+            self._dated_cache[name] = self._prices[matches[-1]] if matches else None
+        return self._dated_cache[name]
+
+    def cost_usd(self, provider: str, model: str, tokens_in: Optional[int], tokens_out: Optional[int]) -> Optional[float]:
+        if tokens_in is None and tokens_out is None:
+            return None
+        price = self.lookup(provider, model)
+        if price is None:
+            return None
+        return (tokens_in or 0) * price.input_per_token + (tokens_out or 0) * price.output_per_token
+
+
+def _is_price(v: object) -> bool:
+    return (
+        isinstance(v, (int, float))
+        and not isinstance(v, bool)
+        and math.isfinite(v)
+        and 0 <= v <= _MAX_SANE_PRICE_PER_TOKEN
+    )
