@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Dict, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SourceLayer(str, Enum):
@@ -38,12 +38,19 @@ class UsageEvent(BaseModel):
     timestamp: datetime
     tokens_in: Optional[int] = Field(default=None, ge=0)
     tokens_out: Optional[int] = Field(default=None, ge=0)
+    tokens_cached_in: Optional[int] = Field(default=None, ge=0)
     tokens_estimated: bool = False
     compute_seconds: Optional[float] = Field(default=None, ge=0)
     bytes_transferred: Optional[int] = Field(default=None, ge=0)
     storage_delta_bytes: Optional[int] = None
     user_id: Optional[UUID] = None
     org_id: Optional[UUID] = None
+
+    @model_validator(mode="after")
+    def _cached_within_input(self) -> "UsageEvent":
+        if self.tokens_cached_in and self.tokens_cached_in > (self.tokens_in or 0):
+            raise ValueError("tokens_cached_in cannot exceed tokens_in")
+        return self
 
     @property
     def total_tokens(self) -> Optional[int]:

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stardust-sdk"
+version = "0.1.0"
+description = "Stardust infra SDK: meter Anthropic, OpenAI and Gemini API usage (measured tokens) and report it to Stardust Core."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+dependencies = []  # stdlib only: an SDK shouldn't pull dependencies into your app
+
+[project.optional-dependencies]
+# Only needed to run the tests against the real vendor response types.
+dev = ["pytest>=8", "anthropic>=0.40", "openai>=1.50", "google-genai>=1.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

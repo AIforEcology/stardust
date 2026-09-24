@@ -14,6 +14,10 @@ dependencies = [
   "uvicorn>=0.29",
   "pydantic>=2.6",
   "httpx>=0.27",
+  # OpenTelemetry receiver/exporter (spec §11). 1.41.x is the last line supporting Python 3.9.
+  "opentelemetry-sdk>=1.30",
+  "opentelemetry-exporter-otlp-proto-http>=1.30",
+  "opentelemetry-proto>=1.30",
 ]
 
 [project.optional-dependencies]

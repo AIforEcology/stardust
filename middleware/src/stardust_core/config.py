@@ -11,7 +11,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -36,6 +36,17 @@ def parse_refresh(value: str) -> Optional[float]:
     return hours
 
 
+def parse_headers(value: str) -> Tuple[Tuple[str, str], ...]:
+    """``STARDUST_OTLP_HEADERS``: "key=value,key2=value2", the same format as OTEL_EXPORTER_OTLP_HEADERS."""
+    pairs = []
+    for item in value.split(","):
+        if "=" in item:
+            k, v = item.split("=", 1)
+            if k.strip():
+                pairs.append((k.strip(), v.strip()))
+    return tuple(pairs)
+
+
 @dataclass(frozen=True)
 class Settings:
     methodology_path: Path
@@ -48,6 +59,9 @@ class Settings:
     pricing_url: str = DEFAULT_PRICING_URL
     pricing_ref: str = "main"
     pricing_cache_path: Optional[Path] = None
+    # OTLP/HTTP traces URL to export enriched spans to (e.g. http://collector:4318/v1/traces); None = off.
+    otlp_endpoint: Optional[str] = None
+    otlp_headers: Tuple[Tuple[str, str], ...] = ()
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -62,6 +76,8 @@ class Settings:
             pricing_url=os.environ.get("STARDUST_PRICING_URL", DEFAULT_PRICING_URL),
             pricing_ref=os.environ.get("STARDUST_PRICING_REF", "main"),
             pricing_cache_path=Path(os.environ.get("STARDUST_PRICING_CACHE", DEFAULT_PRICING_CACHE)),
+            otlp_endpoint=os.environ.get("STARDUST_OTLP_ENDPOINT") or None,
+            otlp_headers=parse_headers(os.environ.get("STARDUST_OTLP_HEADERS", "")),
         )
 
 

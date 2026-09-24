@@ -1,0 +1,23 @@
+{
+  "name": "@stardust/sdk",
+  "version": "0.1.0",
+  "description": "Stardust infra SDK: meter Anthropic, OpenAI and Gemini API usage (measured tokens) and report it to Stardust Core.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.60.0",
+    "@types/node": "^22.0.0",
+    "openai": "^5.0.0",
+    "typescript": "^5.5.0"
+  }
+}

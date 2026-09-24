@@ -9,13 +9,14 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
-from collections import deque
+from collections import OrderedDict, deque
 from contextlib import asynccontextmanager
-from typing import Deque, List, Optional
+from typing import Deque, List, Optional, Tuple
 from uuid import UUID
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from opentelemetry.sdk.trace.export import SpanExporter
 from pydantic import BaseModel, Field
 
 from . import indicator
@@ -23,6 +24,7 @@ from .broker import Broker, BrokerError
 from .config import Settings, load_methodology
 from .methodology import Methodology
 from .models import EnrichedEvent, UsageEvent
+from .otel import MAX_BODY_BYTES, ImpactSpanExporter, OtlpDecodeError, Parent, decode_request, encode_response, span_to_event
 from .pricing_refresh import PricingRefresher, load_initial
 
 log = logging.getLogger("stardust_core")
@@ -59,11 +61,50 @@ class ApproveRequest(BaseModel):
     tier: str
 
 
-def create_app(settings: Optional[Settings] = None, http: Optional[httpx.AsyncClient] = None) -> FastAPI:
+def _hex_id(value: str, length: int) -> bool:
+    try:
+        return len(value) == length and int(value, 16) != 0
+    except ValueError:
+        return False
+
+
+def create_app(
+    settings: Optional[Settings] = None,
+    http: Optional[httpx.AsyncClient] = None,
+    span_exporter: Optional[SpanExporter] = None,
+) -> FastAPI:
+    """``span_exporter`` overrides the OTLP exporter (tests pass an in-memory one; spans export synchronously)."""
     settings = settings or Settings.from_env()
     cfg = load_methodology(settings.methodology_path)
     engine = Methodology(cfg, load_initial(settings.pricing_path, settings.pricing_cache_path))
     events: Deque[EnrichedEvent] = deque(maxlen=MAX_STORED_EVENTS)
+    # Recent events by id, so a client retry (SDK, extension or OTel collector) isn't counted twice.
+    seen: "OrderedDict[UUID, EnrichedEvent]" = OrderedDict()
+
+    otel_exporter: Optional[ImpactSpanExporter] = None
+    if span_exporter is not None:
+        otel_exporter = ImpactSpanExporter(span_exporter, engine.version, batch=False)
+    elif settings.otlp_endpoint:
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+        otel_exporter = ImpactSpanExporter(
+            OTLPSpanExporter(endpoint=settings.otlp_endpoint, headers=dict(settings.otlp_headers)), engine.version
+        )
+        log.info("Exporting Stardust spans to %s", settings.otlp_endpoint)
+
+    def record(event: UsageEvent, parent: Optional[Parent] = None) -> Tuple[EnrichedEvent, bool]:
+        """Enrich, store and export an event. Returns (enriched, is_new)."""
+        existing = seen.get(event.event_id)
+        if existing is not None:
+            return existing, False
+        enriched = engine.enrich(event)
+        events.append(enriched)
+        seen[enriched.event_id] = enriched
+        if len(seen) > MAX_STORED_EVENTS:
+            seen.popitem(last=False)
+        if otel_exporter:
+            otel_exporter.export(enriched, parent)
+        return enriched, True
     owned_http = http is None
     client = http or httpx.AsyncClient()
     broker = Broker(client)
@@ -91,6 +132,8 @@ def create_app(settings: Optional[Settings] = None, http: Optional[httpx.AsyncCl
                 pass
         if owned_http:
             await client.aclose()
+        if otel_exporter:
+            otel_exporter.shutdown()
 
     app = FastAPI(title="Stardust Core", version="0.1.0", lifespan=lifespan)
     app.state.engine, app.state.broker, app.state.events = engine, broker, events
@@ -106,7 +149,12 @@ def create_app(settings: Optional[Settings] = None, http: Optional[httpx.AsyncCl
 
     @app.get("/healthz")
     def healthz() -> dict:
-        return {"ok": True, "methodology_version": engine.version, "priced_models": len(engine.pricing)}
+        return {
+            "ok": True,
+            "methodology_version": engine.version,
+            "priced_models": len(engine.pricing),
+            "otlp_export": settings.otlp_endpoint if otel_exporter and span_exporter is None else None,
+        }
 
     @app.get("/v1/pricing/status")
     def pricing_status() -> dict:
@@ -119,9 +167,37 @@ def create_app(settings: Optional[Settings] = None, http: Optional[httpx.AsyncCl
 
     @app.post("/v1/events", response_model=EnrichedEvent)
     def ingest(event: UsageEvent) -> EnrichedEvent:
-        enriched = engine.enrich(event)
-        events.append(enriched)
-        return enriched
+        return record(event)[0]
+
+    @app.post("/v1/traces")
+    async def otlp_traces(request: Request) -> Response:
+        """OTLP/HTTP trace receiver (§11.3): GenAI spans become Stardust events; other spans are ignored."""
+        content_type = request.headers.get("content-type", "application/x-protobuf")
+        body = await request.body()
+        if len(body) > MAX_BODY_BYTES:
+            raise HTTPException(413, "payload too large")
+        try:
+            spans = decode_request(body, content_type, request.headers.get("content-encoding", ""))
+        except OtlpDecodeError as e:
+            raise HTTPException(400, str(e))
+
+        rejected, errors = 0, []
+        for span in spans:
+            try:
+                event = span_to_event(span)
+            except ValueError as e:
+                rejected += 1
+                errors.append(f"{span.name or span.span_id}: {str(e).splitlines()[0]}")
+                continue
+            if event is None:
+                continue
+            parent = None
+            if _hex_id(span.trace_id, 32) and _hex_id(span.span_id, 16):
+                parent = Parent(span.trace_id, span.span_id, span.start_ns, span.end_ns)
+            record(event, parent)
+
+        payload, media_type = encode_response(content_type, rejected, "; ".join(errors[:5]))
+        return Response(content=payload, media_type=media_type)
 
     @app.get("/v1/events", response_model=List[EnrichedEvent])
     def recent(user_id: Optional[UUID] = None, limit: int = Query(50, ge=1, le=1000)) -> List[EnrichedEvent]:

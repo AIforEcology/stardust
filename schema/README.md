@@ -9,6 +9,7 @@ The open standard shared by every part of Stardust (spec §17.1). Anyone can emi
 | [`esc.json`](esc.json) | Energy Source Codes and their fallback codes | §5.3.1–§5.3.2 |
 | [`remediation.schema.json`](remediation.schema.json) | Provider registration, catalog, quotes and orders | §10.2–§10.5 |
 | [`provider-telemetry.schema.json`](provider-telemetry.schema.json) | Carbon-capture provider telemetry, keyed by 3-letter field codes | §20 |
+| [`otel-attributes.md`](otel-attributes.md) | How Stardust maps onto OpenTelemetry: `gen_ai.*` in, `gen_ai.*` + `stardust.*` out | §11 |
 | [`factors/methodology-v0.1.json`](factors/methodology-v0.1.json) | Versioned factors: energy per token, grid intensity and mix, water, indicator thresholds, right-sizing weights | §5.1, §8, §21.4 |
 
 ## Methodology v0.1 is a draft

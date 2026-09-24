@@ -33,6 +33,8 @@ _MAX_SANE_PRICE_PER_TOKEN = 1.0
 class Price:
     input_per_token: float
     output_per_token: float
+    # Prompt-cache read price; None means the source doesn't list one (cached tokens then bill as input).
+    cache_read_per_token: Optional[float] = None
 
 
 class PricingTable:
@@ -69,7 +71,8 @@ class PricingTable:
             p_out = entry.get("output_cost_per_token")
             if not (_is_price(p_in) and _is_price(p_out)):
                 continue
-            prices[name.lower()] = Price(float(p_in), float(p_out))
+            p_cache = entry.get("cache_read_input_token_cost")
+            prices[name.lower()] = Price(float(p_in), float(p_out), float(p_cache) if _is_price(p_cache) else None)
         return cls(prices, source=source)
 
     def diff(self, newer: "PricingTable") -> Dict[str, List[str]]:
@@ -105,13 +108,26 @@ class PricingTable:
             self._dated_cache[name] = self._prices[matches[-1]] if matches else None
         return self._dated_cache[name]
 
-    def cost_usd(self, provider: str, model: str, tokens_in: Optional[int], tokens_out: Optional[int]) -> Optional[float]:
+    def cost_usd(
+        self,
+        provider: str,
+        model: str,
+        tokens_in: Optional[int],
+        tokens_out: Optional[int],
+        tokens_cached_in: Optional[int] = None,
+    ) -> Optional[float]:
         if tokens_in is None and tokens_out is None:
             return None
         price = self.lookup(provider, model)
         if price is None:
             return None
-        return (tokens_in or 0) * price.input_per_token + (tokens_out or 0) * price.output_per_token
+        cached = min(tokens_cached_in or 0, tokens_in or 0)
+        cache_rate = price.cache_read_per_token if price.cache_read_per_token is not None else price.input_per_token
+        return (
+            ((tokens_in or 0) - cached) * price.input_per_token
+            + cached * cache_rate
+            + (tokens_out or 0) * price.output_per_token
+        )
 
 
 def _is_price(v: object) -> bool:
