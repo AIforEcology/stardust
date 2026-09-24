@@ -29,7 +29,7 @@ A project of [AI for Ecology](https://aifore.org). See the [v0.9 spec and summar
 
 ## Status: v0.1 scaffold
 
-This is the Phase 1 foundation (§16). The methodology factors are a **draft**, and some are placeholders awaiting review (see [`schema/README.md`](schema/README.md)). Core keeps data in memory, and the extension's figures are estimates.
+This is the Phase 1 foundation (§16). The methodology factors are a **draft**, and some are placeholders awaiting review (see [`schema/README.md`](schema/README.md)). Core stores its data in a single SQLite file (see [the database design](docs/architecture/database.md)), and the extension's figures are estimates.
 
 ## Quick start
 

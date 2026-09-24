@@ -13,6 +13,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from .store import default_database_path
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 DEFAULT_METHODOLOGY = _REPO_ROOT / "schema" / "factors" / "methodology-v0.1.json"
@@ -84,6 +86,10 @@ class Settings:
     otlp_metrics_interval_s: float = 60.0
     # OTLP/gRPC receiver listen address (e.g. 0.0.0.0:4317); None = off. The HTTP receiver is always on.
     otlp_grpc_listen: Optional[str] = None
+    # SQLite database file; None = in memory (tests). from_env defaults to the user data directory.
+    database_path: Optional[str] = None
+    # Delete events older than this many days (§14.1); None = keep forever.
+    retention_days: Optional[int] = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -104,6 +110,8 @@ class Settings:
             otlp_signals=parse_signals(os.environ.get("STARDUST_OTLP_SIGNALS", "traces,metrics")),
             otlp_metrics_interval_s=float(os.environ.get("STARDUST_OTLP_METRICS_INTERVAL", "60")),
             otlp_grpc_listen=os.environ.get("STARDUST_OTLP_GRPC_LISTEN") or None,
+            database_path=os.environ.get("STARDUST_DATABASE_PATH") or str(default_database_path()),
+            retention_days=int(os.environ["STARDUST_RETENTION_DAYS"]) if os.environ.get("STARDUST_RETENTION_DAYS") else None,
         )
 
 
