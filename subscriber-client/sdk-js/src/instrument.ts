@@ -9,9 +9,15 @@
 // - openai: chat.completions.create and responses.create. Streaming chat completions only
 //   report usage when you pass stream_options: { include_usage: true }.
 // - @google/genai: models.generateContent and models.generateContentStream
+//
+// With `new Stardust({ tracer })` each call also gets an OpenTelemetry GenAI client span
+// that starts with the call and ends when the response (or the stream's last chunk)
+// arrives. Don't combine that with another GenAI instrumentation of the same client, or
+// each call is traced (and metered) twice.
 
 import type { Stardust } from "./client.ts";
 import { fromAnthropic, fromGemini, fromOpenAI, type Provider, type Usage } from "./extract.ts";
+import type { Call } from "./otel.ts";
 
 type AnyFn = (...args: unknown[]) => unknown;
 type Extractor = (r: unknown, model?: string) => Usage | undefined;
@@ -76,14 +82,7 @@ const ACCUMULATORS: Record<Provider, (model?: string) => Accumulator> = {
 };
 
 /** Proxy a vendor async-iterable stream: events pass through, usage is recorded when it ends. */
-function proxyStream<T extends object>(stream: T, acc: Accumulator, done: (u: Usage | undefined) => void): T {
-  let finished = false;
-  const finish = () => {
-    if (!finished) {
-      finished = true;
-      done(acc.usage());
-    }
-  };
+function proxyStream<T extends object>(stream: T, acc: Accumulator, call: Call): T {
   const source = stream as unknown as AsyncIterable<unknown>;
   async function* iterate() {
     try {
@@ -95,8 +94,12 @@ function proxyStream<T extends object>(stream: T, acc: Accumulator, done: (u: Us
         }
         yield event;
       }
+    } catch (e) {
+      // Usage seen so far is recorded even if the stream broke: those tokens were billed.
+      call.fail(e, acc.usage());
+      throw e;
     } finally {
-      finish();
+      call.finish(acc.usage());
     }
   }
   return new Proxy(stream, {
@@ -124,6 +127,7 @@ function wrap(
   method: string,
   stardust: Stardust,
   provider: Provider,
+  operation: string,
   extractor: Extractor,
   region: string | undefined,
   alwaysStream = false,
@@ -131,36 +135,48 @@ function wrap(
   const original = owner?.[method] as (AnyFn & { [INSTRUMENTED]?: boolean }) | undefined;
   if (typeof original !== "function" || original[INSTRUMENTED]) return false;
 
-  const record = (u: Usage | undefined) => {
-    if (u) stardust.record(u, { region });
-  };
-  const handle = (result: unknown, params: unknown): unknown => {
+  const handle = (result: unknown, params: unknown, call: Call): unknown => {
     const model = field(params, "model") as string | undefined;
     try {
       if (alwaysStream || field(params, "stream") === true) {
         if (result != null && typeof result === "object" && Symbol.asyncIterator in result) {
-          return proxyStream(result, ACCUMULATORS[provider](model), record);
+          return proxyStream(result, ACCUMULATORS[provider](model), call);
         }
+        call.finish(undefined);
         return result;
       }
-      record(extractor(result, model));
+      call.finish(extractor(result, model));
     } catch (e) {
       console.warn("[stardust] metering failed", e);
+      call.finish(undefined);
     }
     return result;
   };
 
   const wrapper = function (this: unknown, ...args: unknown[]) {
-    const result = original.apply(this ?? owner, args);
+    const call = stardust.startCall(provider, operation, field(args[0], "model") as string | undefined, region);
+    let result: unknown;
+    try {
+      result = original.apply(this ?? owner, args);
+    } catch (e) {
+      call.fail(e);
+      throw e;
+    }
     if (result != null && typeof (result as Promise<unknown>).then === "function") {
-      const chained = (result as Promise<unknown>).then((r) => handle(r, args[0]));
+      const chained = (result as Promise<unknown>).then(
+        (r) => handle(r, args[0], call),
+        (e) => {
+          call.fail(e);
+          throw e;
+        },
+      );
       // Metering attaches at call time, so calls read via extras like .withResponse() are metered too.
       // If the call fails and the caller only uses those extras, this branch's rejection must not
       // surface as an unhandled rejection; callers awaiting the result still see the error.
       chained.catch(() => undefined);
       return keepExtras(result as object, chained);
     }
-    return handle(result, args[0]);
+    return handle(result, args[0], call);
   } as AnyFn & { [INSTRUMENTED]?: boolean };
   wrapper[INSTRUMENTED] = true;
   owner![method] = wrapper;
@@ -174,13 +190,13 @@ export function instrument<T extends object>(client: T, stardust: Stardust, opti
   const c = client as Client;
   const { region } = options;
   if (typeof c.messages?.create === "function" && !c.chat) {
-    wrap(c.messages, "create", stardust, "anthropic", fromAnthropic, region);
+    wrap(c.messages, "create", stardust, "anthropic", "chat", fromAnthropic, region);
   } else if (typeof c.chat?.completions?.create === "function") {
-    wrap(c.chat.completions, "create", stardust, "openai", fromOpenAI, region);
-    wrap(c.responses, "create", stardust, "openai", fromOpenAI, region);
+    wrap(c.chat.completions, "create", stardust, "openai", "chat", fromOpenAI, region);
+    wrap(c.responses, "create", stardust, "openai", "chat", fromOpenAI, region);
   } else if (typeof c.models?.generateContent === "function") {
-    wrap(c.models, "generateContent", stardust, "google", fromGemini, region);
-    wrap(c.models, "generateContentStream", stardust, "google", fromGemini, region, true);
+    wrap(c.models, "generateContent", stardust, "google", "generate_content", fromGemini, region);
+    wrap(c.models, "generateContentStream", stardust, "google", "generate_content", fromGemini, region, true);
   } else {
     throw new TypeError("Stardust can't instrument this client: expected an Anthropic, OpenAI or Google Gen AI client");
   }

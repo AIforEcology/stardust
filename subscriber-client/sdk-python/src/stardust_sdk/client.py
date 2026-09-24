@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Deque, Dict, Optional, Tuple
 
 from .extract import Usage, extract
+from .otel import DEFAULT_OPERATION, Call, OtelEmitter, event_id_for_span
 
 log = logging.getLogger("stardust_sdk")
 
@@ -40,6 +41,10 @@ class Stardust:
 
     >>> stardust = Stardust("http://localhost:8080", region="us-east-1")
     >>> stardust.record_response(anthropic_message)       # or instrument(client, stardust)
+
+    ``otel=True`` (or a TracerProvider) also emits an OpenTelemetry GenAI span per call.
+    ``api_base=None`` with ``otel=True`` sends nothing directly: spans travel through
+    your own collector to Core's OTLP receiver.
     """
 
     MAX_BACKOFF_S = 60.0
@@ -48,7 +53,7 @@ class Stardust:
 
     def __init__(
         self,
-        api_base: str = "http://localhost:8080",
+        api_base: Optional[str] = "http://localhost:8080",
         *,
         user_id: Optional[str] = None,
         org_id: Optional[str] = None,
@@ -58,8 +63,14 @@ class Stardust:
         timeout: float = 5.0,
         on_result: Optional[Callable[[Dict[str, Any]], None]] = None,
         transport: Optional[Transport] = None,
+        otel: Any = False,
     ):
-        self.url = api_base.rstrip("/") + "/v1/events"
+        if api_base is None and not otel:
+            raise ValueError("Stardust needs api_base, otel, or both")
+        self.url = api_base.rstrip("/") + "/v1/events" if api_base else None
+        self._otel: Optional[OtelEmitter] = None
+        if otel:
+            self._otel = OtelEmitter(None if otel is True else otel)
         self.user_id, self.org_id, self.region = user_id, org_id, region
         self.enabled = enabled
         self.timeout = timeout
@@ -72,9 +83,10 @@ class Stardust:
         self._backoff = 0.0
         self._flushing = 0
         self.dropped = 0
-        self._worker = threading.Thread(target=self._run, name="stardust-sdk", daemon=True)
-        self._worker.start()
-        atexit.register(self.close, 2.0)
+        if self.url:
+            self._worker = threading.Thread(target=self._run, name="stardust-sdk", daemon=True)
+            self._worker.start()
+            atexit.register(self.close, 2.0)
 
     # --- recording -----------------------------------------------------------
 
@@ -87,39 +99,17 @@ class Stardust:
         *,
         tokens_cached_in: Optional[int] = None,
         region: Optional[str] = None,
-        timestamp: Optional[datetime] = None,
+        operation: Optional[str] = None,
     ) -> None:
+        """Record one operation's usage. With OpenTelemetry on, this also emits a (zero-length) span."""
+        self.record_usage(Usage(provider, model, tokens_in, tokens_out, tokens_cached_in),
+                          region=region, operation=operation)
+
+    def record_usage(self, usage: Usage, *, region: Optional[str] = None, operation: Optional[str] = None) -> None:
         if not self.enabled or self._closed:
             return
-        event: Dict[str, Any] = {
-            "event_id": str(uuid.uuid4()),
-            "source_layer": "infra_agent",
-            "provider": provider,
-            "model": model,
-            "timestamp": (timestamp or datetime.now(timezone.utc)).astimezone().isoformat(),
-            "tokens_in": tokens_in,
-            "tokens_out": tokens_out,
-            "tokens_estimated": False,
-        }
-        optional = {
-            "tokens_cached_in": tokens_cached_in,
-            "region": region or self.region,
-            "user_id": self.user_id,
-            "org_id": self.org_id,
-        }
-        event.update({k: v for k, v in optional.items() if v is not None})
-        with self._cond:
-            if len(self._buffer) == self._buffer.maxlen:
-                self.dropped += 1  # deque drops the oldest
-                log.warning("Stardust buffer full; dropping the oldest event")
-            self._buffer.append(event)
-            self._cond.notify()
-
-    def record_usage(self, usage: Usage, *, region: Optional[str] = None) -> None:
-        self.record(
-            usage.provider, usage.model, usage.tokens_in, usage.tokens_out,
-            tokens_cached_in=usage.tokens_cached_in, region=region,
-        )
+        op = operation or DEFAULT_OPERATION.get(usage.provider, "chat")
+        self.start_call(usage.provider, op, usage.model, region).finish(usage)
 
     def record_response(self, response: Any, *, provider: Optional[str] = None, model: Optional[str] = None,
                         region: Optional[str] = None) -> Optional[Usage]:
@@ -132,6 +122,54 @@ class Stardust:
         except Exception:  # noqa: BLE001 - metering must never break the caller
             log.exception("Stardust could not read usage from a response")
             return None
+
+    def start_call(self, provider: str, operation: str, model: Optional[str], region: Optional[str] = None) -> Call:
+        """Begin metering a call; used by instrument(). ``Call.finish(usage)`` completes it."""
+        return Call(self, provider, operation, model, region or self.region)
+
+    # --- internals used by Call ------------------------------------------------------
+
+    def _span_attributes(self, region: Optional[str]) -> Dict[str, Any]:
+        return {
+            "cloud.region": region,
+            "stardust.source_layer": "infra_agent",
+            "stardust.user_id": self.user_id,
+            "stardust.org_id": self.org_id,
+        }
+
+    @staticmethod
+    def _log_exception(message: str) -> None:
+        log.exception(message)
+
+    def _queue_usage(self, usage: Usage, *, region: Optional[str], trace_ids: Optional[Tuple[str, str]]) -> None:
+        """Queue a usage event for Core, if direct sending is on."""
+        if not self.url or not self.enabled or self._closed:
+            return
+        event: Dict[str, Any] = {
+            "event_id": str(event_id_for_span(*trace_ids) if trace_ids else uuid.uuid4()),
+            "source_layer": "infra_agent",
+            "provider": usage.provider,
+            "model": usage.model,
+            "timestamp": datetime.now(timezone.utc).astimezone().isoformat(),
+            "tokens_in": usage.tokens_in,
+            "tokens_out": usage.tokens_out,
+            "tokens_estimated": False,
+        }
+        optional = {
+            "tokens_cached_in": usage.tokens_cached_in,
+            "region": region or self.region,
+            "user_id": self.user_id,
+            "org_id": self.org_id,
+            "otel_trace_id": trace_ids[0] if trace_ids else None,
+            "otel_span_id": trace_ids[1] if trace_ids else None,
+        }
+        event.update({k: v for k, v in optional.items() if v is not None})
+        with self._cond:
+            if len(self._buffer) == self._buffer.maxlen:
+                self.dropped += 1  # deque drops the oldest
+                log.warning("Stardust buffer full; dropping the oldest event")
+            self._buffer.append(event)
+            self._cond.notify()
 
     # --- lifecycle -------------------------------------------------------------
 
@@ -153,7 +191,8 @@ class Stardust:
     def close(self, timeout: Optional[float] = 5.0) -> None:
         if self._closed:
             return
-        self.flush(timeout)
+        if self.url:
+            self.flush(timeout)
         with self._cond:
             self._closed = True
             self._cond.notify_all()

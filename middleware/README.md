@@ -49,22 +49,40 @@ Admin endpoints need `STARDUST_ADMIN_TOKEN` set on the server and sent as `X-Sta
 | `STARDUST_PRICING_CACHE` | `middleware/data/cache/model_prices_and_context_window.json` (gitignored) |
 | `STARDUST_DONATION_URL` | AIforE's PayPal donation page |
 | `STARDUST_ADMIN_TOKEN` | unset (admin disabled) |
-| `STARDUST_OTLP_ENDPOINT` | unset (export off). An OTLP/HTTP traces URL, e.g. `http://collector:4318/v1/traces` |
+| `STARDUST_OTLP_ENDPOINT` | unset (export off). The collector's base URL: `http://collector:4318` for HTTP, `http://collector:4317` for gRPC. A full `.../v1/traces` URL still works |
+| `STARDUST_OTLP_PROTOCOL` | `http/protobuf`, or `grpc` |
+| `STARDUST_OTLP_SIGNALS` | `traces,metrics` (either or both) |
+| `STARDUST_OTLP_METRICS_INTERVAL` | `60` (seconds between metric exports) |
 | `STARDUST_OTLP_HEADERS` | none. `key=value,key2=value2`, e.g. a vendor API key |
+| `STARDUST_OTLP_GRPC_LISTEN` | unset (off). Address for the OTLP/gRPC receiver, e.g. `0.0.0.0:4317`. The HTTP receiver at `/v1/traces` is always on |
 
 ## OpenTelemetry
 
 Core works with an existing OTel pipeline both ways (spec §11). The full attribute mapping is in [`schema/otel-attributes.md`](../schema/otel-attributes.md).
 
-- **Receive:** point any OTLP/HTTP exporter or collector at `http://<core>/v1/traces`. Spans carrying `gen_ai.usage.*` (from OpenLLMetry, OpenLIT, or the official GenAI instrumentations) become Stardust events, with no Stardust SDK needed. A collector config:
+- **Receive:** spans carrying `gen_ai.usage.*` become Stardust events, with no Stardust SDK needed. They can come from OpenLLMetry, OpenLIT, the official GenAI instrumentations, or the Stardust SDKs' own OTel mode.
+  - **HTTP:** `http://<core>/v1/traces`, always on.
+  - **gRPC:** set `STARDUST_OTLP_GRPC_LISTEN=0.0.0.0:4317`.
+
+  A collector config:
 
   ```yaml
   exporters:
     otlphttp/stardust:
       traces_endpoint: http://stardust-core:8080/v1/traces
+    # or, with the gRPC receiver on:
+    otlp/stardust:
+      endpoint: stardust-core:4317
+      tls: { insecure: true }
   ```
 
-- **Export:** set `STARDUST_OTLP_ENDPOINT`, and every enriched event is sent as a `stardust.impact` span with cost, energy, CO₂e, water, grade code and energy source. When the usage came in over OTLP, that span is a child of the original GenAI span, so your tracing backend shows the footprint inside the request's own trace.
+- **Export traces:** with `STARDUST_OTLP_ENDPOINT` set, every enriched event is sent as a `stardust.impact` span with cost, energy, CO₂e, water, grade code and energy source. When the event carries trace context (it came in over OTLP, or from an SDK with OTel on), that span is a child of the original GenAI span. Your tracing backend then shows the footprint inside the request's own trace.
+- **Export metrics for dashboards:** running totals are sent every `STARDUST_OTLP_METRICS_INTERVAL` seconds:
+  - `stardust.ai.requests`, `stardust.ai.tokens` (split by `gen_ai.token.type`), `stardust.ai.tokens.cached`
+  - `stardust.cost` (USD), `stardust.energy` (Wh), `stardust.co2e` (g), `stardust.water` (mL)
+
+  They're broken down by provider, model, model tier, region, source layer, confidence tier, energy source, grade and (when set) `stardust.org_id`. User and event ids are deliberately left out to keep cardinality low. Any OTLP metrics backend can chart them: Prometheus through its OTLP receiver or a collector, Grafana Cloud, Datadog, and others.
+- **Protocol:** set `STARDUST_OTLP_PROTOCOL=grpc` to export over gRPC; the default is HTTP.
 
 Core never re-ingests its own spans, so pointing both directions at the same collector is safe.
 

@@ -14,8 +14,8 @@ from typing import Any, Optional
 class Usage:
     provider: str
     model: str
-    tokens_in: int
-    tokens_out: int
+    tokens_in: Optional[int]
+    tokens_out: Optional[int]
     tokens_cached_in: Optional[int] = None
 
 

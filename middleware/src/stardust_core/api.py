@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
+import threading
 from collections import OrderedDict, deque
 from contextlib import asynccontextmanager
 from typing import Deque, List, Optional, Tuple
@@ -16,6 +17,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from opentelemetry.sdk.metrics.export import MetricReader
 from opentelemetry.sdk.trace.export import SpanExporter
 from pydantic import BaseModel, Field
 
@@ -24,7 +26,16 @@ from .broker import Broker, BrokerError
 from .config import Settings, load_methodology
 from .methodology import Methodology
 from .models import EnrichedEvent, UsageEvent
-from .otel import MAX_BODY_BYTES, ImpactSpanExporter, OtlpDecodeError, Parent, decode_request, encode_response, span_to_event
+from .otel import (
+    MAX_BODY_BYTES,
+    OtlpDecodeError,
+    OtlpSpan,
+    build_telemetry,
+    decode_request,
+    encode_response,
+    span_to_event,
+    start_grpc_receiver,
+)
 from .pricing_refresh import PricingRefresher, load_initial
 
 log = logging.getLogger("stardust_core")
@@ -61,50 +72,61 @@ class ApproveRequest(BaseModel):
     tier: str
 
 
-def _hex_id(value: str, length: int) -> bool:
-    try:
-        return len(value) == length and int(value, 16) != 0
-    except ValueError:
-        return False
-
-
 def create_app(
     settings: Optional[Settings] = None,
     http: Optional[httpx.AsyncClient] = None,
     span_exporter: Optional[SpanExporter] = None,
+    metric_reader: Optional[MetricReader] = None,
 ) -> FastAPI:
-    """``span_exporter`` overrides the OTLP exporter (tests pass an in-memory one; spans export synchronously)."""
+    """``span_exporter`` / ``metric_reader`` replace the OTLP exporters (tests pass in-memory ones)."""
     settings = settings or Settings.from_env()
     cfg = load_methodology(settings.methodology_path)
     engine = Methodology(cfg, load_initial(settings.pricing_path, settings.pricing_cache_path))
     events: Deque[EnrichedEvent] = deque(maxlen=MAX_STORED_EVENTS)
     # Recent events by id, so a client retry (SDK, extension or OTel collector) isn't counted twice.
     seen: "OrderedDict[UUID, EnrichedEvent]" = OrderedDict()
+    # Sync endpoints run in a thread pool and gRPC on the event loop; keep check-and-insert atomic.
+    lock = threading.Lock()
 
-    otel_exporter: Optional[ImpactSpanExporter] = None
-    if span_exporter is not None:
-        otel_exporter = ImpactSpanExporter(span_exporter, engine.version, batch=False)
-    elif settings.otlp_endpoint:
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    telemetry = build_telemetry(
+        version=engine.version,
+        endpoint=settings.otlp_endpoint,
+        protocol=settings.otlp_protocol,
+        headers=dict(settings.otlp_headers),
+        signals=settings.otlp_signals,
+        metrics_interval_s=settings.otlp_metrics_interval_s,
+        span_exporter=span_exporter,
+        metric_reader=metric_reader,
+    )
 
-        otel_exporter = ImpactSpanExporter(
-            OTLPSpanExporter(endpoint=settings.otlp_endpoint, headers=dict(settings.otlp_headers)), engine.version
-        )
-        log.info("Exporting Stardust spans to %s", settings.otlp_endpoint)
-
-    def record(event: UsageEvent, parent: Optional[Parent] = None) -> Tuple[EnrichedEvent, bool]:
+    def record(event: UsageEvent) -> Tuple[EnrichedEvent, bool]:
         """Enrich, store and export an event. Returns (enriched, is_new)."""
-        existing = seen.get(event.event_id)
-        if existing is not None:
-            return existing, False
-        enriched = engine.enrich(event)
-        events.append(enriched)
-        seen[enriched.event_id] = enriched
-        if len(seen) > MAX_STORED_EVENTS:
-            seen.popitem(last=False)
-        if otel_exporter:
-            otel_exporter.export(enriched, parent)
+        with lock:
+            existing = seen.get(event.event_id)
+            if existing is not None:
+                return existing, False
+            enriched = engine.enrich(event)
+            events.append(enriched)
+            seen[enriched.event_id] = enriched
+            if len(seen) > MAX_STORED_EVENTS:
+                seen.popitem(last=False)
+        telemetry.record(enriched)
         return enriched, True
+
+    def ingest_spans(spans: List[OtlpSpan]) -> Tuple[int, str]:
+        """Shared by the HTTP and gRPC receivers. Returns (rejected spans, error message)."""
+        rejected, errors = 0, []
+        for span in spans:
+            try:
+                event = span_to_event(span)
+            except ValueError as e:
+                rejected += 1
+                errors.append(f"{span.name or span.span_id}: {str(e).splitlines()[0]}")
+                continue
+            if event is not None:
+                record(event)
+        return rejected, "; ".join(errors[:5])
+
     owned_http = http is None
     client = http or httpx.AsyncClient()
     broker = Broker(client)
@@ -117,7 +139,10 @@ def create_app(
     )
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(app: FastAPI):
+        grpc_server = None
+        if settings.otlp_grpc_listen:
+            grpc_server, app.state.otlp_grpc_port = await start_grpc_receiver(settings.otlp_grpc_listen, ingest_spans)
         task = None
         if settings.pricing_refresh_hours is not None:
             task = asyncio.create_task(refresher.run(settings.pricing_refresh_hours))
@@ -130,14 +155,16 @@ def create_app(
                 await task
             except asyncio.CancelledError:
                 pass
+        if grpc_server:
+            await grpc_server.stop(grace=2)
         if owned_http:
             await client.aclose()
-        if otel_exporter:
-            otel_exporter.shutdown()
+        telemetry.shutdown()
 
     app = FastAPI(title="Stardust Core", version="0.1.0", lifespan=lifespan)
     app.state.engine, app.state.broker, app.state.events = engine, broker, events
     app.state.pricing_refresher = refresher
+    app.state.otlp_grpc_port = None
 
     def require_admin(x_stardust_admin_token: Optional[str] = Header(default=None)) -> None:
         if not settings.admin_token:
@@ -153,7 +180,12 @@ def create_app(
             "ok": True,
             "methodology_version": engine.version,
             "priced_models": len(engine.pricing),
-            "otlp_export": settings.otlp_endpoint if otel_exporter and span_exporter is None else None,
+            "otlp_export": {
+                "endpoint": settings.otlp_endpoint,
+                "protocol": settings.otlp_protocol,
+                "signals": list(settings.otlp_signals),
+            } if settings.otlp_endpoint else None,
+            "otlp_grpc_receiver": settings.otlp_grpc_listen,
         }
 
     @app.get("/v1/pricing/status")
@@ -181,22 +213,8 @@ def create_app(
         except OtlpDecodeError as e:
             raise HTTPException(400, str(e))
 
-        rejected, errors = 0, []
-        for span in spans:
-            try:
-                event = span_to_event(span)
-            except ValueError as e:
-                rejected += 1
-                errors.append(f"{span.name or span.span_id}: {str(e).splitlines()[0]}")
-                continue
-            if event is None:
-                continue
-            parent = None
-            if _hex_id(span.trace_id, 32) and _hex_id(span.span_id, 16):
-                parent = Parent(span.trace_id, span.span_id, span.start_ns, span.end_ns)
-            record(event, parent)
-
-        payload, media_type = encode_response(content_type, rejected, "; ".join(errors[:5]))
+        rejected, message = ingest_spans(spans)
+        payload, media_type = encode_response(content_type, rejected, message)
         return Response(content=payload, media_type=media_type)
 
     @app.get("/v1/events", response_model=List[EnrichedEvent])

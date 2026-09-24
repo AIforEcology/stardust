@@ -42,9 +42,22 @@ stardust.record_response(message)                     # auto-detects Anthropic /
 stardust.record("anthropic", "claude-sonnet-5", tokens_in=1200, tokens_out=300, tokens_cached_in=800)
 ```
 
+## OpenTelemetry
+
+Pass `otel=True` to use your app's global tracer provider, or pass a `TracerProvider`. Each metered call then also becomes a standard GenAI client span, for example `chat claude-sonnet-5` with `gen_ai.*` attributes, timed across the real call (including streams). It nests under whatever span is active and flows through your own OTel pipeline. This needs `pip install "stardust-sdk[otel]"`.
+
+```python
+stardust = Stardust("http://localhost:8080", otel=True)   # direct to Core + spans
+stardust = Stardust(None, otel=True)                       # spans only: your collector forwards them to Core
+```
+
+Direct events reuse the span's ids, so an event that reaches Core both ways is counted once, and Core's `stardust.impact` span lands in the same trace. Don't also enable a separate GenAI instrumentation for the same client, or each call is traced twice. The span attributes are listed in [`schema/otel-attributes.md`](../../schema/otel-attributes.md).
+
 ## Options
 
-`Stardust(api_base, *, user_id=None, org_id=None, region=None, enabled=True, max_buffer=10_000, timeout=5.0, on_result=None)`
+`Stardust(api_base, *, user_id=None, org_id=None, region=None, enabled=True, max_buffer=10_000, timeout=5.0, on_result=None, otel=False)`
+
+- `api_base`: Core's URL, or `None` to send nothing directly (needs `otel`).
 
 - `region`: the processing region, which picks the grid factors (e.g. `us-east-1`, `eu-north-1`). `instrument(client, stardust, region=...)` overrides it per client.
 - `on_result`: called with Core's enriched event (indicator code, cost, CO₂e…) for each event sent.

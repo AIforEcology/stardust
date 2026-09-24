@@ -26,6 +26,19 @@ await stardust.flush(2000); // before a short-lived script exits
 - **Manual recording:** `stardust.recordResponse(response)` or `stardust.record({ provider, model, tokensIn, tokensOut, tokensCachedIn })`.
 - **Short-lived processes:** retries never keep Node alive, so call `flush()` or `close()` before exiting.
 
+## OpenTelemetry
+
+Pass a tracer from `@opentelemetry/api`, and each metered call also becomes a standard GenAI client span, for example `chat claude-sonnet-5` with `gen_ai.*` attributes, timed across the real call (including streams). The SDK only uses the tracer you give it; `@opentelemetry/api` is an optional peer dependency, not a runtime import.
+
+```ts
+import { trace } from "@opentelemetry/api";
+
+new Stardust({ apiBase: "http://localhost:8080", tracer: trace.getTracer("my-app") }); // direct + spans
+new Stardust({ apiBase: null, tracer: trace.getTracer("my-app") });                     // spans only, via your collector
+```
+
+Direct events reuse the span's ids, so Core counts each call once, however it arrives. Attributes are listed in [`schema/otel-attributes.md`](../../schema/otel-attributes.md).
+
 ## Scripts
 
 `npm run build` (to `dist/`), `npm run typecheck`, `npm test`

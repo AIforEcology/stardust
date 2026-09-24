@@ -1,13 +1,17 @@
 """OpenTelemetry harmonization (spec §11).
 
-Receiver: OTLP/HTTP trace payloads (protobuf or JSON). Spans carrying GenAI usage
+Receiver: OTLP trace payloads over HTTP (protobuf or JSON) or gRPC. Spans carrying GenAI usage
 (``gen_ai.usage.*``) become Stardust usage events, keyed deterministically by
 trace/span id so collector retries don't double count.
 
-Exporter: each enriched event is emitted as a ``stardust.impact`` span with the
-usage side under ``gen_ai.*`` (§11.1) and everything environmental under the
-``stardust.*`` namespace (§11.2). When the event came in over OTLP, that span is a
-child of the original GenAI span, so it sits in the same trace in any OTel backend.
+Exporter (OTLP over HTTP or gRPC):
+
+- traces: each enriched event becomes a ``stardust.impact`` span with the usage side
+  under ``gen_ai.*`` (§11.1) and everything environmental under ``stardust.*`` (§11.2).
+  When the event carries trace context (it came in over OTLP, or from an SDK with
+  OpenTelemetry on), the span is a child of the original GenAI span.
+- metrics: running totals (requests, tokens, cost, energy, CO2e, water) with
+  low-cardinality attributes, for dashboards (§6.3, §11.3).
 
 Stardust's own spans are never re-ingested, so Core can safely export into a
 collector pipeline that also feeds its receiver.
@@ -21,13 +25,17 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+import grpc
 from opentelemetry import trace
+from opentelemetry.proto.collector.trace.v1 import trace_service_pb2_grpc
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
     ExportTraceServiceRequest,
     ExportTraceServiceResponse,
 )
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import MetricReader, PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor, SpanExporter
@@ -149,6 +157,10 @@ def decode_protobuf(body: bytes) -> List[OtlpSpan]:
         req.ParseFromString(body)
     except Exception as e:  # noqa: BLE001 - protobuf raises its own DecodeError
         raise OtlpDecodeError(f"invalid OTLP protobuf: {e}") from e
+    return spans_from_request(req)
+
+
+def spans_from_request(req: ExportTraceServiceRequest) -> List[OtlpSpan]:
     spans = []
     for rs in req.resource_spans:
         resource = {kv.key: _pb_value(kv.value) for kv in rs.resource.attributes}
@@ -194,6 +206,19 @@ def encode_response(content_type: str, rejected: int, message: str) -> Tuple[byt
 
 
 # --- span → usage event --------------------------------------------------------------
+
+
+def valid_hex_id(value: Optional[str], length: int) -> bool:
+    try:
+        return value is not None and len(value) == length and int(value, 16) != 0
+    except ValueError:
+        return False
+
+
+def event_id_for_span(trace_id: str, span_id: str) -> uuid.UUID:
+    """Deterministic event id for a span. The SDKs derive the same id, so an event that reaches
+    Core both directly and through a collector is counted once."""
+    return uuid.uuid5(EVENT_ID_NAMESPACE, f"{trace_id}:{span_id}")
 
 
 def _token(v: Any) -> Optional[int]:
@@ -250,8 +275,11 @@ def span_to_event(span: OtlpSpan) -> Optional[UsageEvent]:
     ns = span.end_ns or span.start_ns
     timestamp = datetime.fromtimestamp(ns / 1e9, tz=timezone.utc) if ns else datetime.now(timezone.utc)
 
+    has_context = valid_hex_id(span.trace_id, 32) and valid_hex_id(span.span_id, 16)
     return UsageEvent(
-        event_id=uuid.uuid5(EVENT_ID_NAMESPACE, f"{span.trace_id}:{span.span_id}"),
+        event_id=event_id_for_span(span.trace_id, span.span_id),
+        otel_trace_id=span.trace_id if has_context else None,
+        otel_span_id=span.span_id if has_context else None,
         source_layer=source_layer,
         provider=provider,
         model=model,
@@ -300,48 +328,210 @@ def event_attributes(e: EnrichedEvent) -> Dict[str, Any]:
     return {k: v for k, v in attrs.items() if v is not None}
 
 
-@dataclass(frozen=True)
-class Parent:
-    trace_id: str
-    span_id: str
-    start_ns: int
-    end_ns: int
-
-
 class ImpactSpanExporter:
     """Emits enriched events as OTel spans through Core's own (non-global) tracer provider."""
 
     def __init__(self, exporter: SpanExporter, version: str, batch: bool = True):
-        self.provider = TracerProvider(resource=Resource.create({
-            SERVICE_NAME_ATTR: SERVICE_NAME,
-            "service.version": version,
-        }))
+        self.provider = TracerProvider(resource=_resource(version))
         processor = BatchSpanProcessor(exporter) if batch else SimpleSpanProcessor(exporter)
         self.provider.add_span_processor(processor)
         self.tracer = self.provider.get_tracer("stardust_core", version)
 
-    def export(self, event: EnrichedEvent, parent: Optional[Parent] = None) -> None:
+    def export(self, event: EnrichedEvent) -> None:
         try:
             context = None
-            if parent:
+            if valid_hex_id(event.otel_trace_id, 32) and valid_hex_id(event.otel_span_id, 16):
                 ctx = SpanContext(
-                    trace_id=int(parent.trace_id, 16),
-                    span_id=int(parent.span_id, 16),
+                    trace_id=int(event.otel_trace_id, 16),  # type: ignore[arg-type]
+                    span_id=int(event.otel_span_id, 16),  # type: ignore[arg-type]
                     is_remote=True,
                     trace_flags=TraceFlags(TraceFlags.SAMPLED),
                 )
                 context = trace.set_span_in_context(NonRecordingSpan(ctx))
-                # Sit inside the parent's time range, at its end (when usage is known).
-                start = end = parent.end_ns or parent.start_ns
-            else:
-                start = end = int(event.timestamp.timestamp() * 1e9)
+            # Timed at the event (for OTLP input: the GenAI span's end, when usage was known).
+            at = int(event.timestamp.timestamp() * 1e9)
             span = self.tracer.start_span(
                 SPAN_NAME, context=context, kind=SpanKind.INTERNAL,
-                attributes=event_attributes(event), start_time=start,
+                attributes=event_attributes(event), start_time=at,
             )
-            span.end(end_time=end)
+            span.end(end_time=at)
         except Exception:  # noqa: BLE001 - exporting must never break ingestion
             log.exception("Failed to export Stardust span")
 
     def shutdown(self) -> None:
         self.provider.shutdown()
+
+
+# --- metrics ----------------------------------------------------------------------------
+
+
+def metric_attributes(e: EnrichedEvent) -> Dict[str, Any]:
+    """Dimensions for dashboards. Deliberately low-cardinality: no user or event ids."""
+    attrs = {
+        GEN_AI_PROVIDER: e.provider,
+        GEN_AI_REQUEST_MODEL: e.model,
+        CLOUD_REGION: e.region or "unknown",
+        STARDUST_SOURCE_LAYER: e.source_layer.value,
+        "stardust.model.tier": e.model_tier,
+        "stardust.impact.confidence_tier": e.confidence_tier.value,
+        "stardust.esc.code": e.energy_source_code,
+        "stardust.indicator.grade": e.indicator_code[0],
+    }
+    if e.org_id:
+        attrs[STARDUST_ORG_ID] = str(e.org_id)  # team / cost-center breakdown (§6.3)
+    return attrs
+
+
+class ImpactMetrics:
+    """Running totals as OTel counters, exported periodically by ``reader``."""
+
+    def __init__(self, reader: MetricReader, version: str):
+        self.provider = MeterProvider(resource=_resource(version), metric_readers=[reader])
+        meter = self.provider.get_meter("stardust_core", version)
+        self.requests = meter.create_counter("stardust.ai.requests", unit="{request}",
+                                             description="Metered AI operations")
+        self.tokens = meter.create_counter("stardust.ai.tokens", unit="{token}",
+                                           description="Tokens, by gen_ai.token.type (input includes cached)")
+        self.cached_tokens = meter.create_counter("stardust.ai.tokens.cached", unit="{token}",
+                                                  description="Input tokens served from a prompt cache")
+        self.cost = meter.create_counter("stardust.cost", unit="USD",
+                                         description="Cost of operations with a known price")
+        self.energy = meter.create_counter("stardust.energy", unit="Wh", description="Electricity")
+        self.co2e = meter.create_counter("stardust.co2e", unit="g", description="Greenhouse gases, CO2e")
+        self.water = meter.create_counter("stardust.water", unit="mL", description="Water")
+
+    def record(self, e: EnrichedEvent) -> None:
+        try:
+            attrs = metric_attributes(e)
+            self.requests.add(1, {**attrs, "stardust.cost.known": e.cost_usd is not None})
+            if e.tokens_in:
+                self.tokens.add(e.tokens_in, {**attrs, "gen_ai.token.type": "input"})
+            if e.tokens_out:
+                self.tokens.add(e.tokens_out, {**attrs, "gen_ai.token.type": "output"})
+            if e.tokens_cached_in:
+                self.cached_tokens.add(e.tokens_cached_in, attrs)
+            if e.cost_usd is not None:
+                self.cost.add(e.cost_usd, attrs)
+            self.energy.add(e.energy_wh, attrs)
+            self.co2e.add(e.co2e_g, attrs)
+            self.water.add(e.water_ml, attrs)
+        except Exception:  # noqa: BLE001
+            log.exception("Failed to record Stardust metrics")
+
+    def shutdown(self) -> None:
+        self.provider.shutdown()
+
+
+def _resource(version: str) -> Resource:
+    return Resource.create({SERVICE_NAME_ATTR: SERVICE_NAME, "service.version": version})
+
+
+# --- export configuration ------------------------------------------------------------------
+
+
+class Telemetry:
+    """Whatever Core exports: spans, metrics, both or neither."""
+
+    def __init__(self, spans: Optional[ImpactSpanExporter] = None, metrics: Optional[ImpactMetrics] = None):
+        self.spans, self.metrics = spans, metrics
+
+    def record(self, event: EnrichedEvent) -> None:
+        if self.spans:
+            self.spans.export(event)
+        if self.metrics:
+            self.metrics.record(event)
+
+    def shutdown(self) -> None:
+        for part in (self.spans, self.metrics):
+            if part:
+                try:
+                    part.shutdown()
+                except Exception:  # noqa: BLE001
+                    log.exception("Telemetry shutdown failed")
+
+
+def otlp_base(endpoint: str) -> str:
+    """Accept a base endpoint, or (for backward compatibility) a full .../v1/traces URL."""
+    base = endpoint.rstrip("/")
+    for suffix in ("/v1/traces", "/v1/metrics"):
+        if base.endswith(suffix):
+            return base[: -len(suffix)]
+    return base
+
+
+def build_telemetry(
+    *,
+    version: str,
+    endpoint: Optional[str],
+    protocol: str = "http/protobuf",
+    headers: Optional[Dict[str, str]] = None,
+    signals: Iterable[str] = ("traces", "metrics"),
+    metrics_interval_s: float = 60.0,
+    span_exporter: Optional[SpanExporter] = None,
+    metric_reader: Optional[MetricReader] = None,
+) -> Telemetry:
+    """OTLP exporters for Core. ``span_exporter`` / ``metric_reader`` override the network ones (tests)."""
+    signals = set(signals)
+    spans = metrics = None
+    if span_exporter is not None:
+        spans = ImpactSpanExporter(span_exporter, version, batch=False)
+    if metric_reader is not None:
+        metrics = ImpactMetrics(metric_reader, version)
+    if not endpoint:
+        return Telemetry(spans, metrics)
+
+    base, headers = otlp_base(endpoint), dict(headers or {})
+    if protocol == "grpc":
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+        trace_kw = metric_kw = {"endpoint": base, "headers": headers, "insecure": base.startswith("http://")}
+    elif protocol in ("http/protobuf", "http"):
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter  # type: ignore[no-redef]
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter  # type: ignore[no-redef]
+
+        trace_kw = {"endpoint": f"{base}/v1/traces", "headers": headers}
+        metric_kw = {"endpoint": f"{base}/v1/metrics", "headers": headers}
+    else:
+        raise ValueError(f"unsupported OTLP protocol {protocol!r}; use http/protobuf or grpc")
+
+    if spans is None and "traces" in signals:
+        spans = ImpactSpanExporter(OTLPSpanExporter(**trace_kw), version)
+    if metrics is None and "metrics" in signals:
+        reader = PeriodicExportingMetricReader(
+            OTLPMetricExporter(**metric_kw), export_interval_millis=int(metrics_interval_s * 1000)
+        )
+        metrics = ImpactMetrics(reader, version)
+    log.info("Exporting Stardust %s via OTLP/%s to %s", "+".join(sorted(signals)), protocol, base)
+    return Telemetry(spans, metrics)
+
+
+# --- gRPC receiver ----------------------------------------------------------------------------
+
+# Processes decoded spans; returns (rejected count, error message).
+SpanIngest = Callable[[List[OtlpSpan]], Tuple[int, str]]
+
+
+class _TraceService(trace_service_pb2_grpc.TraceServiceServicer):
+    def __init__(self, ingest: SpanIngest):
+        self._ingest = ingest
+
+    async def Export(self, request: ExportTraceServiceRequest, context: Any) -> ExportTraceServiceResponse:  # noqa: N802
+        rejected, message = self._ingest(spans_from_request(request))
+        response = ExportTraceServiceResponse()
+        if rejected:
+            response.partial_success.rejected_spans = rejected
+            response.partial_success.error_message = message
+        return response
+
+
+async def start_grpc_receiver(listen: str, ingest: SpanIngest) -> Tuple[Any, int]:
+    """Serve OTLP/gRPC TraceService on ``listen`` (e.g. "0.0.0.0:4317"). Returns (server, bound port)."""
+    server = grpc.aio.server(options=[("grpc.max_receive_message_length", MAX_BODY_BYTES)])
+    trace_service_pb2_grpc.add_TraceServiceServicer_to_server(_TraceService(ingest), server)
+    port = server.add_insecure_port(listen)
+    if not port:
+        raise RuntimeError(f"could not bind the OTLP/gRPC receiver to {listen}")
+    await server.start()
+    log.info("OTLP/gRPC receiver listening on %s (port %d)", listen, port)
+    return server, port

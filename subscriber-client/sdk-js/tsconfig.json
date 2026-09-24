@@ -3,13 +3,22 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022", "DOM"],
-    "types": ["node"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
     "strict": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "erasableSyntaxOnly": true
   },
-  "include": ["src", "test"]
+  "include": [
+    "src",
+    "test"
+  ]
 }

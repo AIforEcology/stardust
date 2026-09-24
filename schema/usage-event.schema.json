@@ -111,6 +111,22 @@
             "null"
           ],
           "format": "uuid"
+        },
+        "otel_trace_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{32}$",
+          "description": "W3C/OpenTelemetry trace id (lowercase hex) of the span that made the AI call, when the caller uses OpenTelemetry. Core exports its stardust.impact span into this trace (§11.3)."
+        },
+        "otel_span_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{16}$",
+          "description": "Span id of that span; parent of Core's stardust.impact span."
         }
       }
     }
