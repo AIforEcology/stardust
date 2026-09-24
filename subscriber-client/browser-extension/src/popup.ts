@@ -13,6 +13,7 @@ function renderEvent(e: EnrichedEvent): void {
   $("code").textContent = e.indicator_code;
   $("code").dataset.grade = e.indicator_code[0];
   $("breakdown").innerHTML = [
+    row("Model", e.model === "unknown" ? "not shown by site" : e.model),
     row("Tokens in / out", `${e.tokens_in ?? "?"} / ${e.tokens_out ?? "?"}${e.tokens_estimated ? " (est.)" : ""}`),
     row("Cost", fmtUsd(e.cost_usd)),
     row("Electricity", fmt(e.energy_wh, "Wh")),

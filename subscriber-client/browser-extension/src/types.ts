@@ -51,6 +51,8 @@ export interface Summary {
 export interface UsageMessage {
   type: "stardust:usage";
   siteId: string;
+  /** API model id read from the page, when the site shows it. */
+  model?: string;
   tokensIn: number;
   tokensOut: number;
 }

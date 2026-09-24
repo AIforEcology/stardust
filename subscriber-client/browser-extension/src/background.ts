@@ -44,7 +44,7 @@ chrome.runtime.onMessage.addListener((msg: Message, sender) => {
       await record(tabId, {
         source_layer: "browser_ext",
         provider: site.provider,
-        model: "unknown",
+        model: msg.model || "unknown",
         timestamp: isoWithOffset(new Date()),
         tokens_in: msg.tokensIn,
         tokens_out: msg.tokensOut,
