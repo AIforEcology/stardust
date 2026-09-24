@@ -18,7 +18,22 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_METHODOLOGY = _REPO_ROOT / "schema" / "factors" / "methodology-v0.1.json"
 DEFAULT_ESC = _REPO_ROOT / "schema" / "esc.json"
 DEFAULT_PRICING = _REPO_ROOT / "middleware" / "data" / "model_prices_and_context_window.json"
+DEFAULT_PRICING_CACHE = _REPO_ROOT / "middleware" / "data" / "cache" / "model_prices_and_context_window.json"
+DEFAULT_PRICING_URL = "https://raw.githubusercontent.com/BerriAI/litellm/{ref}/model_prices_and_context_window.json"
 DEFAULT_DONATION_URL = "https://www.paypal.com/ncp/payment/BRVT8CAGDWN8J"
+
+
+def parse_refresh(value: str) -> Optional[float]:
+    """``STARDUST_PRICING_REFRESH``: "off" → None, "once" → 0, otherwise a positive number of hours."""
+    v = value.strip().lower()
+    if v in ("off", "none", "false", "0", ""):
+        return None
+    if v == "once":
+        return 0.0
+    hours = float(v)
+    if hours <= 0:
+        raise ValueError(f"STARDUST_PRICING_REFRESH must be off, once or a positive number of hours, got {value!r}")
+    return hours
 
 
 @dataclass(frozen=True)
@@ -28,6 +43,11 @@ class Settings:
     pricing_path: Path
     donation_url: str
     admin_token: Optional[str]
+    # None = never refresh pricing, 0 = refresh once at startup, >0 = every N hours.
+    pricing_refresh_hours: Optional[float] = None
+    pricing_url: str = DEFAULT_PRICING_URL
+    pricing_ref: str = "main"
+    pricing_cache_path: Optional[Path] = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -38,6 +58,10 @@ class Settings:
             donation_url=os.environ.get("STARDUST_DONATION_URL", DEFAULT_DONATION_URL),
             # Admin (provider vetting) endpoints are disabled unless a token is set.
             admin_token=os.environ.get("STARDUST_ADMIN_TOKEN") or None,
+            pricing_refresh_hours=parse_refresh(os.environ.get("STARDUST_PRICING_REFRESH", "once")),
+            pricing_url=os.environ.get("STARDUST_PRICING_URL", DEFAULT_PRICING_URL),
+            pricing_ref=os.environ.get("STARDUST_PRICING_REF", "main"),
+            pricing_cache_path=Path(os.environ.get("STARDUST_PRICING_CACHE", DEFAULT_PRICING_CACHE)),
         )
 
 

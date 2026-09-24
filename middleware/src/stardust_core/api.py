@@ -6,6 +6,7 @@ and orders are lost on restart.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 from collections import deque
@@ -22,9 +23,15 @@ from .broker import Broker, BrokerError
 from .config import Settings, load_methodology
 from .methodology import Methodology
 from .models import EnrichedEvent, UsageEvent
-from .pricing import PricingTable
+from .pricing_refresh import PricingRefresher, load_initial
 
 log = logging.getLogger("stardust_core")
+if not log.handlers:
+    # uvicorn only configures its own loggers; make Core's (e.g. pricing refresh) visible too.
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)s:     [%(name)s] %(message)s"))
+    log.addHandler(_handler)
+    log.setLevel(logging.INFO)
 
 MAX_STORED_EVENTS = 100_000
 
@@ -55,20 +62,39 @@ class ApproveRequest(BaseModel):
 def create_app(settings: Optional[Settings] = None, http: Optional[httpx.AsyncClient] = None) -> FastAPI:
     settings = settings or Settings.from_env()
     cfg = load_methodology(settings.methodology_path)
-    engine = Methodology(cfg, PricingTable.load(settings.pricing_path))
+    engine = Methodology(cfg, load_initial(settings.pricing_path, settings.pricing_cache_path))
     events: Deque[EnrichedEvent] = deque(maxlen=MAX_STORED_EVENTS)
     owned_http = http is None
     client = http or httpx.AsyncClient()
     broker = Broker(client)
+    refresher = PricingRefresher(
+        get_table=lambda: engine.pricing,
+        set_table=lambda t: setattr(engine, "pricing", t),
+        http=client,
+        url=settings.pricing_url.format(ref=settings.pricing_ref),
+        cache_path=settings.pricing_cache_path,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        task = None
+        if settings.pricing_refresh_hours is not None:
+            task = asyncio.create_task(refresher.run(settings.pricing_refresh_hours))
+        else:
+            refresher.status["schedule"] = "off"
         yield
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         if owned_http:
             await client.aclose()
 
     app = FastAPI(title="Stardust Core", version="0.1.0", lifespan=lifespan)
     app.state.engine, app.state.broker, app.state.events = engine, broker, events
+    app.state.pricing_refresher = refresher
 
     def require_admin(x_stardust_admin_token: Optional[str] = Header(default=None)) -> None:
         if not settings.admin_token:
@@ -81,6 +107,10 @@ def create_app(settings: Optional[Settings] = None, http: Optional[httpx.AsyncCl
     @app.get("/healthz")
     def healthz() -> dict:
         return {"ok": True, "methodology_version": engine.version, "priced_models": len(engine.pricing)}
+
+    @app.get("/v1/pricing/status")
+    def pricing_status() -> dict:
+        return refresher.status
 
     @app.get("/v1/methodology")
     def methodology() -> dict:
@@ -177,6 +207,10 @@ def create_app(settings: Optional[Settings] = None, http: Optional[httpx.AsyncCl
             return broker.delist(provider_id).__dict__
         except BrokerError as e:
             raise HTTPException(404, str(e))
+
+    @app.post("/v1/admin/pricing/refresh", dependencies=[Depends(require_admin)])
+    async def refresh_pricing() -> dict:
+        return await refresher.refresh_once()
 
     return app
 

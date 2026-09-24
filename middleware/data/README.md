@@ -7,3 +7,5 @@ python scripts/update_pricing.py --ref <litellm commit SHA>
 ```
 
 If the file is missing, Core still runs but `cost_usd` is `null` and the indicator's cost tier is `X`.
+
+The running server also refreshes prices on its own (see *Pricing refresh* in the [middleware README](../README.md)). It writes to `cache/`, which is gitignored, and never overwrites this file.

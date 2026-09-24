@@ -11,7 +11,7 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .config import load_json
 
@@ -53,9 +53,14 @@ class PricingTable:
         if not path.exists():
             log.warning("Pricing file %s not found; cost_usd will be null. Run scripts/update_pricing.py.", path)
             return cls.empty()
-        raw = load_json(path)
+        table = cls.from_raw(load_json(path), source=str(path))
+        log.info("Loaded %d priced models from %s", len(table), path)
+        return table
+
+    @classmethod
+    def from_raw(cls, raw: object, source: str) -> "PricingTable":
         if not isinstance(raw, dict):
-            raise ValueError(f"{path}: expected a JSON object keyed by model name")
+            raise ValueError(f"{source}: expected a JSON object keyed by model name")
         prices: Dict[str, Price] = {}
         for name, entry in raw.items():
             if name == "sample_spec" or not isinstance(entry, dict):
@@ -65,8 +70,16 @@ class PricingTable:
             if not (_is_price(p_in) and _is_price(p_out)):
                 continue
             prices[name.lower()] = Price(float(p_in), float(p_out))
-        log.info("Loaded %d priced models from %s", len(prices), path)
-        return cls(prices, source=str(path))
+        return cls(prices, source=source)
+
+    def diff(self, newer: "PricingTable") -> Dict[str, List[str]]:
+        """Models added, removed and re-priced going from this table to ``newer``."""
+        old, new = self._prices, newer._prices
+        return {
+            "added": sorted(new.keys() - old.keys()),
+            "removed": sorted(old.keys() - new.keys()),
+            "changed": sorted(k for k in old.keys() & new.keys() if old[k] != new[k]),
+        }
 
     def lookup(self, provider: str, model: str) -> Optional[Price]:
         model = model.lower()

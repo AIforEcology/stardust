@@ -17,10 +17,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from stardust_core.pricing import PricingTable  # noqa: E402
+from stardust_core.pricing_refresh import PricingRejected, validate  # noqa: E402
 
 DEST = Path(__file__).resolve().parents[1] / "data" / "model_prices_and_context_window.json"
 URL = "https://raw.githubusercontent.com/BerriAI/litellm/{ref}/model_prices_and_context_window.json"
-MIN_PRICED_MODELS = 100
 
 
 def main() -> int:
@@ -31,18 +31,15 @@ def main() -> int:
     url = URL.format(ref=args.ref)
     with urllib.request.urlopen(url, timeout=30) as r:
         body = r.read()
-    data = json.loads(body)
-    if not isinstance(data, dict):
-        print("upstream file is not a JSON object; refusing to update", file=sys.stderr)
+    try:
+        # Same checks the running server applies (stardust_core.pricing_refresh).
+        table = validate(json.loads(body), PricingTable.load(DEST), source=url)
+    except (ValueError, PricingRejected) as e:
+        print(f"refusing to update: {e}", file=sys.stderr)
         return 1
 
     tmp = DEST.with_suffix(".tmp")
     tmp.write_bytes(body)
-    table = PricingTable.load(tmp)
-    if len(table) < MIN_PRICED_MODELS:
-        tmp.unlink()
-        print(f"only {len(table)} valid priced models (< {MIN_PRICED_MODELS}); refusing to update", file=sys.stderr)
-        return 1
     tmp.replace(DEST)
     print(f"updated {DEST.name} from {url}: {len(table)} priced models")
     return 0
