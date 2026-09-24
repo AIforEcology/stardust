@@ -43,6 +43,7 @@ The tech operations fee ([middleware README](../middleware/README.md#tech-operat
 ### Decisions
 
 - [ ] **Counsel review of the fee structure.** Confirm with counsel the tech operations fee invoiced under a technology-services agreement, and its unrelated-business-income treatment ([operating model](architecture/impact-credits.md#operating-model-technology-and-connection-not-financial-brokerage)).
+- [ ] **Receipts for fee payers (with counsel and AIforE's accountant).** The tech operations fee pays for a service, so it isn't a charitable contribution. Fee payers get a **payment receipt or invoice**, which doesn't state the fee is tax deductible (a business may still deduct it as an expense). **Donations** (§18) get the IRS written acknowledgment: required for gifts of $250 or more, and it states whether anything was received in return. Confirm before building receipts into Core.
 - [ ] **Set the operating budget.** Set `STARDUST_OPERATING_COST_MONTHLY_USD` so the weekly review has a coverage figure.
 
 ### Build (spec v1.2 plan, [impact-credits.md](architecture/impact-credits.md))
