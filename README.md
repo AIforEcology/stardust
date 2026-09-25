@@ -8,7 +8,7 @@ A project of [AI for Ecology](https://aifore.org). See the [spec (v1.2) and summ
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="stardust-technical-architecture-dark.png">
-  <img src="stardust-technical-architecture.png" alt="Stardust technical architecture: subscriber-side clients (chat plugin, browser extension, cloud and infra agent, database agent) send events through the ingestion API (REST and gRPC) to the middleware and telemetry core; an MCP analytics server queries the core; provider drivers (direct air capture, point-source, nature-based, ocean-based) send verified telemetry through the provider driver interface.">
+  <img src="stardust-technical-architecture.png" alt="Stardust technical architecture: subscriber-side clients (chat plugin, browser extension, cloud and infra agent, database agent) send events through the ingestion API (REST and gRPC) to the middleware and telemetry core, which holds the Net Impact Ledger; three MCP servers (subscriber reporting, provider insights, operator lifecycle) query the core; provider drivers (direct air capture, point-source, nature-based, ocean-based) send verified telemetry through the provider driver interface.">
 </picture>
 
 ```
