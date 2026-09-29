@@ -25,7 +25,7 @@ A span becomes a Stardust usage event when it carries `gen_ai.usage.input_tokens
 
 ## What Core emits
 
-One `stardust.impact` span (kind `INTERNAL`) per enriched event, from resource `service.name = stardust-core`. For events that arrived over OTLP, it's a **child of the original GenAI span**, timed at that span's end, so it appears in the same trace.
+One `stardust.impact` span (kind `INTERNAL`) per enriched event, from resource `service.name = stardust-core`. The resource also carries `stardust.spec.version`, the product spec version Core implements (e.g. `1.4`, from `schema/spec-version.json`); `service.version` is the methodology version. For events that arrived over OTLP, it's a **child of the original GenAI span**, timed at that span's end, so it appears in the same trace.
 
 | Attribute | Type | Meaning |
 |---|---|---|
@@ -90,7 +90,7 @@ Monotonic counters, exported every `STARDUST_OTLP_METRICS_INTERVAL` seconds (cum
 | `stardust.heat.rejected` | `Wh` | |
 | `stardust.heat.recovered` | `Wh` | only operations with a reported Energy Reuse Factor |
 
-Every metric carries `gen_ai.provider.name`, `gen_ai.request.model`, `cloud.region` (`unknown` if not set), `stardust.source_layer`, `stardust.model.tier`, `stardust.impact.confidence_tier`, `stardust.esc.code` and `stardust.indicator.grade` (A–F), plus `stardust.org_id` when present. User and event ids are never metric attributes.
+Metrics come from the same resource as the spans, so they also carry `stardust.spec.version`. Every metric carries `gen_ai.provider.name`, `gen_ai.request.model`, `cloud.region` (`unknown` if not set), `stardust.source_layer`, `stardust.model.tier`, `stardust.impact.confidence_tier`, `stardust.esc.code` and `stardust.indicator.grade` (A–F), plus `stardust.org_id` when present. User and event ids are never metric attributes.
 
 ## Planned mappings (§11.5)
 

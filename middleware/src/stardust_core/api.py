@@ -23,7 +23,8 @@ from pydantic import BaseModel, Field
 
 from . import indicator
 from .broker import Broker, BrokerError
-from .config import Settings, load_methodology
+from . import __version__
+from .config import Settings, load_methodology, load_spec_version
 from .methodology import Methodology
 from .models import EnrichedEvent, UsageEvent
 from .otel import (
@@ -85,6 +86,7 @@ def create_app(
     settings = settings or Settings.from_env()
     cfg = load_methodology(settings.methodology_path)
     engine = Methodology(cfg, load_initial(settings.pricing_path, settings.pricing_cache_path))
+    spec_version = load_spec_version()
     store = Store(settings.database_path or ":memory:")
     log.info("Database: %s", store.path)
     # Sync endpoints run in a thread pool and gRPC on the event loop; keep check-enrich-insert atomic
@@ -100,6 +102,7 @@ def create_app(
         metrics_interval_s=settings.otlp_metrics_interval_s,
         span_exporter=span_exporter,
         metric_reader=metric_reader,
+        spec_version=spec_version,
     )
 
     def record(event: UsageEvent) -> Tuple[EnrichedEvent, bool]:
@@ -179,7 +182,7 @@ def create_app(
         telemetry.shutdown()
         store.close()
 
-    app = FastAPI(title="Stardust Core", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Stardust Core", version=__version__, lifespan=lifespan)
     app.state.engine, app.state.broker, app.state.store = engine, broker, store
     app.state.pricing_refresher = refresher
     app.state.otlp_grpc_port = None
@@ -196,6 +199,7 @@ def create_app(
     def healthz() -> dict:
         return {
             "ok": True,
+            "spec_version": spec_version,
             "methodology_version": engine.version,
             "priced_models": len(engine.pricing),
             "otlp_export": {

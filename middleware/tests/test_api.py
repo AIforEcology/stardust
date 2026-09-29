@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import httpx
@@ -5,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from stardust_core.api import create_app
-from stardust_core.config import DEFAULT_ESC, DEFAULT_METHODOLOGY, Settings
+from stardust_core.config import DEFAULT_ESC, DEFAULT_METHODOLOGY, DEFAULT_SPEC_VERSION, Settings
 from stardust_core.store import SCHEMA_VERSION
 
 EVENT = {
@@ -36,6 +37,7 @@ def test_health(client):
         "ok": True, "methodology_version": "0.2.0", "priced_models": 3, "otlp_export": None, "otlp_grpc_receiver": None,
     }
     assert body["database"]["schema_version"] == SCHEMA_VERSION
+    assert body["spec_version"] == json.loads(DEFAULT_SPEC_VERSION.read_text())["spec_version"]
 
 
 def test_ingest_and_summary(client):
