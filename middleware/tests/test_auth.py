@@ -182,3 +182,26 @@ def test_split_key():
     assert auth.split_key("sdk_abc_secret") == "abc"
     for bad in ("abc_secret", "sdk_", "sdk_abc", "sdk__secret", "sdk_abc_"):
         assert auth.split_key(bad) is None
+
+
+# --- principal lookup (for the MCP servers) --------------------------------------------------------
+
+
+def test_principal_describes_the_key(client):
+    k = key(client, user_id=USER_A1, scopes=["reporting.read", "provider.read"])
+    r = client.get("/v1/auth/principal", headers=bearer(k))
+    assert r.status_code == 200
+    assert r.json() == {"key_id": k["key_id"], "org_id": ORG_A, "user_id": USER_A1,
+                        "scopes": ["provider.read", "reporting.read"]}
+
+
+def test_principal_needs_a_valid_key(client):
+    assert client.get("/v1/auth/principal").status_code == 401
+    assert client.get("/v1/auth/principal", headers={"Authorization": "Bearer sdk_x_y"}).status_code == 401
+
+
+def test_principal_is_refused_when_auth_is_off(pricing_file):
+    # With auth off every read is unscoped, so no service may act on a subscriber's behalf.
+    with make_client(pricing_file, "off") as c:
+        r = c.get("/v1/auth/principal", headers={"Authorization": "Bearer sdk_x_y"})
+        assert r.status_code == 404 and r.json()["reason"] == "not_found"
