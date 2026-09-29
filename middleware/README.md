@@ -36,7 +36,7 @@ To set other options, such as `STARDUST_OTLP_ENDPOINT`, put them in `~/Library/A
 |---|---|---|
 | `POST` | `/v1/events` | Send a usage event; returns the enriched event. A repeated `event_id` returns the original and isn't counted twice |
 | `POST` | `/v1/traces` | OTLP/HTTP trace receiver (protobuf or JSON, optionally gzipped). GenAI spans become events |
-| `GET` | `/v1/events?user_id=&limit=` | Recent enriched events |
+| `GET` | `/v1/events?user_id=&limit=` | Recent enriched events. With a key, only the key's organization (and user) |
 | `GET` | `/v1/summary?user_id=&org_id=&since=&until=` | Totals plus an aggregate indicator code, for a user, an org or everything, over an optional time window |
 | `GET` | `/v1/summary/daily?user_id=&org_id=&since=&until=` | The same totals per UTC day, for trend charts |
 | `GET` | `/v1/methodology` | The exact factor set in use, for auditability |
@@ -52,9 +52,43 @@ To set other options, such as `STARDUST_OTLP_ENDPOINT`, put them in `~/Library/A
 | `POST` | `/v1/admin/providers/{id}/delist` | Remove a provider from new quotes |
 | `POST` | `/v1/admin/pricing/refresh` | Refresh pricing now |
 | `DELETE` | `/v1/admin/users/{user_id}/events` | Erase one user's events (§14.1) |
+| `POST` | `/v1/admin/keys` | Issue a subscriber API key: `{org_id, user_id?, scopes?, label?}`. The key is in the response once |
+| `GET` | `/v1/admin/keys?org_id=` | List keys (never the key or its hash) |
+| `POST` | `/v1/admin/keys/{key_id}/revoke` | Revoke a key |
 | `GET` | `/v1/admin/fees?since=&until=` | Tech operations fees, provider payouts and operating-cost coverage (default: this month; `/v1/admin/broker/fees` still works) |
 
 Admin endpoints need `STARDUST_ADMIN_TOKEN` set on the server and sent as `X-Stardust-Admin-Token`. They are off when the variable is unset.
+
+## Subscriber API keys
+
+The read endpoints (`/v1/summary`, `/v1/summary/daily` and `GET /v1/events`) can be limited to the caller's own organization (spec §23.6). This is **off by default**. Set `STARDUST_SUBSCRIBER_AUTH`:
+
+| Mode | Without a key | With a key |
+|---|---|---|
+| `off` (default) | Served as before | The header is ignored |
+| `optional` | Served as before | Held to the key: its organization, and its user if set |
+| `required` | `401` | Held to the key |
+
+Use `optional` while moving existing clients to keys, then `required`.
+
+1. **Issue a key** for an organization, and optionally one user in it:
+
+   ```bash
+   curl -s -X POST -H "X-Stardust-Admin-Token: $STARDUST_ADMIN_TOKEN" -H "Content-Type: application/json" \
+     -d '{"org_id": "<org uuid>", "label": "reporting"}' http://127.0.0.1:8080/v1/admin/keys
+   ```
+
+   The response contains `key` (`sdk_<key_id>_<secret>`). It is shown only this once; Core stores only its SHA-256 hash.
+2. **Call with it:** `Authorization: Bearer sdk_…`.
+
+With a key:
+- Queries are pinned to the key's organization, and to its user for a user-level key.
+- Asking for another organization or user returns `403` with `"reason": "forbidden_scope"`, never someone else's data.
+- A missing, unknown or revoked key returns `401` with `"reason": "unauthorized"`.
+
+Keys carry the spec's OAuth scopes: `reporting.read` (the default and the one these endpoints need), `provider.read`, `operator.lifecycle.read` and `operator.lifecycle.write`.
+
+**Not covered yet:** ingestion (`POST /v1/events`, `/v1/traces`) and the remediation endpoints still accept calls without a key. `/healthz` shows the current mode.
 
 ## Configuration
 
@@ -78,6 +112,7 @@ Admin endpoints need `STARDUST_ADMIN_TOKEN` set on the server and sent as `X-Sta
 | `STARDUST_OPERATING_COST_MONTHLY_USD` | unset. Monthly operating budget; the fee report then shows how much of it fees covered |
 | `STARDUST_DATABASE_PATH` | `~/Library/Application Support/stardust/core.db` on macOS (the user data directory elsewhere). Keep it on a local disk, not a network share or USB drive |
 | `STARDUST_RETENTION_DAYS` | unset (keep forever). Delete events older than this, at startup and every 6 hours |
+| `STARDUST_SUBSCRIBER_AUTH` | `off`. `optional` or `required` limits the read endpoints to the caller's key ([above](#subscriber-api-keys)) |
 | `STARDUST_OTLP_GRPC_LISTEN` | unset (off). Address for the OTLP/gRPC receiver, e.g. `0.0.0.0:4317`. The HTTP receiver at `/v1/traces` is always on |
 
 ## Tech operations fee
@@ -143,4 +178,4 @@ To update the committed copy itself, run `scripts/update_pricing.py --ref <SHA>`
 
 - Live grid-intensity feed (§8.6) and Measured-tier sources (§8.1)
 - Right-sizing scores (§21) and provider-telemetry ingestion (§20)
-- Auth for subscriber endpoints
+- Keys on ingestion and remediation endpoints (reads have them: [Subscriber API keys](#subscriber-api-keys))

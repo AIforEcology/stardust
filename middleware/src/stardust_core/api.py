@@ -17,11 +17,13 @@ from uuid import UUID
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
 from opentelemetry.sdk.metrics.export import MetricReader
 from opentelemetry.sdk.trace.export import SpanExporter
 from pydantic import BaseModel, Field
 
-from . import indicator
+from . import auth, indicator
+from .auth import AuthError, Principal
 from .broker import Broker, BrokerError
 from . import __version__
 from .config import Settings, load_methodology, load_spec_version
@@ -74,6 +76,14 @@ class AddProviderRequest(BaseModel):
 
 class ApproveRequest(BaseModel):
     tier: str
+
+
+class CreateKeyRequest(BaseModel):
+    org_id: UUID
+    # Set to limit the key to one user's events within the organization.
+    user_id: Optional[UUID] = None
+    scopes: List[str] = Field(default_factory=lambda: [auth.REPORTING_READ])
+    label: Optional[str] = Field(default=None, max_length=200)
 
 
 def create_app(
@@ -187,11 +197,39 @@ def create_app(
     app.state.pricing_refresher = refresher
     app.state.otlp_grpc_port = None
 
+    @app.exception_handler(AuthError)
+    async def auth_error(_: Request, e: AuthError) -> Response:
+        # §23.7 reason codes; 401s tell the client how to authenticate.
+        headers = {"WWW-Authenticate": "Bearer"} if e.status == 401 else None
+        return JSONResponse({"detail": e.message, "reason": e.reason}, status_code=e.status, headers=headers)
+
     def require_admin(x_stardust_admin_token: Optional[str] = Header(default=None)) -> None:
         if not settings.admin_token:
             raise HTTPException(403, "admin endpoints are disabled (STARDUST_ADMIN_TOKEN not set)")
         if not x_stardust_admin_token or not hmac.compare_digest(x_stardust_admin_token, settings.admin_token):
             raise HTTPException(401, "invalid admin token")
+
+    def principal(authorization: Optional[str] = Header(default=None)) -> Optional[Principal]:
+        """The caller's key, per STARDUST_SUBSCRIBER_AUTH (auth.py). None means "serve as before"."""
+        mode = settings.subscriber_auth
+        if mode == "off":
+            return None
+        key = auth.bearer(authorization)
+        if key is None:
+            if mode == "required":
+                raise AuthError(401, "unauthorized", "an API key is required (Authorization: Bearer <key>)")
+            return None
+        key_id = auth.split_key(key)
+        stored = store.load_api_key(key_id) if key_id else None
+        if stored is None or stored["revoked_at"] or not auth.matches(key, stored["key_hash"]):
+            raise AuthError(401, "unauthorized", "invalid or revoked API key")
+        return Principal(key_id=stored["key_id"], org_id=UUID(stored["org_id"]),
+                         user_id=UUID(stored["user_id"]) if stored["user_id"] else None,
+                         scopes=frozenset(stored["scopes"]))
+
+    def reporting(principal: Optional[Principal], user_id: Optional[UUID],
+                  org_id: Optional[UUID]) -> Tuple[Optional[UUID], Optional[UUID]]:
+        return auth.narrow(principal, auth.REPORTING_READ, user_id, org_id)
 
     # --- metering -------------------------------------------------------------
 
@@ -208,6 +246,7 @@ def create_app(
                 "signals": list(settings.otlp_signals),
             } if settings.otlp_endpoint else None,
             "otlp_grpc_receiver": settings.otlp_grpc_listen,
+            "subscriber_auth": settings.subscriber_auth,
             "database": store.stats(),
         }
 
@@ -241,13 +280,17 @@ def create_app(
         return Response(content=payload, media_type=media_type)
 
     @app.get("/v1/events", response_model=List[EnrichedEvent])
-    def recent(user_id: Optional[UUID] = None, limit: int = Query(50, ge=1, le=1000)) -> List[EnrichedEvent]:
-        return store.recent_events(user_id=user_id, limit=limit)
+    def recent(user_id: Optional[UUID] = None, limit: int = Query(50, ge=1, le=1000),
+               caller: Optional[Principal] = Depends(principal)) -> List[EnrichedEvent]:
+        user_id, org_id = reporting(caller, user_id, None)
+        return store.recent_events(user_id=user_id, org_id=org_id, limit=limit)
 
     @app.get("/v1/summary")
     def summary(user_id: Optional[UUID] = None, org_id: Optional[UUID] = None,
-                since: Optional[datetime] = None, until: Optional[datetime] = None) -> dict:
+                since: Optional[datetime] = None, until: Optional[datetime] = None,
+                caller: Optional[Principal] = Depends(principal)) -> dict:
         """Totals for a user, an org, or everything, optionally within [since, until)."""
+        user_id, org_id = reporting(caller, user_id, org_id)
         a = store.aggregate(user_id=user_id, org_id=org_id, since=since, until=until)
         return {
             "events": a.events,
@@ -274,8 +317,10 @@ def create_app(
 
     @app.get("/v1/summary/daily")
     def summary_daily(user_id: Optional[UUID] = None, org_id: Optional[UUID] = None,
-                      since: Optional[datetime] = None, until: Optional[datetime] = None) -> dict:
+                      since: Optional[datetime] = None, until: Optional[datetime] = None,
+                      caller: Optional[Principal] = Depends(principal)) -> dict:
         """Per-day (UTC) totals for trend charts (§6.3)."""
+        user_id, org_id = reporting(caller, user_id, org_id)
         return {"days": store.daily(user_id=user_id, org_id=org_id, since=since, until=until)}
 
     # --- Subscriber API (§10.3) -----------------------------------------------
@@ -381,6 +426,35 @@ def create_app(
             deleted = store.delete_user_events(user_id)
         log.info("Deleted %d events for a user on admin request", deleted)
         return {"deleted": deleted}
+
+    # --- subscriber API keys (admin, auth.py) ------------------------------------
+
+    @app.post("/v1/admin/keys", dependencies=[Depends(require_admin)])
+    def create_key(req: CreateKeyRequest) -> dict:
+        """Issue a key. The response is the only time the key itself is shown; store it safely."""
+        try:
+            scopes = auth.validate_scopes(req.scopes)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        key_id, key, key_hash = auth.new_key()
+        store.save_api_key(key_id, key_hash, req.org_id, req.user_id, sorted(scopes), req.label,
+                           datetime.now(timezone.utc))
+        log.info("Issued API key %s for org %s", key_id, req.org_id)
+        record = store.load_api_key(key_id)
+        record.pop("key_hash")
+        return {"key": key, **record}
+
+    @app.get("/v1/admin/keys", dependencies=[Depends(require_admin)])
+    def list_keys(org_id: Optional[UUID] = None) -> dict:
+        return {"keys": store.list_api_keys(org_id)}
+
+    @app.post("/v1/admin/keys/{key_id}/revoke", dependencies=[Depends(require_admin)])
+    def revoke_key(key_id: str) -> dict:
+        revoked = store.revoke_api_key(key_id, datetime.now(timezone.utc))
+        if revoked is None:
+            raise HTTPException(404, "no such key")
+        log.info("Revoked API key %s", key_id)
+        return revoked
 
     @app.post("/v1/admin/pricing/refresh", dependencies=[Depends(require_admin)])
     async def refresh_pricing() -> dict:

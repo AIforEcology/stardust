@@ -2,7 +2,7 @@
 
 The architecture for spec v1.4 §9.5 and §23: what the Model Context Protocol interface adds to Stardust, how each tool maps onto today's Core, and the incremental plan for building it.
 
-**Status:** designed, not built. No MCP server exists yet. The tool list lives in [`schema/mcp-tools.json`](../../schema/mcp-tools.json), generated from the spec, and a conformance test will check the servers against it once they exist.
+**Status:** step M1 (subscriber keys and tenant isolation in Core) is built; no MCP server exists yet. The tool list lives in [`schema/mcp-tools.json`](../../schema/mcp-tools.json), generated from the spec, and a conformance test will check the servers against it once they exist.
 
 ## What v1.4 adds
 
@@ -70,13 +70,17 @@ None of these exist. They need the §22.8 asset store first ([time-embodied-life
 
 ### Cross-cutting gaps
 
-- **Authentication.** Core has no per-subscriber authentication today: `/v1/summary` accepts any `user_id` or `org_id`, and only admin endpoints need a token. MCP needs OAuth with the four scopes, and tenant isolation on every call. **This is the largest piece of work and it comes first.**
+- **Authentication.** Built in M1: subscriber API keys that carry the four §23.6 scopes, and tenant isolation on Core's read endpoints (`STARDUST_SUBSCRIBER_AUTH`, off by default; see the [middleware README](../../middleware/README.md#subscriber-api-keys)). What remains is **OAuth for the MCP servers** (M2):
+  - The servers validate the user's OAuth token.
+  - They call Core with the same principal: organization, optional user and scopes.
+  - Core already enforces isolation for that principal, so an MCP server can't widen it.
+  - Ingestion still takes calls without a key.
 - **Spec version in responses.** Core already reports it (`GET /healthz` → `spec_version`, and the `stardust.spec.version` OTel resource attribute). The servers can pass it through.
 - **Audit log** for operator writes: a new table.
 
 ## Where the servers live
 
-**Recommendation:** a new top-level `mcp/` package (Python, like Core), with one entry point per server, that calls Core over its REST API rather than importing Core.
+**Decided (September 2026):** a new top-level `mcp/` package (Python, like Core), with one entry point per server, that calls Core over its REST API rather than importing Core.
 
 - **Keeps Core free of write tools.** The reporting and Provider servers can only do what Core's read endpoints allow.
 - **Keeps each server's surface small**, which directory review needs (§12.2), and lets the operator server ship separately.
@@ -85,7 +89,7 @@ None of these exist. They need the §22.8 asset store first ([time-embodied-life
 
 The alternative, routes inside Core, is less code but mixes MCP's OAuth with Core's ingestion. It also makes it harder to show that the reporting server has no write paths.
 
-This package isn't created yet. It needs sign-off, and an MCP SDK dependency needs approval.
+The package is created in M2. Adding an MCP SDK dependency still needs approval.
 
 ## Incremental plan
 
@@ -94,8 +98,8 @@ The [ground rules in impact-credits.md](impact-credits.md#ground-rules-for-every
 | # | Step | What changes | What stays untouched |
 |---|---|---|---|
 | M0 | **Docs and conformance** (spec v1.4 update) | This doc; `schema/mcp-tools.json`; a tool-set conformance test, skipped until servers exist | All code |
-| M1 | **Subscriber auth in Core** | OAuth and API keys for subscribers; `user_id` and `org_id` checked against the caller. Off unless enabled, so existing clients keep working | Existing unauthenticated endpoints, until the switch is flipped |
-| M2 | **Reporting server, first tools** | `mcp/` package; `get_usage_summary`, `get_impact_summary` (operational only, with the gap disclosed), `explain_metric`, `quote_credits` (carbon only). All read-only | Core |
+| M1 | **Subscriber auth in Core** (built) | API keys with §23.6 scopes; reads pinned to the key's organization and user; `401 unauthorized` and `403 forbidden_scope` reason codes. `STARDUST_SUBSCRIBER_AUTH=off` (default), `optional` or `required` | Every endpoint while the switch is `off`; ingestion and remediation in any mode |
+| M2 | **Reporting server, first tools** | `mcp/` package; OAuth, mapped to Core principals; `get_usage_summary`, `get_impact_summary` (operational only, with the gap disclosed), `explain_metric`, `quote_credits` (carbon only). All read-only | Core |
 | M3 | **Provider insights, first tools** | `list_orders` (needs a new read endpoint), `get_order_status` | Broker, orders |
 | M4 | **Remaining reporting tools**, one per PR as Core gains the data | `get_net_impact_ledger` after ledger step 3; right-size and recommendations after §21 scoring; `get_load_shift_report` after §21.7 | Earlier tools |
 | M5 | **Operator lifecycle server** | Separate entry point and distribution; propose and confirm; audit log. After the asset store (L1) | Reporting and Provider servers |

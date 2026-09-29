@@ -13,6 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from .auth import parse_auth_mode
 from .fees import DEFAULT_FEE_PCT
 from .store import default_database_path
 
@@ -103,6 +104,8 @@ class Settings:
     tech_ops_min_fee_usd: float = 0.0
     # Monthly operating budget, so the fee report can show how much of it fees covered.
     operating_cost_monthly_usd: Optional[float] = None
+    # Subscriber authentication on the read endpoints (auth.py): off, optional or required.
+    subscriber_auth: str = "off"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -131,6 +134,7 @@ class Settings:
                 float(os.environ["STARDUST_OPERATING_COST_MONTHLY_USD"])
                 if os.environ.get("STARDUST_OPERATING_COST_MONTHLY_USD") else None
             ),
+            subscriber_auth=parse_auth_mode(os.environ.get("STARDUST_SUBSCRIBER_AUTH", "off")),
         )
 
 

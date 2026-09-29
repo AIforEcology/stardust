@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stardust-core"
-version = "0.2.0"
+version = "0.3.0"
 description = "Stardust Core: usage-event ingestion, cost and environmental-impact enrichment, indicator codes, and the remediation broker."
 readme = "README.md"
 license = { text = "Apache-2.0" }

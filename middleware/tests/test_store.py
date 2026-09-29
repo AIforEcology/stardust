@@ -202,8 +202,31 @@ def test_v2_events_migrate_to_v3(tmp_path):
     conn.close()
 
     store = Store(db)
-    assert store.stats()["schema_version"] == SCHEMA_VERSION == 3
+    assert store.stats()["schema_version"] == SCHEMA_VERSION
     a = store.aggregate()
     assert a.heat_rejected_wh == 2.0             # back-filled from energy
     assert a.water_ml == 9.88 and a.water_onsite_ml == 0  # old water stays whole, reported as unsplit
     assert (a.heat_recovered_wh, a.heat_recovered_events) == (None, 0)
+
+
+def test_v3_database_migrates_to_v4_with_no_keys(tmp_path):
+    from stardust_core.store import _MIGRATIONS
+
+    db = tmp_path / "core.db"
+    conn = sqlite3.connect(db)
+    for script in _MIGRATIONS[:3]:
+        for statement in script.split(";"):
+            if statement.strip():
+                conn.execute(statement)
+    conn.execute("PRAGMA user_version=3")
+    conn.execute("""INSERT INTO events (event_id, ts, source_layer, provider, model, energy_wh, co2e_g, water_ml,
+                        confidence_tier, indicator_code, data)
+                    VALUES ('e1', '2026-09-20T00:00:00+00:00', 'infra_agent', 'anthropic', 'm', 2.0, 1.0, 9.88,
+                        'modeled', 'C3-S', '{}')""")
+    conn.commit()
+    conn.close()
+
+    store = Store(db)
+    assert store.stats()["schema_version"] == 4
+    assert store.stats()["rows"]["api_keys"] == 0
+    assert store.aggregate().events == 1  # existing events untouched

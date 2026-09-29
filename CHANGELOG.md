@@ -8,7 +8,22 @@ Notable changes to Project Stardust. The repository holds several packages, each
 
 Versions follow [Semantic Versioning](https://semver.org/). The format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## Unreleased: spec v1.4
+## Unreleased
+
+### Added
+- **stardust-core 0.3.0:** subscriber API keys and tenant isolation (spec §23.6, MCP plan step M1). Off by default.
+  - `STARDUST_SUBSCRIBER_AUTH` = `off`, `optional` or `required`.
+  - Keys belong to an organization, and optionally one user in it, and carry §23.6 scopes.
+  - With a key, `/v1/summary`, `/v1/summary/daily` and `GET /v1/events` are pinned to that organization and user. Asking for another returns `403 forbidden_scope`.
+  - Admin endpoints: `POST /v1/admin/keys`, `GET /v1/admin/keys`, `POST /v1/admin/keys/{key_id}/revoke`.
+  - `/healthz` reports `subscriber_auth` and counts `api_keys` rows.
+- Database schema v4: the `api_keys` table, which stores only key hashes.
+
+### Unchanged
+- With the default `off`, every endpoint behaves exactly as before.
+- Ingestion and remediation endpoints don't use keys yet.
+
+## spec-v1.4 (tag)
 
 ### Added
 - Spec v1.4, the Telemetry Specification T1.2, and `docs/tools/stardust_telemetry_sync.py` for keeping them in sync.
