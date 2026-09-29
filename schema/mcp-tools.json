@@ -1,0 +1,149 @@
+{
+  "spec_version": "1.4",
+  "tools": [
+    {
+      "tool": "get_usage_summary",
+      "purpose": "Tokens, requests and cost by period, model, provider or project",
+      "key_inputs": "period, group_by, scope",
+      "returns": "Usage and cost fields (§4)",
+      "section": "23.3",
+      "server": "23.3 Subscriber Reporting Tools"
+    },
+    {
+      "tool": "get_impact_summary",
+      "purpose": "Energy, water and lifecycle emissions with the OPE/FAC/TRA/EMB split",
+      "key_inputs": "period, scope",
+      "returns": "§4.3, §8.8 fields, confidence tags",
+      "section": "23.3",
+      "server": "23.3 Subscriber Reporting Tools"
+    },
+    {
+      "tool": "get_right_size_report",
+      "purpose": "Right-Size Score, sub-scores and efficiency indexes",
+      "key_inputs": "scope, period",
+      "returns": "D-RSS, D-MFS, D-TES, D-UTS, D-CTS, D-EIC, D-EIE, D-EIG",
+      "section": "23.3",
+      "server": "23.3 Subscriber Reporting Tools"
+    },
+    {
+      "tool": "list_recommendations",
+      "purpose": "Ranked recommendations with projected savings",
+      "key_inputs": "scope, min_savings",
+      "returns": "§21.5 recommendations, D-SAV, D-LXS",
+      "section": "23.3",
+      "server": "23.3 Subscriber Reporting Tools"
+    },
+    {
+      "tool": "get_load_shift_report",
+      "purpose": "Shifted work, savings and missed opportunities",
+      "key_inputs": "period, scope",
+      "returns": "D-LSS, D-LSC, D-CRU, SLK, GSG",
+      "section": "23.3",
+      "server": "23.3 Subscriber Reporting Tools"
+    },
+    {
+      "tool": "get_net_impact_ledger",
+      "purpose": "Gross footprint, reductions, credits retired and residual, per dimension",
+      "key_inputs": "period",
+      "returns": "§22.6 ledger",
+      "section": "23.3",
+      "server": "23.3 Subscriber Reporting Tools"
+    },
+    {
+      "tool": "quote_credits",
+      "purpose": "Like-for-like credit quote per dimension; quote only, never a purchase",
+      "key_inputs": "period or impact vector, preferences",
+      "returns": "§22.5 quote basket",
+      "section": "23.3",
+      "server": "23.3 Subscriber Reporting Tools"
+    },
+    {
+      "tool": "explain_metric",
+      "purpose": "Definition, unit, method and section reference for any field code",
+      "key_inputs": "code",
+      "returns": "Field definition and § reference",
+      "section": "23.3",
+      "server": "23.3 Subscriber Reporting Tools"
+    },
+    {
+      "tool": "get_demand_forecast",
+      "purpose": "Expected Subscriber demand by category and region",
+      "key_inputs": "category, region, horizon",
+      "returns": "Forecast volumes by credit_category",
+      "section": "23.4",
+      "server": "23.4 Provider Insights Tools"
+    },
+    {
+      "tool": "list_orders",
+      "purpose": "Orders assigned to the Provider",
+      "key_inputs": "status, period",
+      "returns": "Order records (§10.5)",
+      "section": "23.4",
+      "server": "23.4 Provider Insights Tools"
+    },
+    {
+      "tool": "get_order_status",
+      "purpose": "Fulfillment status of one order",
+      "key_inputs": "order_id",
+      "returns": "Status, serials, retirement_ref",
+      "section": "23.4",
+      "server": "23.4 Provider Insights Tools"
+    },
+    {
+      "tool": "get_issuance_status",
+      "purpose": "Issued and pending credits",
+      "key_inputs": "period",
+      "returns": "get_issuance() results (§22.5)",
+      "section": "23.4",
+      "server": "23.4 Provider Insights Tools"
+    },
+    {
+      "tool": "get_telemetry_health",
+      "purpose": "Ingestion gaps, anomalies and data quality",
+      "key_inputs": "facility, period",
+      "returns": "ADF, DQS, reporting gaps",
+      "section": "23.4",
+      "server": "23.4 Provider Insights Tools"
+    },
+    {
+      "tool": "list_assets",
+      "purpose": "Assets filtered by lifecycle state or approaching refresh date",
+      "key_inputs": "LCS, rcp_due_within",
+      "returns": "AID, LCS, DSD, RCP",
+      "section": "23.5",
+      "server": "23.5 Operator Lifecycle Tools"
+    },
+    {
+      "tool": "get_asset_record",
+      "purpose": "Full lifecycle record for one asset",
+      "key_inputs": "AID",
+      "returns": "§22.8.1 fields with PRV",
+      "section": "23.5",
+      "server": "23.5 Operator Lifecycle Tools"
+    },
+    {
+      "tool": "propose_lifecycle_update",
+      "purpose": "Draft a state change; returns a change_id and a before/after diff, writes nothing",
+      "key_inputs": "AID, LCS, OWN, RDP, notes",
+      "returns": "Pending change",
+      "section": "23.5",
+      "server": "23.5 Operator Lifecycle Tools"
+    },
+    {
+      "tool": "confirm_lifecycle_update",
+      "purpose": "Apply a proposed change after the user confirms",
+      "key_inputs": "change_id",
+      "returns": "Updated record, audit reference",
+      "section": "23.5",
+      "server": "23.5 Operator Lifecycle Tools"
+    },
+    {
+      "tool": "request_recycler_confirmation",
+      "purpose": "Ask a certified recycler or refurbisher to confirm a transition",
+      "key_inputs": "AID, recycler_id",
+      "returns": "Request status",
+      "section": "23.5",
+      "server": "23.5 Operator Lifecycle Tools"
+    }
+  ]
+}

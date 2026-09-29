@@ -9,7 +9,7 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from stardust_core.api import create_app
-from stardust_core.config import DEFAULT_ESC, DEFAULT_METHODOLOGY, Settings, parse_protocol, parse_signals
+from stardust_core.config import DEFAULT_ESC, DEFAULT_METHODOLOGY, Settings, load_spec_version, parse_protocol, parse_signals
 from stardust_core.otel import build_telemetry, event_id_for_span, otlp_base
 from test_otel import END_NS, SPAN, TRACE, genai_attrs, protobuf_payload
 
@@ -96,6 +96,7 @@ def metric_points(reader):
     data = reader.get_metrics_data()
     for rm in data.resource_metrics:
         assert rm.resource.attributes["service.name"] == "stardust-core"
+        assert rm.resource.attributes["stardust.spec.version"] == load_spec_version()
         for sm in rm.scope_metrics:
             for m in sm.metrics:
                 out[m.name] = [(dict(p.attributes), p.value) for p in m.data.data_points]

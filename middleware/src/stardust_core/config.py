@@ -20,6 +20,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 DEFAULT_METHODOLOGY = _REPO_ROOT / "schema" / "factors" / "methodology-v0.2.json"
 DEFAULT_ESC = _REPO_ROOT / "schema" / "esc.json"
+# Generated from the spec (docs/tools/stardust_telemetry_sync.py export); names the spec version Core implements.
+DEFAULT_SPEC_VERSION = _REPO_ROOT / "schema" / "spec-version.json"
 DEFAULT_PRICING = _REPO_ROOT / "middleware" / "data" / "model_prices_and_context_window.json"
 DEFAULT_PRICING_CACHE = _REPO_ROOT / "middleware" / "data" / "cache" / "model_prices_and_context_window.json"
 DEFAULT_PRICING_URL = "https://raw.githubusercontent.com/BerriAI/litellm/{ref}/model_prices_and_context_window.json"
@@ -140,3 +142,9 @@ def load_json(path: Path) -> Dict[str, Any]:
 @lru_cache(maxsize=8)
 def load_methodology(path: Path = DEFAULT_METHODOLOGY) -> Dict[str, Any]:
     return load_json(path)
+
+
+@lru_cache(maxsize=1)
+def load_spec_version(path: Path = DEFAULT_SPEC_VERSION) -> str:
+    """The product spec version Core implements (e.g. "1.4"), separate from the methodology version."""
+    return load_json(path)["spec_version"]

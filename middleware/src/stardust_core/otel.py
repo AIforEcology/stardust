@@ -62,6 +62,8 @@ GEN_AI_CACHE_READ = "gen_ai.usage.cache_read.input_tokens"
 GEN_AI_CACHE_WRITE = "gen_ai.usage.cache_creation.input_tokens"
 CLOUD_REGION = "cloud.region"
 SERVICE_NAME_ATTR = "service.name"
+# Resource attribute naming the product spec version Core implements (spec §23.8).
+SPEC_VERSION_ATTR = "stardust.spec.version"
 
 STARDUST_EVENT_ID = "stardust.event_id"
 STARDUST_SOURCE_LAYER = "stardust.source_layer"
@@ -347,8 +349,8 @@ def event_attributes(e: EnrichedEvent) -> Dict[str, Any]:
 class ImpactSpanExporter:
     """Emits enriched events as OTel spans through Core's own (non-global) tracer provider."""
 
-    def __init__(self, exporter: SpanExporter, version: str, batch: bool = True):
-        self.provider = TracerProvider(resource=_resource(version))
+    def __init__(self, exporter: SpanExporter, version: str, batch: bool = True, spec_version: Optional[str] = None):
+        self.provider = TracerProvider(resource=_resource(version, spec_version))
         processor = BatchSpanProcessor(exporter) if batch else SimpleSpanProcessor(exporter)
         self.provider.add_span_processor(processor)
         self.tracer = self.provider.get_tracer("stardust_core", version)
@@ -401,8 +403,8 @@ def metric_attributes(e: EnrichedEvent) -> Dict[str, Any]:
 class ImpactMetrics:
     """Running totals as OTel counters, exported periodically by ``reader``."""
 
-    def __init__(self, reader: MetricReader, version: str):
-        self.provider = MeterProvider(resource=_resource(version), metric_readers=[reader])
+    def __init__(self, reader: MetricReader, version: str, spec_version: Optional[str] = None):
+        self.provider = MeterProvider(resource=_resource(version, spec_version), metric_readers=[reader])
         meter = self.provider.get_meter("stardust_core", version)
         self.requests = meter.create_counter("stardust.ai.requests", unit="{request}",
                                              description="Metered AI operations")
@@ -451,8 +453,11 @@ class ImpactMetrics:
         self.provider.shutdown()
 
 
-def _resource(version: str) -> Resource:
-    return Resource.create({SERVICE_NAME_ATTR: SERVICE_NAME, "service.version": version})
+def _resource(version: str, spec_version: Optional[str] = None) -> Resource:
+    attrs = {SERVICE_NAME_ATTR: SERVICE_NAME, "service.version": version}
+    if spec_version:
+        attrs[SPEC_VERSION_ATTR] = spec_version
+    return Resource.create(attrs)
 
 
 # --- export configuration ------------------------------------------------------------------
@@ -498,14 +503,15 @@ def build_telemetry(
     metrics_interval_s: float = 60.0,
     span_exporter: Optional[SpanExporter] = None,
     metric_reader: Optional[MetricReader] = None,
+    spec_version: Optional[str] = None,
 ) -> Telemetry:
     """OTLP exporters for Core. ``span_exporter`` / ``metric_reader`` override the network ones (tests)."""
     signals = set(signals)
     spans = metrics = None
     if span_exporter is not None:
-        spans = ImpactSpanExporter(span_exporter, version, batch=False)
+        spans = ImpactSpanExporter(span_exporter, version, batch=False, spec_version=spec_version)
     if metric_reader is not None:
-        metrics = ImpactMetrics(metric_reader, version)
+        metrics = ImpactMetrics(metric_reader, version, spec_version)
     if not endpoint:
         return Telemetry(spans, metrics)
 
@@ -525,12 +531,12 @@ def build_telemetry(
         raise ValueError(f"unsupported OTLP protocol {protocol!r}; use http/protobuf or grpc")
 
     if spans is None and "traces" in signals:
-        spans = ImpactSpanExporter(OTLPSpanExporter(**trace_kw), version)
+        spans = ImpactSpanExporter(OTLPSpanExporter(**trace_kw), version, spec_version=spec_version)
     if metrics is None and "metrics" in signals:
         reader = PeriodicExportingMetricReader(
             OTLPMetricExporter(**metric_kw), export_interval_millis=int(metrics_interval_s * 1000)
         )
-        metrics = ImpactMetrics(reader, version)
+        metrics = ImpactMetrics(reader, version, spec_version)
     log.info("Exporting Stardust %s via OTLP/%s to %s", "+".join(sorted(signals)), protocol, base)
     return Telemetry(spans, metrics)
 

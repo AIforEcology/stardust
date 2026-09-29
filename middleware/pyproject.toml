@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stardust-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "Stardust Core: usage-event ingestion, cost and environmental-impact enrichment, indicator codes, and the remediation broker."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -30,3 +30,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# The product spec version this package implements (docs/, schema/spec-version.json).
+# Separate from the methodology version in schema/factors/.
+[tool.stardust]
+spec_version = "1.4"

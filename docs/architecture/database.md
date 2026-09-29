@@ -153,7 +153,7 @@ For continuous off-site backup, [Litestream](https://litestream.io) streams the 
 
 **Move or reset:** stop Core, then move or delete `core.db` together with `core.db-wal` and `core.db-shm`.
 
-**Health:** `GET /healthz` reports the database path, schema version and row counts per table.
+**Health:** `GET /healthz` reports the database path, schema version and row counts per table, alongside the spec and methodology versions.
 
 ## Changing the schema
 

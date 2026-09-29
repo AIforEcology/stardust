@@ -16,8 +16,10 @@ BASE = "https://github.com/AIforEcology/stardust/schema/"
 
 
 def _schema_files():
-    # Skip macOS "._" resource forks that exFAT volumes create.
-    return [p for p in SCHEMA_DIR.glob("*.json") if not p.name.startswith("._")]
+    # Skip macOS "._" resource forks that exFAT volumes create, and the data files generated
+    # from the spec (spec-version.json, field-codes.json, mcp-tools.json), which aren't schemas.
+    files = [p for p in SCHEMA_DIR.glob("*.json") if not p.name.startswith("._")]
+    return [p for p in files if "$schema" in json.loads(p.read_text())]
 
 
 def _validator(name):
