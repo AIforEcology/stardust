@@ -23,3 +23,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# The product spec version this package implements (docs/, schema/spec-version.json).
+# Separate from the methodology version in schema/factors/.
+[tool.stardust]
+spec_version = "1.4"

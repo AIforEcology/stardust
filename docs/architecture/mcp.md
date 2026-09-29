@@ -71,7 +71,7 @@ None of these exist. They need the §22.8 asset store first ([time-embodied-life
 ### Cross-cutting gaps
 
 - **Authentication.** Core has no per-subscriber authentication today: `/v1/summary` accepts any `user_id` or `org_id`, and only admin endpoints need a token. MCP needs OAuth with the four scopes, and tenant isolation on every call. **This is the largest piece of work and it comes first.**
-- **Spec version in responses.** Core will report the spec version from PR 2 of the v1.4 update (`/healthz` and the `stardust.spec.version` OTel attribute). The servers can pass it through.
+- **Spec version in responses.** Core already reports it (`GET /healthz` → `spec_version`, and the `stardust.spec.version` OTel resource attribute). The servers can pass it through.
 - **Audit log** for operator writes: a new table.
 
 ## Where the servers live

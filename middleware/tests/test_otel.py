@@ -12,7 +12,7 @@ from opentelemetry.proto.common.v1.common_pb2 import AnyValue, KeyValue
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from stardust_core.api import create_app
-from stardust_core.config import DEFAULT_ESC, DEFAULT_METHODOLOGY, Settings, parse_headers
+from stardust_core.config import DEFAULT_ESC, DEFAULT_METHODOLOGY, Settings, load_spec_version, parse_headers
 from stardust_core.otel import EVENT_ID_NAMESPACE, OtlpSpan, span_to_event
 
 TRACE = "5b8efff798038103d269b633813fc60c"
@@ -205,6 +205,7 @@ def test_exported_span_is_child_of_the_genai_span(client, exported):
     assert format(span.parent.span_id, "016x") == SPAN
     assert span.start_time == span.end_time == END_NS
     assert span.resource.attributes["service.name"] == "stardust-core"
+    assert span.resource.attributes["stardust.spec.version"] == load_spec_version()
 
     a = span.attributes
     assert a["gen_ai.provider.name"] == "anthropic"
