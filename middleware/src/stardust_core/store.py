@@ -26,7 +26,7 @@ from .models import EnrichedEvent
 log = logging.getLogger(__name__)
 
 # Bump when adding a migration; migrations run in order on open.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _MIGRATIONS: List[str] = [
     # v1
@@ -92,6 +92,20 @@ _MIGRATIONS: List[str] = [
     ALTER TABLE events ADD COLUMN heat_rejected_wh REAL;
     ALTER TABLE events ADD COLUMN heat_recovered_wh REAL;
     UPDATE events SET heat_rejected_wh = energy_wh;
+    """,
+    # v4: subscriber API keys (auth.py, spec §23.6). Only a hash of each key is stored.
+    """
+    CREATE TABLE api_keys (
+        key_id     TEXT PRIMARY KEY,
+        key_hash   TEXT NOT NULL,
+        org_id     TEXT NOT NULL,
+        user_id    TEXT,               -- NULL: the key covers the whole organization
+        scopes     TEXT NOT NULL,      -- JSON list of §23.6 scopes
+        label      TEXT,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT
+    );
+    CREATE INDEX api_keys_org ON api_keys (org_id);
     """,
 ]
 
@@ -222,12 +236,10 @@ class Store:
             )
             return cur.rowcount == 1
 
-    def recent_events(self, *, user_id: Optional[UUID] = None, limit: int = 50) -> List[EnrichedEvent]:
-        sql, args = "SELECT data FROM events", []
-        if user_id is not None:
-            sql += " WHERE user_id = ?"
-            args.append(str(user_id))
-        sql += " ORDER BY ts DESC, rowid DESC LIMIT ?"
+    def recent_events(self, *, user_id: Optional[UUID] = None, org_id: Optional[UUID] = None,
+                      limit: int = 50) -> List[EnrichedEvent]:
+        where, args = self._filters(user_id, org_id, None, None)
+        sql = f"SELECT data FROM events {where} ORDER BY ts DESC, rowid DESC LIMIT ?"
         args.append(limit)
         with self._lock:
             rows = self._conn.execute(sql, args).fetchall()
@@ -372,12 +384,56 @@ class Store:
             row = self._conn.execute("SELECT data FROM orders WHERE order_id = ?", (str(order_id),)).fetchone()
         return json.loads(row["data"]) if row else None
 
+    # --- API keys (auth.py) ---------------------------------------------------------------------
+
+    def save_api_key(self, key_id: str, key_hash: str, org_id: UUID, user_id: Optional[UUID],
+                     scopes: List[str], label: Optional[str], created_at: datetime) -> None:
+        with self._lock:
+            self._conn.execute(
+                """INSERT INTO api_keys (key_id, key_hash, org_id, user_id, scopes, label, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (key_id, key_hash, str(org_id), str(user_id) if user_id else None,
+                 _json(sorted(scopes)), label, _utc(created_at)),
+            )
+
+    def load_api_key(self, key_id: str) -> Optional[Dict[str, Any]]:
+        """The stored key, including its hash (for checking a presented key). None if unknown."""
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM api_keys WHERE key_id = ?", (key_id,)).fetchone()
+        return self._api_key(row, with_hash=True) if row else None
+
+    def list_api_keys(self, org_id: Optional[UUID] = None) -> List[Dict[str, Any]]:
+        """Keys without their hashes, newest first."""
+        sql, args = "SELECT * FROM api_keys", []
+        if org_id is not None:
+            sql += " WHERE org_id = ?"
+            args.append(str(org_id))
+        with self._lock:
+            rows = self._conn.execute(sql + " ORDER BY created_at DESC, rowid DESC", args).fetchall()
+        return [self._api_key(r) for r in rows]
+
+    def revoke_api_key(self, key_id: str, at: datetime) -> Optional[Dict[str, Any]]:
+        """Revoke a key (idempotent: the first revocation time stays). None if unknown."""
+        with self._lock:
+            self._conn.execute("UPDATE api_keys SET revoked_at = ? WHERE key_id = ? AND revoked_at IS NULL",
+                               (_utc(at), key_id))
+            row = self._conn.execute("SELECT * FROM api_keys WHERE key_id = ?", (key_id,)).fetchone()
+        return self._api_key(row) if row else None
+
+    @staticmethod
+    def _api_key(row: sqlite3.Row, with_hash: bool = False) -> Dict[str, Any]:
+        d = dict(row)
+        d["scopes"] = json.loads(d["scopes"])
+        if not with_hash:
+            d.pop("key_hash")
+        return d
+
     # --- maintenance ------------------------------------------------------------------------------
 
     def stats(self) -> Dict[str, Any]:
         with self._lock:
             counts = {t: self._conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]  # noqa: S608 - fixed names
-                      for t in ("events", "providers", "quotes", "orders")}
+                      for t in ("events", "providers", "quotes", "orders", "api_keys")}
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
         return {"path": self.path, "schema_version": version, "rows": counts}
 

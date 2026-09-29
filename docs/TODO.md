@@ -71,8 +71,10 @@ Time-of-use, embodied carbon and hardware lifecycle ([time-embodied-lifecycle.md
 
 MCP interface ([mcp.md](architecture/mcp.md)):
 
-- [ ] Decide where the MCP servers live (recommended: a new `mcp/` package) and approve an MCP SDK dependency
-- [ ] M1: subscriber authentication in Core (OAuth scopes, tenant isolation)
+- [x] Decide where the MCP servers live: a new `mcp/` package
+- [ ] Approve an MCP SDK dependency (needed for M2)
+- [x] M1: subscriber API keys with §23.6 scopes, and tenant isolation on Core's reads
+- [ ] Keys on ingestion and remediation endpoints, stamping the key's organization on events
 - [ ] M2: Subscriber reporting server, first tools
 - [ ] M3: Provider insights server, first tools
 - [ ] M4: remaining reporting tools, as Core gains the data

@@ -76,6 +76,20 @@ These hold the Remediation Broker's state (spec §10).
 | `quotes` | `quote_id` | `expires_at` (indexed) | Deleted when used or expired |
 | `orders` | `order_id` | `subscriber_id`, `status`, `created_at`, `provider_price_usd`, `fee_usd`, `total_usd` (indexed by subscriber and by `created_at`) | Updated as fulfillment progresses. The money columns are fixed from the quote at order time and feed the tech operations fee report |
 
+### `api_keys` (v4)
+
+Subscriber API keys ([middleware README](../../middleware/README.md#subscriber-api-keys)).
+
+| Column | Type | Notes |
+|---|---|---|
+| `key_id` | TEXT PK | The public part of the key, `sdk_<key_id>_<secret>` |
+| `key_hash` | TEXT | SHA-256 of the whole key. **The key itself is never stored** |
+| `org_id` | TEXT | Indexed. The organization the key reads |
+| `user_id` | TEXT | NULL for an organization-wide key |
+| `scopes` | TEXT | JSON list of §23.6 scopes |
+| `label` | TEXT | Free text, for admins |
+| `created_at`, `revoked_at` | TEXT | A revoked key is kept for audit and refused on use |
+
 ## How writes work
 
 ### Recording an event
@@ -118,6 +132,7 @@ Core opens **one connection**, shared across FastAPI's thread pool and the gRPC 
 
 - **Retention:** set `STARDUST_RETENTION_DAYS`, and events older than that are deleted at startup and every 6 hours. Expired quotes are cleaned up on the same schedule.
 - **Deletion on request:** `DELETE /v1/admin/users/{user_id}/events` erases one user's events. It requires the admin token.
+- **Access:** with `STARDUST_SUBSCRIBER_AUTH` set, reads are limited to the caller's organization, and to its user for a user-level key.
 - **Content:** events never contain prompts or responses. Only counts, model, region and time are received in the first place.
 
 ## Performance
@@ -164,6 +179,8 @@ For continuous off-site backup, [Litestream](https://litestream.io) streams the 
 Example: v2 added the fee columns to `orders` with three `ALTER TABLE … ADD COLUMN` statements and an index. Existing orders keep NULL in the new columns, and the fee report counts them as fee-free.
 
 v3 added the water split and heat columns to `events` the same way, and back-filled `heat_rejected_wh`, which equals energy by definition. The water split isn't back-filled: `/v1/summary` reports older events' water as `water_unsplit_ml` instead of guessing.
+
+v4 added the `api_keys` table. Nothing existing changed.
 
 Prefer adding columns (and back-filling from `data` if needed) over rewriting tables. Since `data` holds the full record, most model changes need no migration at all.
 
