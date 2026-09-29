@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stardust-mcp"
+version = "0.1.0"
+description = "Stardust MCP servers (spec §23): ask Stardust about usage and impact from Claude and other AI assistants. Read-only; they call Stardust Core's REST API."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+# The MCP Python SDK 2.x needs Python 3.10+. The rest of Stardust supports 3.9.
+requires-python = ">=3.10"
+dependencies = [
+  # Official MCP Python SDK (MIT). Brings httpx2, uvicorn, starlette and pydantic, which this package uses.
+  "mcp>=2.2,<3",
+]
+
+[project.optional-dependencies]
+# Tests run the real Core in-process: install middleware/ too (pip install -e middleware).
+dev = ["pytest>=8"]
+
+[project.scripts]
+stardust-mcp = "stardust_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# The product spec version this package implements (docs/, schema/spec-version.json).
+[tool.stardust]
+spec_version = "1.4"

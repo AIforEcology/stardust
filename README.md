@@ -30,6 +30,7 @@ A project of [AI for Ecology](https://aifore.org). See the [spec (v1.4) and summ
 | [`middleware/`](middleware/) | Stardust Core: ingestion, enrichment and the remediation broker (Python/FastAPI) | §8–§11, §21.7, §22.8, §23 |
 | [`subscriber-client/`](subscriber-client/) | Clients that capture usage: the Chrome/Edge extension for now (TypeScript) | §6, §12, §23.3 |
 | [`providers-service/`](providers-service/) | The interface remediation providers implement, a mock provider, and carbon-capture telemetry models | §10.2, §20 |
+| [`mcp/`](mcp/) | MCP servers for asking Stardust questions from AI assistants: Subscriber reporting for now (Python 3.10+) | §9.5, §23 |
 | [`docs/`](docs/) | The product spec and summary | |
 
 ## Status: v0.1 scaffold

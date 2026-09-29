@@ -39,6 +39,7 @@ To set other options, such as `STARDUST_OTLP_ENDPOINT`, put them in `~/Library/A
 | `GET` | `/v1/events?user_id=&limit=` | Recent enriched events. With a key, only the key's organization (and user) |
 | `GET` | `/v1/summary?user_id=&org_id=&since=&until=` | Totals plus an aggregate indicator code, for a user, an org or everything, over an optional time window |
 | `GET` | `/v1/summary/daily?user_id=&org_id=&since=&until=` | The same totals per UTC day, for trend charts |
+| `GET` | `/v1/auth/principal` | The organization, user and scopes the caller's key grants. For services acting for a subscriber, such as the MCP servers. `404` when subscriber auth is off |
 | `GET` | `/v1/methodology` | The exact factor set in use, for auditability |
 | `GET` | `/v1/pricing/status` | Pricing source, last refresh, last error, and models added/removed/re-priced |
 | `POST` | `/v1/remediation/quotes` | `request_quote(co2e_g, tier_preference)` |
