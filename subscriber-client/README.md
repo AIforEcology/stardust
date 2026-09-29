@@ -5,7 +5,7 @@ Everything that captures usage or consumes Stardust on a subscriber's behalf (sp
 | Client | Status |
 |---|---|
 | [`browser-extension/`](browser-extension/) | v0.1: Chrome/Edge, Manifest V3 |
-| Claude connector (remote MCP, §12.2) | Planned |
+| Subscriber reporting MCP server, the Claude connector (§12.2, §23.3; [plan](../docs/architecture/mcp.md)) | Planned |
 | [`sdk-python/`](sdk-python/) | v0.1: Anthropic, OpenAI and Gemini API metering (measured tokens) |
 | [`sdk-js/`](sdk-js/) | v0.1: the same for Node.js / TypeScript |
 | Database driver wrappers and the reverse-proxy sidecar (§9.1, §12.8) | Planned |

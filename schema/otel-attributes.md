@@ -92,6 +92,37 @@ Monotonic counters, exported every `STARDUST_OTLP_METRICS_INTERVAL` seconds (cum
 
 Every metric carries `gen_ai.provider.name`, `gen_ai.request.model`, `cloud.region` (`unknown` if not set), `stardust.source_layer`, `stardust.model.tier`, `stardust.impact.confidence_tier`, `stardust.esc.code` and `stardust.indicator.grade` (A–F), plus `stardust.org_id` when present. User and event ids are never metric attributes.
 
+## Planned mappings (§11.5)
+
+**Planned, not implemented.** Spec v1.3 adds telemetry for time-of-use, embodied carbon and hardware lifecycles ([plan](../docs/architecture/time-embodied-lifecycle.md)). Two rules govern it:
+
+1. **Reuse first.** Where OpenTelemetry or another standard already has a name, Stardust uses it.
+2. **Neutral names upstream.** Where nothing exists, Stardust proposes a vendor-neutral name to the OTel semantic conventions community and the Green Software Foundation. Until one is accepted, the value goes under `stardust.*`, as everything environmental does today.
+
+The OTel hardware conventions are still in Development status, so these names can change.
+
+### Reused as is
+
+| Concept | Convention |
+|---|---|
+| Host, GPU, memory and power-supply energy | OTel `hw.energy`, `hw.host.energy`, `hw.gpu.*` metrics, collected by Kepler (Kubernetes), NVIDIA DCGM or Redfish power telemetry |
+| Component class for embodied data (`EMC`) | OTel `hw.type` values (`cpu`, `gpu`, `memory`, `physical_disk`, `network`, `power_supply`, `enclosure`), extended only for accelerator subcomponents |
+| Asset identity (`AID`) | OTel `host.*` resource attributes; DMTF Redfish inventory properties |
+| Circularity (`D-CIR`) | ISO 59020. No new attribute |
+
+### Proposed neutral names
+
+| Concept | Fields | Proposed name | Interim name |
+|---|---|---|---|
+| Grid carbon intensity | `GCI` | `energy.grid.carbon_intensity` | `stardust.grid.intensity_g_per_kwh` (emitted today) |
+| Grid signal type and source | `GSG` | `energy.grid.signal_type`, `energy.grid.signal_source` | `stardust.grid.signal_type`, `stardust.grid.signal_source` |
+| Time-of-use period and rate | `TOU`, `TRT` | `energy.tariff.period`, `energy.tariff.rate` | `stardust.tariff.period`, `stardust.tariff.rate` |
+| Scheduling slack and shift | `SLK` | `workload.schedule.slack`, `workload.schedule.shift` | `stardust.schedule.slack`, `stardust.schedule.shift` |
+| Embodied carbon per device or component | `EMC`, `EMS` | `hw.embodied.co2e`, `hw.embodied.source` | `stardust.hw.embodied.co2e`, `stardust.hw.embodied.source` |
+| Hardware lifecycle state | `LCS` | `hw.lifecycle.state` (OTel `hw.status` covers only ok, degraded and failed) | `stardust.hw.lifecycle.state` |
+
+The interim names are what Stardust will emit until a neutral name is accepted. Then the attribute moves to that name.
+
 ## Loop safety
 
 Core never ingests a span that has `stardust.event_id`, comes from `service.name = stardust-core`, or is named `stardust.impact`. That makes it safe to export into a collector pipeline that also feeds Core's receiver.

@@ -1,0 +1,1225 @@
+{
+  "spec_version": "1.4",
+  "codes": [
+    {
+      "code": "NGP",
+      "source_plant_type": "Natural gas power plant",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "RNG",
+      "source_plant_type": "Renewable natural gas / biogas power plant",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "OPP",
+      "source_plant_type": "Oil-fired power plant",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "NPP",
+      "source_plant_type": "Nuclear power plant (conventional)",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "SMR",
+      "source_plant_type": "Small modular reactor",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "WEC",
+      "source_plant_type": "Wave/marine energy converter",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "HYD",
+      "source_plant_type": "Hydroelectric power plant",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "SPP",
+      "source_plant_type": "Solar power plant (utility-scale PV or thermal)",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "WPP",
+      "source_plant_type": "Wind power plant",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "GPP",
+      "source_plant_type": "Geothermal power plant",
+      "derived": false,
+      "section": "5.3.1"
+    },
+    {
+      "code": "FPP",
+      "meaning": "Fossil fuel power plant (unspecified type)",
+      "used_when": "Known to be fossil-sourced, but the specific fuel (gas/oil/coal) isn't resolvable",
+      "derived": false,
+      "section": "5.3.2"
+    },
+    {
+      "code": "ZEP",
+      "meaning": "Zero-emissions power plant (unspecified type)",
+      "used_when": "Known to be a zero-carbon-at-generation source, but not resolvable to nuclear vs. SMR vs. another zero-emission type",
+      "derived": false,
+      "section": "5.3.2"
+    },
+    {
+      "code": "REP",
+      "meaning": "Renewable energy power plant (unspecified type)",
+      "used_when": "Known to be renewable, but not resolvable to solar/wind/hydro/geothermal/wave specifically",
+      "derived": false,
+      "section": "5.3.2"
+    },
+    {
+      "code": "OPE",
+      "field_name": "Operational Inference Emissions",
+      "definition": "Chip and server energy for the call multiplied by grid carbon intensity at run time (§8.5–§8.6)",
+      "unit": "gCO2e",
+      "frequency": "Per call",
+      "confidence": "Measured / modeled",
+      "derived": false,
+      "section": "8.8.1"
+    },
+    {
+      "code": "FAC",
+      "field_name": "Facility Overhead Emissions",
+      "definition": "Cooling, power conversion and other data-center overhead, derived from OPE and the facility PUE",
+      "unit": "gCO2e",
+      "frequency": "Per call",
+      "confidence": "Modeled",
+      "derived": false,
+      "section": "8.8.1"
+    },
+    {
+      "code": "TRA",
+      "field_name": "Amortized Training Emissions",
+      "definition": "The call’s share of the model’s total training emissions, amortized over lifetime token throughput",
+      "unit": "gCO2e",
+      "frequency": "Per call",
+      "confidence": "Estimated",
+      "derived": false,
+      "section": "8.8.1"
+    },
+    {
+      "code": "EMB",
+      "field_name": "Embodied Hardware Emissions",
+      "definition": "The call’s share of manufacturing and construction emissions for the accelerators, servers and facility it used",
+      "unit": "gCO2e",
+      "frequency": "Per call",
+      "confidence": "Estimated",
+      "derived": false,
+      "section": "8.8.1"
+    },
+    {
+      "code": "STE",
+      "field_name": "Self-Trained Emissions",
+      "definition": "Training or fine-tuning run on the Subscriber’s own infrastructure, measured by the infra agent and attributed 100% to that Subscriber",
+      "unit": "gCO2e",
+      "frequency": "Per job",
+      "confidence": "Measured",
+      "derived": false,
+      "section": "8.8.1"
+    },
+    {
+      "code": "TLE",
+      "field_name": "Total Training Emissions",
+      "definition": "Published or estimated lifecycle training emissions for a model version, with source citation (Appendix A)",
+      "unit": "tCO2e",
+      "frequency": "Per model version",
+      "confidence": "Cited / estimated",
+      "derived": false,
+      "section": "8.8.2"
+    },
+    {
+      "code": "LTT",
+      "field_name": "Lifetime Token Throughput",
+      "definition": "Expected total tokens served by a model version over its deployment life",
+      "unit": "tokens",
+      "frequency": "Per model version",
+      "confidence": "Estimated",
+      "derived": false,
+      "section": "8.8.2"
+    },
+    {
+      "code": "HEE",
+      "field_name": "Hardware Embodied Emissions",
+      "definition": "Manufacturing emissions per server or accelerator, including a configurable share for networking and facility construction",
+      "unit": "kgCO2e",
+      "frequency": "Per hardware class",
+      "confidence": "Cited / estimated",
+      "derived": false,
+      "section": "8.8.2"
+    },
+    {
+      "code": "HLF",
+      "field_name": "Hardware Service Life",
+      "definition": "Expected service life of the hardware class",
+      "unit": "years",
+      "frequency": "Per hardware class",
+      "confidence": "Estimated",
+      "derived": false,
+      "section": "8.8.2"
+    },
+    {
+      "code": "HUR",
+      "field_name": "Hardware Utilization Ratio",
+      "definition": "Share of hardware time doing useful work; from GPU (§21.2) where measured, otherwise a provider default",
+      "unit": "ratio 0–1",
+      "frequency": "Hourly / default",
+      "confidence": "Measured / estimated",
+      "derived": false,
+      "section": "8.8.2"
+    },
+    {
+      "code": "ACS",
+      "field_name": "Accelerator-Seconds",
+      "definition": "Accelerator time consumed by the call, measured or modeled from tokens and model class",
+      "unit": "GPU-s",
+      "frequency": "Per call",
+      "confidence": "Measured / modeled",
+      "derived": false,
+      "section": "8.8.2"
+    },
+    {
+      "code": "D-LCE",
+      "field_name": "Total Lifecycle Emissions",
+      "definition": "OPE + FAC + TRA + EMB (+ STE where applicable), always stored with its component split",
+      "unit": "gCO2e",
+      "frequency": "Per call",
+      "confidence": "Lowest of inputs",
+      "derived": true,
+      "section": "8.8.2"
+    },
+    {
+      "code": "D-SCI",
+      "field_name": "SCI Score",
+      "definition": "Lifecycle emissions per functional unit, using Useful Output Count (UOC, §21.2) as the unit",
+      "unit": "gCO2e/UOC",
+      "frequency": "Daily",
+      "confidence": "Lowest of inputs",
+      "derived": true,
+      "section": "8.8.2"
+    },
+    {
+      "code": "EMC",
+      "field_name": "Embodied Carbon by Component",
+      "definition": "Cradle-to-gate emissions for one component class of a device. Component classes use the OpenTelemetry hw.type values (cpu, gpu, memory, physical_disk, network, power_supply, enclosure), extended where needed with accelerator subcomponents (logic die, HBM stack, package and substrate, board)",
+      "unit": "kgCO2e",
+      "frequency": "Per device model",
+      "confidence": "Cited / modeled",
+      "derived": false,
+      "section": "8.8.8"
+    },
+    {
+      "code": "EMS",
+      "field_name": "Embodied Data Source",
+      "definition": "Source of each EMC value: manufacturer PCF (ISO 14067), open model (e.g., Boavizta), peer-reviewed literature, or default",
+      "unit": "enum",
+      "frequency": "Per value",
+      "confidence": "—",
+      "derived": false,
+      "section": "8.8.8"
+    },
+    {
+      "code": "MAT",
+      "field_name": "Material Declaration",
+      "definition": "Substance and material composition per IEC 62474, including critical raw materials, where the manufacturer provides it",
+      "unit": "kg by substance",
+      "frequency": "Per device model",
+      "confidence": "Cited",
+      "derived": false,
+      "section": "8.8.8"
+    },
+    {
+      "code": "DIE",
+      "field_name": "Die Area and Process Node",
+      "definition": "Logic die area and fabrication node, used for fab-based estimates when no PCF exists",
+      "unit": "mm², nm",
+      "frequency": "Per device model",
+      "confidence": "Cited",
+      "derived": false,
+      "section": "8.8.8"
+    },
+    {
+      "code": "HBC",
+      "field_name": "HBM Capacity",
+      "definition": "High-bandwidth memory capacity per accelerator, the input for memory-scaled embodied estimates",
+      "unit": "GB",
+      "frequency": "Per device model",
+      "confidence": "Cited",
+      "derived": false,
+      "section": "8.8.8"
+    },
+    {
+      "code": "DSD",
+      "field_name": "Deployment Start Date",
+      "definition": "Date the device entered service",
+      "unit": "date",
+      "frequency": "Per asset",
+      "confidence": "Measured",
+      "derived": false,
+      "section": "8.8.8"
+    },
+    {
+      "code": "RCP",
+      "field_name": "Refresh Cycle Plan",
+      "definition": "Planned service life before decommissioning (typically 2–6 years)",
+      "unit": "years",
+      "frequency": "Per asset class",
+      "confidence": "Stated",
+      "derived": false,
+      "section": "8.8.8"
+    },
+    {
+      "code": "ASL",
+      "field_name": "Actual Service Life",
+      "definition": "Service life at decommissioning",
+      "unit": "years",
+      "frequency": "Per asset",
+      "confidence": "Measured",
+      "derived": false,
+      "section": "8.8.8"
+    },
+    {
+      "code": "D-EMH",
+      "field_name": "Embodied per Useful Hour",
+      "definition": "Sum of EMC divided by (service life in hours × HUR); supersedes the single HEE value where component data exists",
+      "unit": "gCO2e/h",
+      "frequency": "Daily",
+      "confidence": "Lowest of inputs",
+      "derived": true,
+      "section": "8.8.8"
+    },
+    {
+      "code": "D-LXS",
+      "field_name": "Life-Extension Savings",
+      "definition": "Reduction in D-EMH from extending service life beyond RCP",
+      "unit": "gCO2e/h, %",
+      "frequency": "On change",
+      "confidence": "Modeled",
+      "derived": true,
+      "section": "8.8.8"
+    },
+    {
+      "code": "DAC",
+      "technology_type": "Direct Air Capture",
+      "notes": "Ambient air, chemical/physical sorbents",
+      "derived": false,
+      "section": "20.1"
+    },
+    {
+      "code": "PSC",
+      "technology_type": "Point-Source Capture",
+      "notes": "Industrial flue gas (cement, steel, power)",
+      "derived": false,
+      "section": "20.1"
+    },
+    {
+      "code": "NBC",
+      "technology_type": "Nature-Based Capture",
+      "notes": "Biomass, soil, afforestation — estimate-heavy",
+      "derived": false,
+      "section": "20.1"
+    },
+    {
+      "code": "OBC",
+      "technology_type": "Ocean-Based Capture",
+      "notes": "Emerging; alkalinity enhancement, electrochemical",
+      "derived": false,
+      "section": "20.1"
+    },
+    {
+      "code": "CRI",
+      "field_name": "Capture Rate Interval",
+      "definition": "Mass captured per reporting interval",
+      "unit": "kg/hr or t/day",
+      "frequency": "Real-time–hourly",
+      "applies_to": "DAC, PSC, OBC",
+      "derived": false,
+      "section": "20.2"
+    },
+    {
+      "code": "CEP",
+      "field_name": "Capture Efficiency Percentage",
+      "definition": "% of CO2 in input stream actually captured",
+      "unit": "%",
+      "frequency": "Hourly/daily",
+      "applies_to": "DAC, PSC",
+      "derived": false,
+      "section": "20.2"
+    },
+    {
+      "code": "CUR",
+      "field_name": "Capacity Utilization Rate",
+      "definition": "Actual throughput vs. rated nameplate capacity",
+      "unit": "%",
+      "frequency": "Daily",
+      "applies_to": "DAC, PSC, OBC",
+      "derived": false,
+      "section": "20.2"
+    },
+    {
+      "code": "UDL",
+      "field_name": "Uptime/Downtime Log",
+      "definition": "Operational hours vs. downtime, with reason code",
+      "unit": "hrs + code",
+      "frequency": "Continuous",
+      "applies_to": "DAC, PSC, OBC",
+      "derived": false,
+      "section": "20.2"
+    },
+    {
+      "code": "CCM",
+      "field_name": "Cumulative Captured Mass",
+      "definition": "Running total mass captured, resets per crediting period",
+      "unit": "kg or t",
+      "frequency": "Daily/cumulative",
+      "applies_to": "All",
+      "derived": false,
+      "section": "20.3"
+    },
+    {
+      "code": "SUP",
+      "field_name": "Storage/Utilization Pathway",
+      "definition": "Destination: geologic, mineralization, utilization, transport",
+      "unit": "enum",
+      "frequency": "Per batch",
+      "applies_to": "All",
+      "derived": false,
+      "section": "20.3"
+    },
+    {
+      "code": "CSP",
+      "field_name": "CO2 Stream Purity",
+      "definition": "Purity of captured CO2 output stream",
+      "unit": "%",
+      "frequency": "Per batch",
+      "applies_to": "DAC, PSC",
+      "derived": false,
+      "section": "20.3"
+    },
+    {
+      "code": "PLR",
+      "field_name": "Post-Capture Leakage Rate",
+      "definition": "Loss during compression, transport, or injection",
+      "unit": "% or kg",
+      "frequency": "Per batch",
+      "applies_to": "DAC, PSC, OBC",
+      "derived": false,
+      "section": "20.3"
+    },
+    {
+      "code": "ECT",
+      "field_name": "Energy Consumption per Tonne",
+      "definition": "Total energy used per tonne captured",
+      "unit": "kWh/t",
+      "frequency": "Daily",
+      "applies_to": "DAC, PSC, OBC",
+      "derived": false,
+      "section": "20.4"
+    },
+    {
+      "code": "ESM",
+      "field_name": "Energy Source Mix",
+      "definition": "Breakdown of grid, renewable, and onsite generation",
+      "unit": "% split",
+      "frequency": "Daily/monthly",
+      "applies_to": "DAC, PSC, OBC",
+      "derived": false,
+      "section": "20.4"
+    },
+    {
+      "code": "WCT",
+      "field_name": "Water Consumption per Tonne",
+      "definition": "Water used per tonne captured",
+      "unit": "L/t or gal/t",
+      "frequency": "Daily",
+      "applies_to": "DAC, PSC",
+      "derived": false,
+      "section": "20.4"
+    },
+    {
+      "code": "SCR",
+      "field_name": "Sorbent/Solvent Consumption Rate",
+      "definition": "Chemical media used per tonne captured",
+      "unit": "kg/t",
+      "frequency": "Per batch",
+      "applies_to": "DAC, PSC",
+      "derived": false,
+      "section": "20.4"
+    },
+    {
+      "code": "RCC",
+      "field_name": "Regeneration Cycle Count",
+      "definition": "Number of sorbent/solvent regeneration cycles",
+      "unit": "count",
+      "frequency": "Per cycle",
+      "applies_to": "DAC, PSC",
+      "derived": false,
+      "section": "20.4"
+    },
+    {
+      "code": "SCT",
+      "field_name": "Sensor Calibration Timestamp",
+      "definition": "Last calibration date and certification status of metering hardware",
+      "unit": "datetime + status",
+      "frequency": "Per calibration event",
+      "applies_to": "All",
+      "derived": false,
+      "section": "20.5"
+    },
+    {
+      "code": "DST",
+      "field_name": "Data Source Type",
+      "definition": "Direct-metered vs. estimated/modeled",
+      "unit": "enum",
+      "frequency": "Per record",
+      "applies_to": "All",
+      "derived": false,
+      "section": "20.5"
+    },
+    {
+      "code": "MSR",
+      "field_name": "MRV Standard Reference",
+      "definition": "Applicable third-party standard (Puro.earth, Verra, Isometric, etc.)",
+      "unit": "text/enum",
+      "frequency": "Per project",
+      "applies_to": "All",
+      "derived": false,
+      "section": "20.5"
+    },
+    {
+      "code": "FPI",
+      "field_name": "Facility/Project ID",
+      "definition": "Unique identifier for the capture facility or project",
+      "unit": "ID string",
+      "frequency": "Static",
+      "applies_to": "All",
+      "derived": false,
+      "section": "20.5"
+    },
+    {
+      "code": "GLC",
+      "field_name": "Geolocation Coordinate",
+      "definition": "Latitude/longitude of facility",
+      "unit": "decimal degrees",
+      "frequency": "Static",
+      "applies_to": "All",
+      "derived": false,
+      "section": "20.5"
+    },
+    {
+      "code": "RFI",
+      "field_name": "Reporting Frequency Interval",
+      "definition": "Cadence at which this Provider reports",
+      "unit": "enum",
+      "frequency": "Static",
+      "applies_to": "All",
+      "derived": false,
+      "section": "20.5"
+    },
+    {
+      "code": "D-CEP",
+      "field_name": "Modeled Capture Efficiency",
+      "definition": "ML-estimated efficiency where direct sensing is unavailable",
+      "unit": "%",
+      "derived_from": "CEP, ECT",
+      "derived": true,
+      "section": "20.6"
+    },
+    {
+      "code": "D-CCM",
+      "field_name": "Projected Cumulative Mass",
+      "definition": "Forecasted captured mass for current crediting period",
+      "unit": "kg or t",
+      "derived_from": "CCM, CRI",
+      "derived": true,
+      "section": "20.6"
+    },
+    {
+      "code": "ADF",
+      "field_name": "Anomaly Detection Flag",
+      "definition": "Flags telemetry readings outside expected operational bounds",
+      "unit": "bool + code",
+      "derived_from": "CRI, UDL, ECT",
+      "derived": false,
+      "section": "20.6"
+    },
+    {
+      "code": "DQS",
+      "field_name": "Data Quality Score",
+      "definition": "Composite confidence score for a record's reliability",
+      "unit": "0–1 scale",
+      "derived_from": "DST, SCT, ADF",
+      "derived": false,
+      "section": "20.6"
+    },
+    {
+      "code": "MCI",
+      "field_name": "Model Confidence Interval",
+      "definition": "Uncertainty band on any derived (D-) estimate",
+      "unit": "± unit of metric",
+      "derived_from": "All D- fields",
+      "derived": false,
+      "section": "20.6"
+    },
+    {
+      "code": "FVI",
+      "field_name": "Feature Vector ID",
+      "definition": "Identifier for the ML feature set used to generate a derived record",
+      "unit": "ID string",
+      "derived_from": "All raw fields",
+      "derived": false,
+      "section": "20.6"
+    },
+    {
+      "code": "D-ESM",
+      "field_name": "Net Carbon Accounting Adjustment",
+      "definition": "Adjusts captured-mass credit based on energy source mix",
+      "unit": "kg CO2-eq",
+      "derived_from": "ESM, CCM",
+      "derived": true,
+      "section": "20.6"
+    },
+    {
+      "code": "MTR",
+      "field_name": "Model Tier",
+      "definition": "Tier of the model serving the call (frontier, mid, small), from the provider/model lookup in §9.4",
+      "unit": "enum",
+      "frequency": "Per call",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "MFP",
+      "field_name": "Model Fit Parity",
+      "definition": "Output-quality parity when a sampled prompt is re-run on a smaller or cheaper model tier, vs. the production model",
+      "unit": "ratio 0–1",
+      "frequency": "Daily (sampled)",
+      "applies_to": "Chat, Infra",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "TIO",
+      "field_name": "Token In/Out Ratio",
+      "definition": "Input tokens divided by output tokens",
+      "unit": "ratio",
+      "frequency": "Per call",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "CXB",
+      "field_name": "Context Bloat",
+      "definition": "Share of input tokens that repeat unchanged system prompts or prior-turn context",
+      "unit": "%",
+      "frequency": "Per call",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "CHR",
+      "field_name": "Cache Hit Rate",
+      "definition": "Share of input tokens served from the provider’s prompt cache",
+      "unit": "%",
+      "frequency": "Per call / hourly",
+      "applies_to": "Chat, Infra",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "RTR",
+      "field_name": "Retry Rate",
+      "definition": "Share of calls regenerated, retried, or discarded without use",
+      "unit": "%",
+      "frequency": "Hourly",
+      "applies_to": "Chat, Browser",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "UOC",
+      "field_name": "Useful Output Count",
+      "definition": "Completed tasks or accepted responses (the denominator for efficiency)",
+      "unit": "count",
+      "frequency": "Per session",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "GPU",
+      "field_name": "Accelerator Utilization",
+      "definition": "Mean GPU/accelerator utilization over the interval",
+      "unit": "%",
+      "frequency": "1–5 min",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "IDC",
+      "field_name": "Idle Provisioned Capacity",
+      "definition": "Provisioned but unused compute over the interval",
+      "unit": "GPU-hr / vCPU-hr",
+      "frequency": "Hourly",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "BTC",
+      "field_name": "Batchable Real-Time Calls",
+      "definition": "Latency-tolerant calls executed synchronously instead of batched",
+      "unit": "% of calls",
+      "frequency": "Daily",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "GCI",
+      "field_name": "Grid Carbon Intensity at Run",
+      "definition": "Carbon intensity of the grid for the region and hour the call ran (§8.6)",
+      "unit": "gCO2e/kWh",
+      "frequency": "Per call",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "CWD",
+      "field_name": "Cleanest Window Delta",
+      "definition": "Difference between GCI at run time and the lowest GCI available within the job’s allowed window",
+      "unit": "gCO2e/kWh",
+      "frequency": "Per job",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.2"
+    },
+    {
+      "code": "D-MFS",
+      "field_name": "Model Fit Sub-score",
+      "definition": "Normalized from MFP and MTR; 100 = smallest adequate model in use",
+      "unit": "0–100",
+      "frequency": "Daily",
+      "scope": "Workload",
+      "derived": true,
+      "section": "21.3"
+    },
+    {
+      "code": "D-TES",
+      "field_name": "Token Efficiency Sub-score",
+      "definition": "Normalized from TIO, CXB, CHR and RTR",
+      "unit": "0–100",
+      "frequency": "Daily",
+      "scope": "Workload",
+      "derived": true,
+      "section": "21.3"
+    },
+    {
+      "code": "D-UTS",
+      "field_name": "Utilization Sub-score",
+      "definition": "Normalized from GPU, IDC and BTC",
+      "unit": "0–100",
+      "frequency": "Daily",
+      "scope": "Infra workloads",
+      "derived": true,
+      "section": "21.3"
+    },
+    {
+      "code": "D-CTS",
+      "field_name": "Carbon Timing Sub-score",
+      "definition": "Normalized from GCI and CWD",
+      "unit": "0–100",
+      "frequency": "Daily",
+      "scope": "Workload",
+      "derived": true,
+      "section": "21.3"
+    },
+    {
+      "code": "D-RSS",
+      "field_name": "Right-Size Score",
+      "definition": "Weighted composite of the four sub-scores (§21.4)",
+      "unit": "0–100",
+      "frequency": "Daily / rolling 30-day",
+      "scope": "Workload, team, org",
+      "derived": true,
+      "section": "21.3"
+    },
+    {
+      "code": "D-EIC",
+      "field_name": "Efficiency Index (Cost)",
+      "definition": "Useful outputs (UOC) per dollar of AI spend",
+      "unit": "UOC/$",
+      "frequency": "Daily",
+      "scope": "Workload, org",
+      "derived": true,
+      "section": "21.3"
+    },
+    {
+      "code": "D-EIE",
+      "field_name": "Efficiency Index (Energy)",
+      "definition": "Useful outputs per kWh",
+      "unit": "UOC/kWh",
+      "frequency": "Daily",
+      "scope": "Workload, org",
+      "derived": true,
+      "section": "21.3"
+    },
+    {
+      "code": "D-EIG",
+      "field_name": "Efficiency Index (Carbon)",
+      "definition": "Useful outputs per kg CO2e",
+      "unit": "UOC/kgCO2e",
+      "frequency": "Daily",
+      "scope": "Workload, org",
+      "derived": true,
+      "section": "21.3"
+    },
+    {
+      "code": "D-SAV",
+      "field_name": "Estimated Savings",
+      "definition": "Projected monthly $, kWh and kg CO2e reduction if open recommendations are applied",
+      "unit": "$, kWh, kgCO2e",
+      "frequency": "Daily",
+      "scope": "Workload, org",
+      "derived": true,
+      "section": "21.3"
+    },
+    {
+      "code": "TOU",
+      "field_name": "Time-of-Use Period",
+      "definition": "Tariff period in effect when energy was used: off-peak, mid-peak, on-peak, super-off-peak, critical-peak, or real-time",
+      "unit": "enum",
+      "frequency": "Per interval",
+      "applies_to": "Infra, All",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "TRT",
+      "field_name": "Tariff Rate at Time",
+      "definition": "Energy price applied to the interval, from the operator’s tariff or a price signal",
+      "unit": "$/kWh",
+      "frequency": "Per interval",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "GSG",
+      "field_name": "Grid Signal Type and Source",
+      "definition": "Which signal produced GCI (§21.2): marginal or average, and the provider (e.g., WattTime, Electricity Maps, grid operator)",
+      "unit": "enum",
+      "frequency": "Per reading",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "GFW",
+      "field_name": "Grid Forecast Window",
+      "definition": "Lowest forecast intensity and its start time within the job’s allowed window, as forecast when the scheduling decision was made",
+      "unit": "gCO2e/kWh, time",
+      "frequency": "Per job",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "RCF",
+      "field_name": "Renewable Curtailment Indicator",
+      "definition": "Renewable energy curtailed in the grid region during the interval, where the grid operator publishes it",
+      "unit": "MWh or flag",
+      "frequency": "Per interval",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "SLK",
+      "field_name": "Scheduling Slack",
+      "definition": "Delay the workload owner declared acceptable before the job was scheduled",
+      "unit": "minutes",
+      "frequency": "Per job",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "D-LSS",
+      "field_name": "Load-Shift Carbon Savings",
+      "definition": "Energy × (intensity at the requested time − intensity at the actual run time), using the same GSG for both",
+      "unit": "gCO2e",
+      "frequency": "Per job",
+      "applies_to": "Modeled",
+      "derived": true,
+      "section": "21.7.1"
+    },
+    {
+      "code": "D-LSC",
+      "field_name": "Load-Shift Cost Savings",
+      "definition": "Energy × (TRT at the requested time − TRT at the actual run time)",
+      "unit": "$",
+      "frequency": "Per job",
+      "applies_to": "Modeled",
+      "derived": true,
+      "section": "21.7.1"
+    },
+    {
+      "code": "D-CRU",
+      "field_name": "Curtailment Utilization",
+      "definition": "Share of shifted energy consumed during intervals with RCF > 0",
+      "unit": "%",
+      "frequency": "Monthly",
+      "applies_to": "Modeled",
+      "derived": true,
+      "section": "21.7.1"
+    },
+    {
+      "code": "REN",
+      "provider_category": "Renewable Energy Generator",
+      "examples": "Solar, wind, hydro, geothermal and storage operators producing metered renewable electricity",
+      "derived": false,
+      "section": "22.3"
+    },
+    {
+      "code": "WRR",
+      "provider_category": "Water Restoration and Recycling",
+      "examples": "Flow restoration, wastewater recycling and reuse, and water remediation projects",
+      "derived": false,
+      "section": "22.3"
+    },
+    {
+      "code": "HRC",
+      "provider_category": "Heat Recovery",
+      "examples": "Facilities exporting waste heat to district heating, greenhouses, or industry, including data centers",
+      "derived": false,
+      "section": "22.3"
+    },
+    {
+      "code": "RCY",
+      "provider_category": "Materials Recycling",
+      "examples": "Certified recyclers of electronics, plastics, and data-center hardware",
+      "derived": false,
+      "section": "22.3"
+    },
+    {
+      "code": "GEN",
+      "field_name": "Net Generation",
+      "definition": "Metered net renewable generation per interval",
+      "unit": "MWh",
+      "frequency": "15 min–hourly",
+      "category": "REN",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "SRC",
+      "field_name": "Source Type",
+      "definition": "Solar, wind, hydro, geothermal, or storage discharge",
+      "unit": "enum",
+      "frequency": "Static",
+      "category": "REN",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "GLN",
+      "field_name": "Grid Location",
+      "definition": "Balancing area or market zone of the generator, for deliverability matching",
+      "unit": "code",
+      "frequency": "Static",
+      "category": "REN",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "CTL",
+      "field_name": "Curtailment",
+      "definition": "Generation curtailed during the interval",
+      "unit": "MWh",
+      "frequency": "Hourly",
+      "category": "REN",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "EAC",
+      "field_name": "Certificate Serial Range",
+      "definition": "Serial numbers of certificates issued for the interval",
+      "unit": "string",
+      "frequency": "Per issuance",
+      "category": "REN",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "VTR",
+      "field_name": "Volume Treated or Recycled",
+      "definition": "Water treated, recycled, or remediated for reuse",
+      "unit": "m3",
+      "frequency": "Daily",
+      "category": "WRR",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "VRT",
+      "field_name": "Volume Returned",
+      "definition": "Water returned to the source watershed at or above required quality",
+      "unit": "m3",
+      "frequency": "Daily",
+      "category": "WRR",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "WQI",
+      "field_name": "Water Quality Indicators",
+      "definition": "Key quality parameters of returned or reused water",
+      "unit": "mg/L, NTU",
+      "frequency": "Daily",
+      "category": "WRR",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "WSI",
+      "field_name": "Watershed ID",
+      "definition": "Basin or watershed identifier for place-based matching",
+      "unit": "code",
+      "frequency": "Static",
+      "category": "WRR",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "WSX",
+      "field_name": "Baseline Water Stress",
+      "definition": "Water stress rating of the watershed (e.g., WRI Aqueduct)",
+      "unit": "index",
+      "frequency": "Annual",
+      "category": "WRR",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "HEX",
+      "field_name": "Heat Exported",
+      "definition": "Thermal energy delivered to an external user",
+      "unit": "MWh-th",
+      "frequency": "Hourly",
+      "category": "HRC",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "HST",
+      "field_name": "Supply Temperature",
+      "definition": "Temperature of exported heat",
+      "unit": "°C",
+      "frequency": "Hourly",
+      "category": "HRC",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "HRP",
+      "field_name": "Heat Recipient",
+      "definition": "District heating, greenhouse, industry, or buildings",
+      "unit": "enum",
+      "frequency": "Static",
+      "category": "HRC",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "ERF",
+      "field_name": "Energy Reuse Factor",
+      "definition": "Reused energy divided by total facility energy (ISO/IEC 30134-6)",
+      "unit": "ratio 0–1",
+      "frequency": "Annual / monthly",
+      "category": "HRC",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "DFB",
+      "field_name": "Displaced Fuel Baseline",
+      "definition": "Fuel or heat source the exported heat replaces",
+      "unit": "enum",
+      "frequency": "Static",
+      "category": "HRC",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "MRC",
+      "field_name": "Mass Recovered",
+      "definition": "Mass of material recovered for reuse or recycling",
+      "unit": "kg",
+      "frequency": "Per batch",
+      "category": "RCY",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "MTY",
+      "field_name": "Material Type",
+      "definition": "Plastic, metals, electronics, batteries, other",
+      "unit": "enum",
+      "frequency": "Per batch",
+      "category": "RCY",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "COC",
+      "field_name": "Chain-of-Custody ID",
+      "definition": "Reference tracing material from source to recycler",
+      "unit": "string",
+      "frequency": "Per batch",
+      "category": "RCY",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "RCS",
+      "field_name": "Recycler Certification",
+      "definition": "R2, e-Stewards, or equivalent",
+      "unit": "enum",
+      "frequency": "Static",
+      "category": "RCY",
+      "derived": false,
+      "section": "22.4"
+    },
+    {
+      "code": "D-HAV",
+      "field_name": "Heat Avoided Emissions",
+      "definition": "Emissions avoided by displacing the DFB heat source with HEX",
+      "unit": "tCO2e",
+      "frequency": "Monthly",
+      "category": "HRC",
+      "derived": true,
+      "section": "22.4"
+    },
+    {
+      "code": "D-VWB",
+      "field_name": "Volumetric Water Benefit",
+      "definition": "Water benefit computed with the VWBA method",
+      "unit": "m3/yr",
+      "frequency": "Annual",
+      "category": "WRR",
+      "derived": true,
+      "section": "22.4"
+    },
+    {
+      "code": "D-MAV",
+      "field_name": "Material Avoided Emissions",
+      "definition": "Emissions avoided versus virgin material production",
+      "unit": "tCO2e",
+      "frequency": "Per batch",
+      "category": "RCY",
+      "derived": true,
+      "section": "22.4"
+    },
+    {
+      "code": "AID",
+      "field_name": "Asset Identity",
+      "definition": "Manufacturer, model, part number and serial number, taken from DMTF Redfish inventory or the operator’s asset system and mapped to OTel host.* attributes",
+      "unit": "string",
+      "frequency": "Per asset",
+      "confidence": "Measured",
+      "derived": false,
+      "section": "22.8.1"
+    },
+    {
+      "code": "LCS",
+      "field_name": "Lifecycle State",
+      "definition": "In service, redeployed, refurbished, parts harvested, recycled, or disposed",
+      "unit": "enum",
+      "frequency": "On change",
+      "confidence": "Per PRV",
+      "derived": false,
+      "section": "22.8.1"
+    },
+    {
+      "code": "LCT",
+      "field_name": "State Transition Time",
+      "definition": "When the asset entered its current state",
+      "unit": "timestamp",
+      "frequency": "On change",
+      "confidence": "Per PRV",
+      "derived": false,
+      "section": "22.8.1"
+    },
+    {
+      "code": "OWN",
+      "field_name": "Custodian",
+      "definition": "Organization holding the asset: operator, refurbisher, broker, or recycler",
+      "unit": "ID",
+      "frequency": "On change",
+      "confidence": "Per PRV",
+      "derived": false,
+      "section": "22.8.1"
+    },
+    {
+      "code": "RDP",
+      "field_name": "Redeployment Path",
+      "definition": "Internal reuse, resale, donation, or parts recovery",
+      "unit": "enum",
+      "frequency": "On change",
+      "confidence": "Per PRV",
+      "derived": false,
+      "section": "22.8.1"
+    },
+    {
+      "code": "RMR",
+      "field_name": "Recovered Material Rate",
+      "definition": "Share of the asset’s mass recovered for reuse or recycling at end of life",
+      "unit": "%",
+      "frequency": "Per asset",
+      "confidence": "Per PRV",
+      "derived": false,
+      "section": "22.8.1"
+    },
+    {
+      "code": "PRV",
+      "field_name": "Record Provenance",
+      "definition": "Operator-reported, refurbisher- or recycler-certified, manufacturer take-back, or inferred",
+      "unit": "enum",
+      "frequency": "Per record",
+      "confidence": "—",
+      "derived": false,
+      "section": "22.8.1"
+    },
+    {
+      "code": "D-CIR",
+      "field_name": "Hardware Circularity Rate",
+      "definition": "Share of decommissioned hardware, by mass, reused or recycled rather than disposed, reported in line with ISO 59020",
+      "unit": "%",
+      "frequency": "Quarterly",
+      "confidence": "Lowest of inputs",
+      "derived": true,
+      "section": "22.8.1"
+    }
+  ]
+}

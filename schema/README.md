@@ -12,6 +12,19 @@ The open standard shared by every part of Stardust (spec §17.1). Anyone can emi
 | [`otel-attributes.md`](otel-attributes.md) | How Stardust maps onto OpenTelemetry: `gen_ai.*` in, `gen_ai.*` + `stardust.*` out | §11 |
 | [`factors/methodology-v0.2.json`](factors/methodology-v0.2.json) | **Current.** Versioned factors: energy per token, grid intensity and mix, water (on-site and off-site), heat, indicator thresholds, right-sizing weights | §5.1, §8, §21.4, §22 |
 | [`factors/methodology-v0.1.json`](factors/methodology-v0.1.json) | The previous factor set, kept so events recorded with it can be audited. Same numbers, without heat | §5.1, §8, §21.4 |
+| [`spec-version.json`](spec-version.json) | **Generated.** The spec version this repository implements, and counts of its field codes and MCP tools | all |
+| [`field-codes.json`](field-codes.json) | **Generated.** Every field code the spec defines (every table with a Code column), with its name, unit and section. `D-` codes are derived | §5.3, §8.8, §20–§22 |
+| [`mcp-tools.json`](mcp-tools.json) | **Generated.** Every MCP tool, grouped by server | §23 |
+
+## Generated files
+
+`spec-version.json`, `field-codes.json` and `mcp-tools.json` aren't JSON Schemas. They're data exported from the spec, and conformance tests compare the code against them. Don't edit them by hand: change the spec, then re-export (needs Python 3 and `lxml`):
+
+```bash
+python docs/tools/stardust_telemetry_sync.py export docs/stardust-spec-v1.4.docx schema/
+```
+
+Only the `generated` date changes when the spec hasn't.
 
 ## Methodology v0.1 is a draft
 

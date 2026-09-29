@@ -54,6 +54,36 @@ The tech operations fee ([middleware README](../middleware/README.md#tech-operat
 - [ ] Step 4: provider categories (REN, WRR, HRC, RCY)
 - [ ] First connector: CarbonPlan OffsetsDB, to verify carbon retirements (read-only)
 
+### Build (spec v1.4 plan)
+
+Time-of-use, embodied carbon and hardware lifecycle ([time-embodied-lifecycle.md](architecture/time-embodied-lifecycle.md)):
+
+- [ ] T1: record the grid signal type and source (`GSG`) on each event
+- [ ] T2: live grid intensity through a grid-signal adapter (decide marginal or average as the default)
+- [ ] T3: job records and load-shift savings (`SLK`, `GFW`, `D-LSS`, `D-CRU`)
+- [ ] T4: time-of-use tariffs (`TOU`, `TRT`, `D-LSC`)
+- [ ] E1: device-level embodied carbon (`EMB`; shared with impact-credits step 2)
+- [ ] E2: component-level embodied carbon (`EMC`, `D-EMH`, `D-LXS`)
+- [ ] L1: asset store, with import from Redfish or CSV
+- [ ] L2: lifecycle updates, with propose and confirm, and an audit log
+- [ ] L3: hardware circularity rate (`D-CIR`)
+- [ ] O1: emit the planned OTel attributes, and propose the neutral names upstream
+
+MCP interface ([mcp.md](architecture/mcp.md)):
+
+- [ ] Decide where the MCP servers live (recommended: a new `mcp/` package) and approve an MCP SDK dependency
+- [ ] M1: subscriber authentication in Core (OAuth scopes, tenant isolation)
+- [ ] M2: Subscriber reporting server, first tools
+- [ ] M3: Provider insights server, first tools
+- [ ] M4: remaining reporting tools, as Core gains the data
+- [ ] M5: Operator lifecycle server (after L1)
+- [ ] M6: submit the reporting server to connector directories
+
+Spec:
+
+- [ ] §22.5: change "purchases from Provider inventory" to "the Subscriber purchases from the Provider" ([operating model](architecture/impact-credits.md#operating-model-technology-and-connection-not-financial-brokerage))
+- [ ] §21.7.1: the table's last column is headed "Applies To", but the `D-LSS`, `D-LSC` and `D-CRU` rows hold a confidence value ("Modeled"). Fix the heading or the values, then re-export `schema/`
+
 ### Testing and fixes
 
 - [ ] Long-running test of the scheduled pricing refresh (`STARDUST_PRICING_REFRESH=<hours>`)
