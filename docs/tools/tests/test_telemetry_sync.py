@@ -247,6 +247,7 @@ FORMAT_EDITS = {
     "line break in text": (P("Time intro."), P("Time intro.").replace("<w:t ", '<w:br/><w:t ')),
     "column break in text": (P("Time intro."), P("Time intro.").replace("<w:t ", '<w:br w:type="column"/><w:t ')),
     "kerning": (P("Time intro."), P("Time intro.").replace("<w:rPr>", '<w:rPr><w:kern w:val="28"/>')),
+    "character scaling": (P("Time intro."), P("Time intro.").replace("<w:rPr>", '<w:rPr><w:w w:val="90"/>')),
     "section break": (P("Time intro."), P("Time intro.").replace("</w:pPr>", '<w:sectPr><w:type w:val="continuous"/></w:sectPr></w:pPr>')),
 }
 
@@ -275,7 +276,7 @@ def word_resave(xml):
     xml = re.sub(r'<w:tcW w:w="\d+" w:type="dxa"/>', '<w:tcW w:w="0" w:type="auto"/>', xml)        # widths from the grid
     xml = xml.replace("<w:rPr>", '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>')  # the font Word uses anyway
     xml = xml.replace("<w:pPr>", '<w:pPr><w:keepNext w:val="0"/><w:pageBreakBefore w:val="0"/>')            # already off
-    xml = xml.replace("<w:sz ", '<w:spacing w:val="0"/><w:kern w:val="0"/><w:sz ')                           # normal spacing, no kerning
+    xml = xml.replace("<w:sz ", '<w:spacing w:val="0"/><w:w w:val="100"/><w:kern w:val="0"/><w:sz ')         # normal spacing and width
     xml = xml.replace("</w:t></w:r>", '</w:t><w:lastRenderedPageBreak/></w:r>', 1)                          # a layout cache, not a break
     xml = xml.replace('<w:tblW w:w="9600" w:type="dxa"/>', '<w:tblW w:w="9600.0" w:type="dxa"/><w:jc w:val="left"/>')
     return xml
@@ -284,7 +285,7 @@ def word_resave(xml):
 def test_word_resave_markup_is_not_a_change(master, tmp_path, capsys):
     noisy = word_resave(MASTER_721)
     assert noisy != MASTER_721 and "proofErr" in noisy and "<w:ind" not in noisy and "9600.0" in noisy and "rFonts" in noisy
-    assert "pageBreakBefore" in noisy and '<w:spacing w:val="0"/>' in noisy and "lastRenderedPageBreak" in noisy and "w:kern" in noisy
+    assert "pageBreakBefore" in noisy and '<w:spacing w:val="0"/>' in noisy and "lastRenderedPageBreak" in noisy and "w:kern" in noisy and "<w:w " in noisy
     out = merge(master, make_docx(tmp_path / "sub.docx", noisy), tmp_path / "out.docx", capsys)
     assert "§21.7: unchanged" in out and "Master version" not in out
 
@@ -298,12 +299,13 @@ def test_word_resave_markup_does_not_hide_a_real_change(master, tmp_path, capsys
 FONT_STYLES = ('<w:style w:type="paragraph" w:styleId="Body"><w:name w:val="Body"/><w:basedOn w:val="BodyBase"/></w:style>'
                '<w:style w:type="paragraph" w:styleId="BodyBase"><w:name w:val="Body Base"/>'
                '<w:pPr><w:keepNext/><w:pageBreakBefore/></w:pPr>'
-               '<w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi"/><w:spacing w:val="10"/><w:kern w:val="24"/></w:rPr></w:style>')
+               '<w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi"/><w:spacing w:val="10"/><w:w w:val="90"/><w:kern w:val="24"/></w:rPr></w:style>')
 
 
-def styled_intro(font=None, on=None, spacing=None, kern=None):
+def styled_intro(font=None, on=None, spacing=None, kern=None, scale=None):
     rf = f'<w:rFonts w:ascii="{font}" w:hAnsi="{font}"/>' if font else ""
-    sp = (f'<w:spacing w:val="{spacing}"/>' if spacing is not None else "") + (f'<w:kern w:val="{kern}"/>' if kern is not None else "")
+    sp = ((f'<w:spacing w:val="{spacing}"/>' if spacing is not None else "") + (f'<w:w w:val="{scale}"/>' if scale is not None else "")
+          + (f'<w:kern w:val="{kern}"/>' if kern is not None else ""))
     flags = f'<w:keepNext w:val="{on}"/><w:pageBreakBefore w:val="{on}"/>' if on is not None else ""
     return (f'<w:p><w:pPr><w:pStyle w:val="Body"/>{flags}<w:spacing w:after="140"/></w:pPr>'
             f'<w:r><w:rPr>{rf}{sp}<w:sz w:val="21"/></w:rPr><w:t>Time intro.</w:t></w:r></w:p>')
@@ -316,21 +318,22 @@ def looks(fp):
 
 def test_inherited_formatting_is_read_through_styles_and_theme(tmp_path):
     # Body is based on BodyBase, which sets keep-with-next, page-break-before, letter spacing,
-    # kerning and the theme's minor font (Georgia)
+    # character scaling, kerning and the theme's minor font (Georgia)
     look = sync.doc_context(sync.read_docx(make_docx(tmp_path / "m.docx", "", extra_styles=FONT_STYLES, theme_minor="Georgia")))
     body = lambda xml: list(etree.fromstring(f'<w:body xmlns:w="{W_NS}">{xml}</w:body>'))
     inherited, = sync.fingerprint(body(styled_intro()), look)
-    spelled_out, = sync.fingerprint(body(styled_intro(font="Georgia", on="1", spacing="10", kern="24")), look)
-    overridden, = sync.fingerprint(body(styled_intro(font="Arial", on="0", spacing="0", kern="0")), look)
+    spelled_out, = sync.fingerprint(body(styled_intro(font="Georgia", on="1", spacing="10", kern="24", scale="90")), look)
+    overridden, = sync.fingerprint(body(styled_intro(font="Arial", on="0", spacing="0", kern="0", scale="100")), look)
     assert inherited == spelled_out                  # writing out what the style gives changes nothing
-    for fp, expect in ((inherited, ("Georgia", "10", "24", True, True)), (overridden, ("Arial", "", "", False, False))):
+    for fp, expect in ((inherited, ("Georgia", "10", "24", "90", True, True)), (overridden, ("Arial", "", "", "", False, False))):
         para, first_run = looks(fp)
-        assert (first_run.font, first_run.letter_spacing, first_run.kerning, para.keep_next, para.page_break_before) == expect
+        assert (first_run.font, first_run.letter_spacing, first_run.kerning, first_run.scale,
+                para.keep_next, para.page_break_before) == expect
     # with nothing set anywhere: Word's Times New Roman, normal spacing, no keep or break
     plain, = sync.fingerprint(body(P("Time intro.")), sync.doc_context(sync.read_docx(make_docx(tmp_path / "n.docx", ""))))
     para, first_run = looks(plain)
-    assert (first_run.font, first_run.letter_spacing, first_run.kerning, para.keep_next, para.page_break_before) == \
-        ("Times New Roman", "", "", False, False)
+    assert (first_run.font, first_run.letter_spacing, first_run.kerning, first_run.scale, para.keep_next, para.page_break_before) == \
+        ("Times New Roman", "", "", "", False, False)
 
 
 def test_content_is_compared_as_it_will_look_in_the_master(tmp_path, capsys):
