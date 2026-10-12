@@ -4,7 +4,7 @@
   "description": "Stardust infra SDK: meter Anthropic, OpenAI and Gemini API usage (measured tokens) and report it to Stardust Core.",
   "license": "Apache-2.0",
   "stardust": {
-    "specVersion": "1.4"
+    "specVersion": "1.6"
   },
   "type": "module",
   "main": "dist/index.js",

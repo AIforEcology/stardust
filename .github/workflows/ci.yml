@@ -23,6 +23,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e "middleware[dev]" -e "providers-service[dev]" -e "subscriber-client/sdk-python[dev]"
       - run: pytest middleware providers-service subscriber-client/sdk-python
+      # The spec sync tool (docs/tools) needs only lxml.
+      - run: pip install "lxml>=4.9"
+      - run: pytest docs/tools
 
   browser-extension:
     runs-on: ubuntu-latest
