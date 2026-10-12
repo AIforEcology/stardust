@@ -21,8 +21,9 @@ Commands
   merge    MASTER.docx  SUB.docx  OUT_MASTER.docx  [--no-bump] [--dry-run]
       Copy every synced unit from the sub-document back into the master,
       replacing the master's version of that unit. New numbered subsections
-      added in the sub-document are carried along automatically. Bumps the
-      master's "vX.Y (Draft)" version unless --no-bump. Prints a change report.
+      added in the sub-document are carried along automatically, as are any
+      styles they use that the master doesn't define. Bumps the master's
+      "vX.Y (Draft)" version unless --no-bump. Prints a change report.
 
 Requires: Python 3.8+, lxml  (pip install lxml)
 """
@@ -285,7 +286,30 @@ def merge(master_path, sub_path, out_path, bump=True, dry=False):
     used_ids = {p.get(q(W14, "paraId")) for p in mroot.iter(q(W, "p")) if p.get(q(W14, "paraId"))}
     mnums = {n.get(q(W, "numId")) for n in parse(mp["word/numbering.xml"]).iter(q(W, "num"))} if "word/numbering.xml" in mp else set()
 
+    # styles the sub-document defines but the master lacks are copied across
+    mstyles_root = parse(mp["word/styles.xml"]) if "word/styles.xml" in mp else None
+    sstyles_root = parse(sp["word/styles.xml"]) if "word/styles.xml" in sp else None
+    def style_ids(root): return {s.get(q(W, "styleId")): s for s in root.iter(q(W, "style"))} if root is not None else {}
+    mstyles, sstyles = style_ids(mstyles_root), style_ids(sstyles_root)
+    carried = []
+
+    def carry_styles(elements):
+        queue = [n.get(q(W, "val")) for el in elements for tag in ("pStyle", "rStyle", "tblStyle") for n in el.iter(q(W, tag))]
+        while queue:
+            sid = queue.pop()
+            if not sid or sid in mstyles: continue
+            src = sstyles.get(sid)
+            if src is None or mstyles_root is None:
+                warn.append(f"Style {sid} is not defined in either document; Word will fall back to the default."); continue
+            new = copy.deepcopy(src)
+            mstyles_root.append(new); mstyles[sid] = new; carried.append(sid)
+            # a style is only complete with the styles it inherits from or links to
+            queue.extend(n.get(q(W, "val")) for tag in ("basedOn", "next", "link") for n in new.findall(q(W, tag)))
+            if new.find(".//w:numPr", {"w": W}) is not None:
+                warn.append(f"Style {sid} uses list numbering, which is not carried; check its lists.")
+
     def fix_refs(elements):
+        carry_styles(elements)
         for el in elements:
             for node in el.iter():
                 for attr in list(node.attrib):
@@ -381,11 +405,13 @@ def merge(master_path, sub_path, out_path, bump=True, dry=False):
 
     print(f"Merge report: {os.path.basename(sub_path)} -> {os.path.basename(master_path)}")
     print("\n".join(report) if report else "  (no synced sections found)")
+    if carried: print(f"  Styles carried from sub-document: {', '.join(carried)}")
     if new_v: print(f"  Master version: {old_v} -> {new_v}")
     for w in dict.fromkeys(warn): print("WARNING:", w)
     if dry:
         print("Dry run: nothing written."); return
     mp["word/document.xml"] = ser(mroot)
+    if carried: mp["word/styles.xml"] = ser(mstyles_root)
     mp["word/_rels/document.xml.rels"] = ser(mrels_root)
     # make sure image extensions are registered
     ct = parse(mp["[Content_Types].xml"]); CT = "http://schemas.openxmlformats.org/package/2006/content-types"
