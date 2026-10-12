@@ -18,11 +18,15 @@ Commands
       field-codes.json (every table with a Code column) and mcp-tools.json
       (every table with a Tool column, grouped by section).
 
-  merge    MASTER.docx  SUB.docx  OUT_MASTER.docx  [--no-bump] [--dry-run]
+  merge    MASTER.docx  SUB.docx  OUT_MASTER.docx  [--no-bump] [--dry-run] [--keep-formatting]
       Copy every synced unit from the sub-document back into the master,
       replacing the master's version of that unit. New numbered subsections
       added in the sub-document are carried along automatically, as are any
-      styles they use that the master doesn't define. Bumps the master's
+      styles they use that the master doesn't define. Content written outside
+      the master (a section whose headings carry none of the master's direct
+      formatting, or any paragraph with no formatting at all) is given the
+      formatting of the master's copy of that section: headings, text, bullets,
+      tables and spacing. --keep-formatting turns this off. Bumps the master's
       "vX.Y (Draft)" version unless --no-bump. Prints a change report.
 
 Requires: Python 3.8+, lxml  (pip install lxml)
@@ -261,12 +265,171 @@ def extract(master_path, out_path, version=None, notes=()):
     write_docx(parts, out_path)
     print(f"Extracted {len(manifest)} units, {len(idx)} field codes -> {out_path}")
 
+# ---------------------------------------------------------------- formatting
+# The master carries its formatting directly on paragraphs and runs (spacing, size, colour)
+# rather than in styles, so content written outside it renders unlike the rest of the spec.
+# These helpers re-dress such content with formatting copied from the master itself.
+NS = {"w": W}
+KEEP_RUN = ("rStyle", "b", "bCs", "i", "iCs", "u", "strike", "vertAlign")   # meaning, not look
+RPR_ORDER = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "caps", "smallCaps", "strike", "dstrike", "outline",
+             "shadow", "emboss", "imprint", "noProof", "snapToGrid", "vanish", "webHidden", "color", "spacing",
+             "w", "kern", "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText",
+             "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath"]
+
+def local(el): return etree.QName(el).localname
+def is_on(el): return el.get(q(W, "val")) not in ("0", "false")
+def runs_of(p): return [r for r in p.iter(q(W, "r")) if r.find(q(W, "t")) is not None]
+def ncols(tbl): return len(tbl.find(q(W, "tr")).findall(q(W, "tc"))) if tbl.find(q(W, "tr")) is not None else 0
+
+def set_first(parent, tag, new):
+    old = parent.find(q(W, tag))
+    if old is not None: parent.remove(old)
+    if new is not None: parent.insert(0, copy.deepcopy(new))
+
+def formatted(p):
+    """True if a paragraph carries direct formatting beyond its style and bold/italic."""
+    ppr = p.find(q(W, "pPr"))
+    if ppr is not None and any(local(c) not in ("pStyle", "rPr") for c in ppr): return True
+    for r in p.iter(q(W, "r")):
+        rpr = r.find(q(W, "rPr"))
+        if rpr is not None and any(local(c) not in KEEP_RUN for c in rpr): return True
+    return False
+
+def plain_rpr(p):
+    """rPr of the paragraph's first non-bold text run (its body text, not a bold run-in)."""
+    rs = runs_of(p)
+    for r in rs:
+        b = r.find("./w:rPr/w:b", NS)
+        if b is None or not is_on(b): return r.find(q(W, "rPr"))
+    return rs[0].find(q(W, "rPr")) if rs else None
+
+def dressed_rpr(tmpl, run):
+    """Template run formatting, keeping the run's own bold, italic, underline and so on."""
+    rpr = copy.deepcopy(tmpl) if tmpl is not None else etree.Element(q(W, "rPr"))
+    for c in [c for c in rpr if local(c) in KEEP_RUN]: rpr.remove(c)
+    orig = run.find(q(W, "rPr"))
+    for c in (orig if orig is not None else []):
+        if local(c) in KEEP_RUN and is_on(c): rpr.append(copy.deepcopy(c))
+    rpr[:] = sorted(rpr, key=lambda c: RPR_ORDER.index(local(c)) if local(c) in RPR_ORDER else len(RPR_ORDER))
+    return rpr
+
+def templates(els):
+    """Formatting examples from master elements: headings by level, the commonest body and list
+    paragraph, tables, and the empty paragraph that follows tables if that is the master's habit."""
+    t = {"head": {}, "body": None, "list": None, "tables": [], "spacer": None}
+    body, lst, after = {}, {}, []
+    for e in els:
+        if e.tag == q(W, "tbl"):
+            t["tables"].append(e)
+            nxt = e.getnext()
+            after.append(nxt if nxt is not None and nxt.tag == q(W, "p") and not ptext(nxt).strip() else None)
+            continue
+        if e.tag != q(W, "p") or not formatted(e) or not ptext(e).strip(): continue
+        h = heading_info(e)
+        if h: t["head"].setdefault(h[0], e); continue
+        if e.find("./w:pPr/w:pStyle", NS) is not None: continue
+        bucket = lst if e.find("./w:pPr/w:numPr", NS) is not None else body
+        sig = etree.tostring(e.find(q(W, "pPr"))) + etree.tostring(plain_rpr(e) if plain_rpr(e) is not None else etree.Element("x"))
+        bucket.setdefault(sig, []).append(e)
+    for key, bucket in (("body", body), ("list", lst)):
+        if bucket: t[key] = max(bucket.values(), key=len)[0]
+    spacers = [s for s in after if s is not None]
+    if spacers and len(spacers) * 2 > len(after): t["spacer"] = spacers[0]
+    return t
+
+def subsection_kinds(els, key):
+    """For each subsection of a master unit, whether its paragraphs are mostly bullets."""
+    counts, sec = {}, key
+    for e in els:
+        h = heading_info(e)
+        if h and h[1]: sec = h[1]; continue
+        if e.tag == q(W, "p") and ptext(e).strip() and e.find("./w:pPr/w:pStyle", NS) is None:
+            c = counts.setdefault(sec, [0, 0]); c[e.find("./w:pPr/w:numPr", NS) is not None] += 1
+    return {s: "list" if c[1] > c[0] else "body" for s, c in counts.items()}
+
+def dress_table(tbl, tmpl):
+    same = ncols(tmpl) == ncols(tbl)
+    set_first(tbl, "tblPr", tmpl.find(q(W, "tblPr")))
+    if same:
+        grid = tbl.find(q(W, "tblGrid"))
+        if grid is not None: grid.getparent().replace(grid, copy.deepcopy(tmpl.find(q(W, "tblGrid"))))
+    trows = tmpl.findall(q(W, "tr"))
+    for i, row in enumerate(tbl.findall(q(W, "tr"))):
+        trow = trows[0] if i == 0 else trows[min(1, len(trows) - 1)]
+        set_first(row, "trPr", trow.find(q(W, "trPr")))
+        tcells = trow.findall(q(W, "tc"))
+        for j, cell in enumerate(row.findall(q(W, "tc"))):
+            tcell = tcells[min(j, len(tcells) - 1)]
+            old = cell.find(q(W, "tcPr"))
+            set_first(cell, "tcPr", tcell.find(q(W, "tcPr")))
+            new = cell.find(q(W, "tcPr"))
+            if old is not None and new is not None:
+                # keep the cell's own geometry: width when columns differ, and any spans or merges
+                for tag in (() if same else ("tcW",)) + ("gridSpan", "vMerge", "hMerge"):
+                    for c in new.findall(q(W, tag)): new.remove(c)
+                    mine = old.find(q(W, tag))
+                    if mine is not None: new.insert(0 if tag == "tcW" else len(new.findall(q(W, "tcW"))), copy.deepcopy(mine))
+            tp = tcell.find(q(W, "p"))
+            for p in cell.findall(q(W, "p")):
+                set_first(p, "pPr", tp.find(q(W, "pPr")))
+                for r in runs_of(p):
+                    # header cells take the template's look outright; body cells keep their emphasis
+                    set_first(r, "rPr", (runs_of(tp)[0].find(q(W, "rPr")) if runs_of(tp) else None) if i == 0 else dressed_rpr(plain_rpr(tp), r))
+
+def match_formatting(new_els, old_els, master_els, key):
+    """Give merged content the master's formatting. Returns (elements, whether anything changed).
+
+    A unit whose top heading has no direct formatting was written outside the master, so all of
+    it (headings, text, lists, tables, spacing after tables) is formatted like the master's copy
+    of that unit, falling back to the rest of the master. Otherwise only paragraphs with no
+    direct formatting at all are touched; formatting someone applied on purpose is kept."""
+    loc, glob = templates(old_els), templates(master_els)
+    pick = lambda k: loc[k] if loc[k] is not None else glob[k]
+    head = lambda lvl: loc["head"].get(lvl) if loc["head"].get(lvl) is not None else glob["head"].get(lvl)
+    first = heading_info(new_els[0]) if new_els else None
+    foreign = bool(first) and not formatted(new_els[0]) and head(first[0]) is not None
+    kinds = subsection_kinds(old_els, key)
+    out, changed, sec = [], False, key
+    for e in new_els:
+        out.append(e)
+        if e.tag == q(W, "tbl"):
+            if not foreign: continue
+            tmpl = next((t for t in loc["tables"] + glob["tables"] if ncols(t) == ncols(e)), None) or \
+                   next(iter(loc["tables"] + glob["tables"]), None)
+            if tmpl is not None: dress_table(e, tmpl); changed = True
+            out.append(None)                                   # spacer slot, filled below
+            continue
+        if e.tag != q(W, "p"): continue
+        h = heading_info(e)
+        if h and h[1]: sec = h[1]
+        if not ptext(e).strip() or (formatted(e) and not foreign): continue
+        if h:
+            tp = head(h[0])
+            if tp is None: continue
+            set_first(e, "pPr", tp.find(q(W, "pPr")))
+            for r in runs_of(e): set_first(r, "rPr", runs_of(tp)[0].find(q(W, "rPr")))
+        else:
+            if e.find("./w:pPr/w:pStyle", NS) is not None: continue   # a deliberate style, e.g. a caption
+            tp = pick("list") if kinds.get(sec) == "list" and pick("list") is not None else pick("body")
+            if tp is None: continue
+            set_first(e, "pPr", tp.find(q(W, "pPr")))
+            for r in runs_of(e): set_first(r, "rPr", dressed_rpr(plain_rpr(tp), r))
+        changed = True
+    spacer = pick("spacer")
+    result = []
+    for i, e in enumerate(out):
+        if e is not None: result.append(e); continue
+        nxt = next((x for x in out[i + 1:] if x is not None), None)
+        if spacer is not None and not (nxt is not None and nxt.tag == q(W, "p") and not ptext(nxt).strip()):
+            result.append(copy.deepcopy(spacer)); changed = True
+    return result, changed
+
 # ---------------------------------------------------------------- merge
 def rels_map(parts):
     r = parse(parts["word/_rels/document.xml.rels"])
     return r, {e.get("Id"): e for e in r}
 
-def merge(master_path, sub_path, out_path, bump=True, dry=False):
+def merge(master_path, sub_path, out_path, bump=True, dry=False, keep_formatting=False):
     mp, sp = read_docx(master_path), read_docx(sub_path)
     mroot, sroot = parse(mp["word/document.xml"]), parse(sp["word/document.xml"])
     mbody, mk = body_children(mroot)
@@ -357,6 +520,9 @@ def merge(master_path, sub_path, out_path, bump=True, dry=False):
             new_heads = {heading_info(e)[1] for e in new_els if heading_info(e) and heading_info(e)[1]}
             added = sorted(new_heads - old_heads, key=numkey); removed = sorted(old_heads - new_heads, key=numkey)
             note = (f"; added {', '.join(added)}" if added else "") + (f"; removed {', '.join(removed)}" if removed else "")
+            if not keep_formatting:
+                new_els, dressed = match_formatting(new_els, mk[mrg[0]:mrg[1]], mk, key)
+                if dressed: note += "; formatting matched to master"
             report.append(f"  §{key}: UPDATED{note}")
             fix_refs(new_els); fresh_para_ids(new_els, used_ids)
             anchor = mk[mrg[0]]
@@ -381,12 +547,15 @@ def merge(master_path, sub_path, out_path, bump=True, dry=False):
                 for j in range(prg[0] + 1, prg[1]):
                     if heading_info(mk[j]): pos = j; break
                     pos = j + 1
+            dressed = False
+            if not keep_formatting: new_els, dressed = match_formatting(new_els, [], mk, key)
             fix_refs(new_els); fresh_para_ids(new_els, used_ids)
             anchor = mk[pos] if pos < len(mk) else None
             for e in new_els:
                 if anchor is not None: anchor.addprevious(e)
                 else: mbody.append(e)
-            report.append(f"  §{key}: NEW section inserted" + (f" after §{after}" if after else f" at start of §{parent}"))
+            report.append(f"  §{key}: NEW section inserted" + (f" after §{after}" if after else f" at start of §{parent}")
+                          + ("; formatting matched to master" if dressed else ""))
 
     # duplicate field codes
     codes = {}
@@ -467,6 +636,6 @@ if __name__ == "__main__":
     elif len(a) >= 3 and a[0] == "export":
         export(a[1], a[2])
     elif len(a) >= 4 and a[0] == "merge":
-        merge(a[1], a[2], a[3], bump="--no-bump" not in a, dry="--dry-run" in a)
+        merge(a[1], a[2], a[3], bump="--no-bump" not in a, dry="--dry-run" in a, keep_formatting="--keep-formatting" in a)
     else:
         print(__doc__); sys.exit(1)
