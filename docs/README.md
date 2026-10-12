@@ -19,7 +19,7 @@
     - §23, the MCP interface: Subscriber reporting, Provider insights and Operator lifecycle servers, with their tools, OAuth scopes and response conventions
     - §12.2 and §22.8.2 now say that write tools exist only on the operator server
 - [`stardust-spec-v1.2.docx`](stardust-spec-v1.2.docx): the previous version, kept for reference.
-- [`stardust-telemetry-spec-T1.5.docx`](stardust-telemetry-spec-T1.5.docx): the Telemetry Specification, a subset of v1.6 holding only the telemetry sections, for editing on its own. Edits merge back into the master with [`tools/stardust_telemetry_sync.py`](tools/stardust_telemetry_sync.py).
+- [`stardust-telemetry-spec-T1.5.docx`](stardust-telemetry-spec-T1.5.docx): the Telemetry Specification, a subset of v1.6 holding only the telemetry sections (now including §21.8 and §21.9), for editing on its own. Edits merge back into the master with [`tools/stardust_telemetry_sync.py`](tools/stardust_telemetry_sync.py).
 - [`stardust-telemetry-spec-T1.2.docx`](stardust-telemetry-spec-T1.2.docx): the earlier Telemetry Specification (a subset of v1.4), kept for reference.
 - [`stardust-summary.pdf`](stardust-summary.pdf): four-page project summary with the data-flow, marketplace and right-sizing diagrams (written for v0.9).
 

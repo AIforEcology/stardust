@@ -51,6 +51,8 @@ UNITS = [
     ("21.3",  "Right-sizing derived scores and indexes"),
     ("21.4",  "Right-sizing scoring method"),
     ("21.7",  "Time-of-use dynamics and carbon-aware load shifting"),
+    ("21.8",  "Energy-aware routing telemetry and method"),
+    ("21.9",  "Accelerator, node and facility runtime telemetry"),
     ("22.3",  "Multi-attribute Provider categories"),
     ("22.4",  "Multi-attribute Provider telemetry fields"),
     ("22.8",  "Hardware lifecycle record: reuse and recycling"),
