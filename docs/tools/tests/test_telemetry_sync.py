@@ -6,7 +6,7 @@ behaviour is checked in isolation. The last few run against the committed v1.6 m
 T1.5 sub-document.
 """
 import json
-import os
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -65,7 +65,7 @@ def SPACER():
     return '<w:p><w:pPr><w:spacing w:after="120"/></w:pPr></w:p>'
 
 
-def TBL(rows, fmt=True, widths=None, style=None):
+def TBL(rows, fmt=True, widths=None, style=None, fill=MASTER_FILL):
     widths = widths or [9600 // len(rows[0])] * len(rows[0])
     if fmt:
         borders = "".join(f'<w:{s} w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
@@ -78,7 +78,7 @@ def TBL(rows, fmt=True, widths=None, style=None):
 
     def cell(t, w, head):
         if fmt:
-            shd = f'<w:shd w:val="clear" w:color="auto" w:fill="{MASTER_FILL}"/>' if head else ""
+            shd = f'<w:shd w:val="clear" w:color="auto" w:fill="{fill}"/>' if head else ""
             rpr = ('<w:b w:val="1"/><w:bCs w:val="1"/><w:color w:val="ffffff"/>' if head else "") + '<w:sz w:val="19"/><w:szCs w:val="19"/>'
         else:
             shd = f'<w:shd w:val="clear" w:fill="{FOREIGN_FILL}"/>' if head else ""
@@ -122,7 +122,7 @@ def make_docx(path, body, version="v1.5", extra_styles=""):
             '</Relationships>'),
         "word/styles.xml": f'<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="{W_NS}">{STYLES}{extra_styles}</w:styles>',
         "word/numbering.xml": (f'<?xml version="1.0" encoding="UTF-8"?><w:numbering xmlns:w="{W_NS}">'
-                               '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum>'
+                               '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum>'
                                '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>'),
         "word/document.xml": doc,
     }
@@ -225,6 +225,55 @@ def test_duplicate_field_codes_are_reported(master, tmp_path, capsys):
     dup = MASTER_721.replace("Time intro.", "Changed.") + H(3, "21.7.4 More") + TBL([["Code", "Field Name"], ["TOU", "Again"]])
     out = merge(master, make_docx(tmp_path / "sub.docx", dup), tmp_path / "out.docx", capsys)
     assert "Field code TOU appears more than once" in out
+
+
+# --- merge: what counts as a change -----------------------------------------------------------
+
+FORMAT_EDITS = {
+    "bold run": (P("Time intro."), P("intro.", lead="Time ")),
+    "paragraph spacing": (P("Time intro."), P("Time intro.").replace('w:after="140"', 'w:after="400"')),
+    "table header colour": (TBL(FIELDS), TBL(FIELDS, fill="7A1E1E")),
+    "bullet to plain text": (BUL(" Forecasts are kept.", "Forecast integrity."), P(" Forecasts are kept.", lead="Forecast integrity.")),
+}
+
+
+@pytest.mark.parametrize("edit", FORMAT_EDITS)
+def test_formatting_only_change_is_merged(master, tmp_path, capsys, edit):
+    old, new = FORMAT_EDITS[edit]
+    assert old in MASTER_721
+    out = merge(master, make_docx(tmp_path / "sub.docx", MASTER_721.replace(old, new)), tmp_path / "out.docx", capsys)
+    assert "§21.7: UPDATED (formatting only)" in out and "Master version: v1.5 -> v1.6" in out
+    after = doc(tmp_path / "out.docx")
+    after_print = sync.fingerprint(list(after.find(W + "body")), {("1", "0"): ("720", "360")})
+    new_print = sync.fingerprint(list(etree.fromstring(f'<w:body xmlns:w="{W_NS}">{new}</w:body>')), {("1", "0"): ("720", "360")})
+    assert new_print[0] in after_print
+
+
+def word_resave(xml):
+    """What Word does to XML on save without changing how the document looks."""
+    xml = xml.replace(P("Time intro."), '<w:p><w:pPr><w:spacing w:after="140" w:line="240" w:lineRule="auto"/></w:pPr>'
+                      '<w:bookmarkStart w:id="0" w:name="_GoBack"/>' + run("Time ", sz="21")       # default line spacing,
+                      + '<w:proofErr w:type="spellStart"/>' + run("intro.", sz="21")             # a split run, a bookmark
+                      + '<w:proofErr w:type="spellEnd"/><w:bookmarkEnd w:id="0"/></w:p>')        # and proofing marks
+    xml = xml.replace("<w:p>", '<w:p w:rsidR="00A1B2C3" w:rsidRDefault="00A1B2C3">')                 # revision ids
+    xml = xml.replace('<w:ind w:left="720" w:hanging="360"/>', "")         # bullet indent equal to the list's
+    xml = xml.replace('<w:b w:val="1"/>', "<w:b/>").replace(MASTER_FILL, MASTER_FILL.upper())    # spelling of values
+    xml = re.sub(r'<w:tcW w:w="\d+" w:type="dxa"/>', '<w:tcW w:w="0" w:type="auto"/>', xml)        # widths from the grid
+    xml = xml.replace('<w:tblW w:w="9600" w:type="dxa"/>', '<w:tblW w:w="9600.0" w:type="dxa"/><w:jc w:val="left"/>')
+    return xml
+
+
+def test_word_resave_markup_is_not_a_change(master, tmp_path, capsys):
+    noisy = word_resave(MASTER_721)
+    assert noisy != MASTER_721 and "proofErr" in noisy and "<w:ind" not in noisy and "9600.0" in noisy
+    out = merge(master, make_docx(tmp_path / "sub.docx", noisy), tmp_path / "out.docx", capsys)
+    assert "§21.7: unchanged" in out and "Master version" not in out
+
+
+def test_word_resave_markup_does_not_hide_a_real_change(master, tmp_path, capsys):
+    noisy = word_resave(MASTER_721).replace(MASTER_FILL.upper(), "7A1E1E")   # recolour the table header
+    out = merge(master, make_docx(tmp_path / "sub.docx", noisy), tmp_path / "out.docx", capsys)
+    assert "§21.7: UPDATED (formatting only)" in out
 
 
 # --- merge: styles ----------------------------------------------------------------------------

@@ -20,9 +20,11 @@ Commands
 
   merge    MASTER.docx  SUB.docx  OUT_MASTER.docx  [--no-bump] [--dry-run] [--keep-formatting]
       Copy every synced unit from the sub-document back into the master,
-      replacing the master's version of that unit. New numbered subsections
-      added in the sub-document are carried along automatically, as are any
-      styles they use that the master doesn't define. Content written outside
+      replacing the master's version of that unit if its text or visible
+      formatting changed (markup Word rewrites on every save is ignored).
+      New numbered subsections added in the sub-document are carried along
+      automatically, as are any styles they use that the master doesn't
+      define. Content written outside
       the master (a section whose headings carry none of the master's direct
       formatting, or any paragraph with no formatting at all) is given the
       formatting of the master's copy of that section: headings, text, bullets,
@@ -425,6 +427,107 @@ def match_formatting(new_els, old_els, master_els, key):
             result.append(copy.deepcopy(spacer)); changed = True
     return result, changed
 
+# ---------------------------------------------------------------- change detection
+# merge compares units by what a reader sees, not by raw XML: Word rewrites a document's XML on
+# every save (revision ids, split runs, dropped default values, widths copied onto every cell)
+# without changing how it looks. A fingerprint records text plus visible formatting, with
+# defaults filled in, so only real edits count as changes.
+def num(v):
+    try:
+        f = float(v); return str(int(f)) if f == int(f) else str(f)
+    except (TypeError, ValueError):
+        return v
+
+def prop(el, path, attr="val", default=""):
+    """An attribute's value, or "" when it is missing or equals the default."""
+    n = el.find(path, NS) if el is not None else None
+    v = n.get(q(W, attr)) if n is not None else None
+    v, default = num(default if v is None else v), num(default)
+    return "" if v == default else v
+
+def toggle(el, tag):
+    n = el.find("w:" + tag, NS) if el is not None else None
+    return n is not None and n.get(q(W, "val")) not in ("0", "false", "off", "none")
+
+def colour(v):
+    v = (v or "").upper()
+    return "" if v in ("", "AUTO") else v
+
+def list_indents(parts):
+    """(numId, ilvl) -> (left, hanging) indent each list level defines."""
+    if "word/numbering.xml" not in parts: return {}
+    n, out = parse(parts["word/numbering.xml"]), {}
+    abstract = {a.get(q(W, "abstractNumId")): a for a in n.findall(q(W, "abstractNum"))}
+    for m in n.findall(q(W, "num")):
+        a = abstract.get(prop(m, "w:abstractNumId"))
+        for lvl in (a.findall(q(W, "lvl")) if a is not None else []):
+            ind = lvl.find("w:pPr/w:ind", NS)
+            out[(m.get(q(W, "numId")), lvl.get(q(W, "ilvl")))] = (prop(ind, ".", "left", "0"), prop(ind, ".", "hanging", "0"))
+    return out
+
+def run_print(rpr):
+    return (toggle(rpr, "b"), toggle(rpr, "i"), toggle(rpr, "strike"), toggle(rpr, "caps"), prop(rpr, "w:u", default="none"),
+            prop(rpr, "w:sz"), colour(prop(rpr, "w:color")), prop(rpr, "w:highlight", default="none"),
+            prop(rpr, "w:vertAlign", default="baseline"), prop(rpr, "w:rStyle"))
+
+def para_print(p, lists):
+    ppr = p.find(q(W, "pPr"))
+    numbering = None
+    if ppr is not None and ppr.find(q(W, "numPr")) is not None:
+        numbering = (prop(ppr, "w:numPr/w:numId", default="0"), prop(ppr, "w:numPr/w:ilvl"))
+        if not numbering[0]: numbering = None
+    left, hanging = prop(ppr, "w:ind", "left", "0"), prop(ppr, "w:ind", "hanging", "0")
+    if numbering and ppr.find(q(W, "ind")) is None:   # a bullet without its own indent takes its list's
+        left, hanging = lists.get((numbering[0], numbering[1] or "0"), ("", ""))
+    rule = prop(ppr, "w:spacing", "lineRule", "auto")
+    props = (prop(ppr, "w:pStyle", default="Normal"), prop(ppr, "w:jc", default="left"),
+             prop(ppr, "w:spacing", "before", "0"), prop(ppr, "w:spacing", "after", "0"),
+             prop(ppr, "w:spacing", "line", "240" if not rule else ""), rule,
+             left, prop(ppr, "w:ind", "right", "0"), hanging, prop(ppr, "w:ind", "firstLine", "0"), numbering)
+    runs = []
+    for r in runs_of(p):   # runs Word split or joined with the same formatting read as one
+        t = "".join(x.text or "" for x in r.iter(q(W, "t")))
+        if not t: continue
+        f = run_print(r.find(q(W, "rPr")))
+        if runs and runs[-1][0] == f: runs[-1] = (f, runs[-1][1] + t)
+        else: runs.append((f, t))
+    return ("p", props, tuple(runs))
+
+def border(el, side):
+    v = prop(el, "w:" + side, default="nil")
+    return (v, prop(el, "w:" + side, "sz"), colour(prop(el, "w:" + side, "color"))) if v not in ("", "none") else None
+
+SIDES = ("top", "left", "bottom", "right", "insideH", "insideV")
+
+def table_print(t, lists):
+    tp = t.find(q(W, "tblPr"))
+    tb = tp.find(q(W, "tblBorders")) if tp is not None else None
+    grid = [int(float(g.get(q(W, "w")) or 0)) for g in t.findall("w:tblGrid/w:gridCol", NS)]
+    props = (prop(tp, "w:tblW", "w"), prop(tp, "w:jc", default="left"), tuple(border(tb, s) for s in SIDES), tuple(map(str, grid)))
+    rows = []
+    for tr in t.findall(q(W, "tr")):
+        cells, col = [], 0
+        for tc in tr.findall(q(W, "tc")):
+            cp = tc.find(q(W, "tcPr"))
+            cb = cp.find(q(W, "tcBorders")) if cp is not None else None
+            span = int(prop(cp, "w:gridSpan", default="1") or 1)
+            # a cell with no width of its own (or an auto one) is as wide as the columns it spans
+            own = prop(cp, "w:tcW", "w", "0") if not prop(cp, "w:tcW", "type", "dxa") else ""
+            width = own or num(str(sum(grid[col:col + span]))); col += span
+            vm = cp.find(q(W, "vMerge")) if cp is not None else None
+            merge_ = (vm.get(q(W, "val")) or "continue") if vm is not None else ""
+            cells.append((width, colour(prop(cp, "w:shd", "fill")), str(span), merge_,
+                          tuple(border(cb, s) for s in SIDES[:4]), tuple(para_print(p, lists) for p in tc.findall(q(W, "p")))))
+        rows.append((toggle(tr.find(q(W, "trPr")), "tblHeader"), tuple(cells)))
+    return ("tbl", props, tuple(rows))
+
+def fingerprint(elements, lists):
+    out = []
+    for e in elements:
+        if e.tag == q(W, "p"): out.append(para_print(e, lists))
+        elif e.tag == q(W, "tbl"): out.append(table_print(e, lists))
+    return out
+
 # ---------------------------------------------------------------- merge
 def rels_map(parts):
     r = parse(parts["word/_rels/document.xml.rels"])
@@ -445,6 +548,7 @@ def merge(master_path, sub_path, out_path, bump=True, dry=False, keep_formatting
     for key, _ in UNITS:
         if key not in sub_keys: warn.append(f"Unit {key} missing from sub-document; master copy left unchanged.")
 
+    mlists, slists = list_indents(mp), list_indents(sp)
     mrels_root, mrels = rels_map(mp)
     _, srels = rels_map(sp)
     used_ids = {p.get(q(W14, "paraId")) for p in mroot.iter(q(W, "p")) if p.get(q(W14, "paraId"))}
@@ -515,12 +619,14 @@ def merge(master_path, sub_path, out_path, bump=True, dry=False, keep_formatting
         new_txt = "\n".join(text_of(e) for e in new_els)
         if mrg:
             old_txt = "\n".join(text_of(e) for e in mk[mrg[0]:mrg[1]])
-            if old_txt == new_txt:
+            same_look = fingerprint(mk[mrg[0]:mrg[1]], mlists) == fingerprint(new_els, slists)
+            if old_txt == new_txt and same_look:
                 report.append(f"  §{key}: unchanged"); continue
             old_heads = {heading_info(e)[1] for e in mk[mrg[0]:mrg[1]] if heading_info(e) and heading_info(e)[1]}
             new_heads = {heading_info(e)[1] for e in new_els if heading_info(e) and heading_info(e)[1]}
             added = sorted(new_heads - old_heads, key=numkey); removed = sorted(old_heads - new_heads, key=numkey)
-            note = (f"; added {', '.join(added)}" if added else "") + (f"; removed {', '.join(removed)}" if removed else "")
+            note = (" (formatting only)" if old_txt == new_txt else "") + \
+                   (f"; added {', '.join(added)}" if added else "") + (f"; removed {', '.join(removed)}" if removed else "")
             if not keep_formatting:
                 new_els, dressed = match_formatting(new_els, mk[mrg[0]:mrg[1]], mk, key)
                 if dressed: note += "; formatting matched to master"
