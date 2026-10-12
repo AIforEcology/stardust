@@ -1,5 +1,5 @@
 {
-  "spec_version": "1.4",
+  "spec_version": "1.6",
   "codes": [
     {
       "code": "NGP",
@@ -804,6 +804,46 @@
       "section": "21.3"
     },
     {
+      "code": "IVL",
+      "field_name": "Interval Bounds",
+      "definition": "UTC start and end of the energy use the record covers; long jobs are split into sub-intervals no longer than the finest factor resolution available",
+      "unit": "datetime pair",
+      "frequency": "Per interval",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "FTR",
+      "field_name": "Factor Temporal Resolution",
+      "definition": "Time resolution of each factor applied: realtime (≤5 min), hourly, daily, monthly or annual",
+      "unit": "enum per factor",
+      "frequency": "Per interval",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "FVW",
+      "field_name": "Factor Validity Window",
+      "definition": "Start and end of the period each factor value applies to, so it can be checked against IVL",
+      "unit": "datetime pair per factor",
+      "frequency": "Per interval",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "FBS",
+      "field_name": "Factor Basis",
+      "definition": "Whether each factor was measured at the time, forecast at decision time, or a historical average",
+      "unit": "enum per factor",
+      "frequency": "Per interval",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
       "code": "TOU",
       "field_name": "Time-of-Use Period",
       "definition": "Tariff period in effect when energy was used: off-peak, mid-peak, on-peak, super-off-peak, critical-peak, or real-time",
@@ -820,6 +860,26 @@
       "unit": "$/kWh",
       "frequency": "Per interval",
       "applies_to": "Infra",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "DMD",
+      "field_name": "Demand Charge Rate",
+      "definition": "Peak-demand rate in the applicable tariff and its measurement window (e.g., highest 15-minute average in the billing month)",
+      "unit": "$/kW + window",
+      "frequency": "Per billing period",
+      "applies_to": "Infra, Operator",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
+      "code": "PKD",
+      "field_name": "Peak Demand Contribution",
+      "definition": "This workload’s power draw during the interval that set the billing-period peak, or during the coincident-peak window",
+      "unit": "kW",
+      "frequency": "Per billing period",
+      "applies_to": "Infra, Operator",
       "derived": false,
       "section": "21.7.1"
     },
@@ -864,22 +924,42 @@
       "section": "21.7.1"
     },
     {
+      "code": "HMS",
+      "field_name": "Hourly Matching Status",
+      "definition": "Granularity at which any claimed renewable or carbon-free supply was matched to consumption: hourly, monthly or annual, with the certificate reference (EAC, §22.4)",
+      "unit": "enum + ref",
+      "frequency": "Per interval / claim",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.7.1"
+    },
+    {
       "code": "D-LSS",
       "field_name": "Load-Shift Carbon Savings",
-      "definition": "Energy × (intensity at the requested time − intensity at the actual run time), using the same GSG for both",
+      "definition": "Energy × (intensity at the requested time − intensity at the actual run time), using the same GSG and FTR for both",
       "unit": "gCO2e",
       "frequency": "Per job",
-      "applies_to": "Modeled",
+      "applies_to": "Infra",
       "derived": true,
       "section": "21.7.1"
     },
     {
       "code": "D-LSC",
       "field_name": "Load-Shift Cost Savings",
-      "definition": "Energy × (TRT at the requested time − TRT at the actual run time)",
+      "definition": "Energy × (TRT at the requested time − TRT at the actual run time), plus any change in D-DCC",
       "unit": "$",
       "frequency": "Per job",
-      "applies_to": "Modeled",
+      "applies_to": "Infra",
+      "derived": true,
+      "section": "21.7.1"
+    },
+    {
+      "code": "D-DCC",
+      "field_name": "Demand Charge Cost",
+      "definition": "PKD × DMD allocated to the workload; reported separately from energy cost",
+      "unit": "$",
+      "frequency": "Per billing period",
+      "applies_to": "Infra, Operator",
       "derived": true,
       "section": "21.7.1"
     },
@@ -889,9 +969,619 @@
       "definition": "Share of shifted energy consumed during intervals with RCF > 0",
       "unit": "%",
       "frequency": "Monthly",
-      "applies_to": "Modeled",
+      "applies_to": "Infra",
       "derived": true,
       "section": "21.7.1"
+    },
+    {
+      "code": "D-TMC",
+      "field_name": "Time-Matched Coverage",
+      "definition": "Share of a workload’s energy whose carbon factor had hourly or finer resolution (FTR) and an overlapping FVW",
+      "unit": "%",
+      "frequency": "Daily / monthly",
+      "applies_to": "All",
+      "derived": true,
+      "section": "21.7.1"
+    },
+    {
+      "code": "RTI",
+      "field_name": "Initial Tier Selected",
+      "definition": "Tier the router first chose: cache, micro, workhorse, or frontier. The tier that finally served the call stays in MTR (§21.2)",
+      "unit": "enum",
+      "frequency": "Per call",
+      "applies_to": "Chat, Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "RRC",
+      "field_name": "Routing Reason Code",
+      "definition": "Why that tier was chosen: cache hit, hard rule, classifier, carbon or thermal override, user or policy pin, or escalation",
+      "unit": "enum",
+      "frequency": "Per call",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "RPS",
+      "field_name": "Predicted Success",
+      "definition": "The router’s calibrated probability that the selected tier meets the quality floor",
+      "unit": "ratio 0–1",
+      "frequency": "Per call",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "RCL",
+      "field_name": "Router Latency",
+      "definition": "Time spent in Tier 0 and Tier 1 before dispatch to a model",
+      "unit": "ms",
+      "frequency": "Per call",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "RCE",
+      "field_name": "Router Energy",
+      "definition": "Energy used by the routing step itself; measured where the router has its own host, otherwise modeled from RCL and host power",
+      "unit": "J",
+      "frequency": "Per call",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "SCH",
+      "field_name": "Semantic Cache Hit",
+      "definition": "Whether the response came from an exact or semantic cache, with the similarity score of the match",
+      "unit": "bool + 0–1",
+      "frequency": "Per call",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "LBG",
+      "field_name": "Latency Budget",
+      "definition": "Latency limit declared for the workload class; a hard constraint on the routing decision",
+      "unit": "ms",
+      "frequency": "Per workload",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "LAM",
+      "field_name": "Effective Energy Price",
+      "definition": "The energy price λ applied to the decision: tariff plus internal carbon price × grid intensity, scaled by thermal pressure (§21.8.2)",
+      "unit": "$/kWh",
+      "frequency": "Per call",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "EVT",
+      "field_name": "Escalation Event",
+      "definition": "Whether a lower tier was aborted and re-routed upward, and the trigger: entropy, validation failure, timeout, or user regenerate",
+      "unit": "bool + enum",
+      "frequency": "Per call",
+      "applies_to": "Chat, Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "EWT",
+      "field_name": "Escalation Wasted Tokens",
+      "definition": "Tokens the aborted tier generated before escalation",
+      "unit": "tokens",
+      "frequency": "Per escalation",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "EWE",
+      "field_name": "Escalation Wasted Energy",
+      "definition": "Energy spent on the aborted attempt, charged to the routing decision rather than hidden",
+      "unit": "Wh",
+      "frequency": "Per escalation",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "TEN",
+      "field_name": "Early Token Entropy",
+      "definition": "Mean token entropy over the first k output tokens of the lower tier; the main escalation signal",
+      "unit": "nats",
+      "frequency": "Per call",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "SHD",
+      "field_name": "Shadow Sample Flag",
+      "definition": "Whether the call was sampled for opt-in shadow evaluation on another tier (§21.4)",
+      "unit": "bool",
+      "frequency": "Per call",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "RPV",
+      "field_name": "Router Policy Version",
+      "definition": "Version of the router model, thresholds, weights and quality judge in effect, so every decision can be audited and reproduced",
+      "unit": "string",
+      "frequency": "Per call",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.8.1"
+    },
+    {
+      "code": "D-RSV",
+      "field_name": "Routing Energy Savings",
+      "definition": "Counterfactual energy had the call run on the default tier, minus actual energy including RCE and EWE",
+      "unit": "Wh, gCO2e",
+      "frequency": "Daily",
+      "applies_to": "Infra",
+      "derived": true,
+      "section": "21.8.1"
+    },
+    {
+      "code": "D-ROR",
+      "field_name": "Router Overhead Ratio",
+      "definition": "Total router energy (RCE) divided by gross energy saved before router cost. Design invariant: at or below 0.05",
+      "unit": "ratio",
+      "frequency": "Daily",
+      "applies_to": "Infra",
+      "derived": true,
+      "section": "21.8.1"
+    },
+    {
+      "code": "D-ESR",
+      "field_name": "Escalation Rate",
+      "definition": "Share of down-tiered calls that escalated",
+      "unit": "%",
+      "frequency": "Daily",
+      "applies_to": "Infra",
+      "derived": true,
+      "section": "21.8.1"
+    },
+    {
+      "code": "D-ECE",
+      "field_name": "Router Calibration Error",
+      "definition": "Expected calibration error of RPS measured against shadow-evaluation outcomes",
+      "unit": "0–1",
+      "frequency": "Weekly",
+      "applies_to": "Infra",
+      "derived": true,
+      "section": "21.8.1"
+    },
+    {
+      "code": "D-RQR",
+      "field_name": "Routing Quality Regret",
+      "definition": "Share of shadow-sampled, down-tiered calls whose output fell below the parity threshold and was not escalated",
+      "unit": "%",
+      "frequency": "Weekly",
+      "applies_to": "Infra",
+      "derived": true,
+      "section": "21.8.1"
+    },
+    {
+      "code": "APW",
+      "field_name": "Accelerator Power Draw",
+      "definition": "Instantaneous board power of the accelerator (NVIDIA DCGM/NVML, AMD SMI, Intel XPU Manager, or cloud runtime equivalent)",
+      "unit": "W",
+      "frequency": "1–10 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "AEC",
+      "field_name": "Accelerator Energy Counter",
+      "definition": "Cumulative energy from the device’s hardware counter; preferred over integrating APW",
+      "unit": "mJ",
+      "frequency": "1–10 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "APL",
+      "field_name": "Accelerator Power Limit",
+      "definition": "Enforced power cap and the default cap, so deliberate power capping can be credited as an efficiency action",
+      "unit": "W",
+      "frequency": "On change",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "ACK",
+      "field_name": "Clock Frequencies",
+      "definition": "Compute and memory clocks against their maximums",
+      "unit": "MHz",
+      "frequency": "1–10 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "ATR",
+      "field_name": "Throttle Reasons",
+      "definition": "Active causes limiting clocks (power cap, GPU or memory thermal, hardware slowdown) and time spent throttled",
+      "unit": "bitmask, s",
+      "frequency": "1–10 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "ATM",
+      "field_name": "Accelerator Temperatures",
+      "definition": "Core and memory (HBM) temperatures and the device’s slowdown threshold",
+      "unit": "°C",
+      "frequency": "1–10 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "SMA",
+      "field_name": "Compute Activity",
+      "definition": "Share of time compute units and tensor pipes are actually active. A truer utilization measure than kernel-busy time, which reports a device as fully busy whenever any kernel runs",
+      "unit": "%",
+      "frequency": "1–60 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "MBW",
+      "field_name": "Memory Bandwidth Activity",
+      "definition": "Share of time the device memory interface is busy. Token generation is usually memory-bound, so this predicts per-token energy",
+      "unit": "%",
+      "frequency": "1–60 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "MEM",
+      "field_name": "Device Memory Used",
+      "definition": "Accelerator memory in use against capacity",
+      "unit": "GB",
+      "frequency": "1–60 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "ICX",
+      "field_name": "Interconnect Traffic",
+      "definition": "Accelerator-to-accelerator (NVLink, Infinity Fabric, ICI) and PCIe traffic",
+      "unit": "GB/s",
+      "frequency": "1–60 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "ERR",
+      "field_name": "Reliability Events",
+      "definition": "Correctable and uncorrectable memory errors, retired or remapped memory rows, and fatal device errors",
+      "unit": "count",
+      "frequency": "On event / hourly",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "PTN",
+      "field_name": "Partition Profile",
+      "definition": "Hardware partition serving the workload (MIG slice, vGPU profile, or whole device) and its share, used to apportion device energy among tenants",
+      "unit": "enum + share",
+      "frequency": "On change",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.1"
+    },
+    {
+      "code": "QDP",
+      "field_name": "Queue Depth",
+      "definition": "Requests waiting to be scheduled on the replica",
+      "unit": "count",
+      "frequency": "1–15 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.2"
+    },
+    {
+      "code": "KVU",
+      "field_name": "KV-Cache Utilization",
+      "definition": "Share of key-value cache blocks in use; high values precede preemption and wasted recomputation",
+      "unit": "%",
+      "frequency": "1–15 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.2"
+    },
+    {
+      "code": "BSZ",
+      "field_name": "Running Batch Size",
+      "definition": "Sequences in the running batch; larger batches lower energy per token",
+      "unit": "count",
+      "frequency": "1–15 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.2"
+    },
+    {
+      "code": "TFT",
+      "field_name": "Time to First Token",
+      "definition": "Latency to the first output token, dominated by prompt processing. Server-side where available, client-side from the chat plugin otherwise",
+      "unit": "ms",
+      "frequency": "Per call",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.9.2"
+    },
+    {
+      "code": "TPT",
+      "field_name": "Time per Output Token",
+      "definition": "Mean time between output tokens during generation",
+      "unit": "ms",
+      "frequency": "Per call",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.9.2"
+    },
+    {
+      "code": "QNT",
+      "field_name": "Numeric Precision",
+      "definition": "Precision of the deployed model’s weights and activations (BF16, FP8, INT8, INT4, FP4)",
+      "unit": "enum",
+      "frequency": "Per deployment",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.2"
+    },
+    {
+      "code": "SPD",
+      "field_name": "Speculative Acceptance",
+      "definition": "Share of draft tokens accepted by the target model where speculative decoding is used",
+      "unit": "%",
+      "frequency": "Per call / hourly",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.2"
+    },
+    {
+      "code": "NPW",
+      "field_name": "Node Power",
+      "definition": "Whole-server input power, including CPUs, memory, fans, network cards and power-supply losses (DMTF Redfish, IPMI DCMI)",
+      "unit": "W",
+      "frequency": "10–60 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "CPE",
+      "field_name": "CPU Package Energy",
+      "definition": "CPU and DRAM energy from RAPL counters, collected through Kepler or a node exporter",
+      "unit": "J",
+      "frequency": "10–60 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "FAN",
+      "field_name": "Fan Speed",
+      "definition": "Fan speed as a share of maximum. Fan power rises steeply with speed, so this signals air-cooling overhead",
+      "unit": "% / RPM",
+      "frequency": "10–60 s",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "PSE",
+      "field_name": "Power Supply Efficiency",
+      "definition": "Power-supply output divided by input",
+      "unit": "%",
+      "frequency": "1–15 min",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "RKP",
+      "field_name": "Rack Power vs. Provisioned",
+      "definition": "Measured rack draw against provisioned capacity",
+      "unit": "kW, %",
+      "frequency": "1–5 min",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "PUE",
+      "field_name": "Interval PUE",
+      "definition": "Total facility energy divided by IT energy over the interval (ISO/IEC 30134-2). Replaces annual defaults in FAC (§8.8.1) where available",
+      "unit": "ratio",
+      "frequency": "15 min–hourly",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "WUE",
+      "field_name": "Interval WUE",
+      "definition": "Site water use divided by IT energy (ISO/IEC 30134-9). Replaces water defaults (§4.3) where available",
+      "unit": "L/kWh",
+      "frequency": "Hourly–daily",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "INL",
+      "field_name": "Inlet Air Temperature",
+      "definition": "Server or rack inlet temperature, judged against the ASHRAE recommended envelope",
+      "unit": "°C",
+      "frequency": "1–5 min",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "CLT",
+      "field_name": "Coolant Loop State",
+      "definition": "Liquid-cooling supply and return temperatures and flow rate at the coolant distribution unit",
+      "unit": "°C, L/min",
+      "frequency": "1–5 min",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "CHD",
+      "field_name": "Cooling Headroom",
+      "definition": "Remaining cooling capacity of the hall or loop",
+      "unit": "%",
+      "frequency": "1–5 min",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "WBT",
+      "field_name": "Outdoor Wet-Bulb Temperature",
+      "definition": "Ambient wet-bulb temperature at the site. It drives chiller efficiency and evaporative water use, so it forecasts PUE and WUE",
+      "unit": "°C",
+      "frequency": "15 min–hourly",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "DRS",
+      "field_name": "Demand-Response State",
+      "definition": "Whether a grid demand-response or curtailment event is active for the site, and the reduction requested (OpenADR)",
+      "unit": "enum, kW",
+      "frequency": "On event",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.9.3"
+    },
+    {
+      "code": "D-EPT",
+      "field_name": "Energy per Token",
+      "definition": "Measured energy per token, split into prompt processing and generation, for each model × hardware × precision × batch-size band. Built from AEC or NPW and token counts. Replaces modeled per-token rates (§8.7) where available and feeds the router (§21.8.2)",
+      "unit": "J/token",
+      "frequency": "Hourly",
+      "applies_to": "Infra",
+      "derived": true,
+      "section": "21.9.4"
+    },
+    {
+      "code": "D-TPI",
+      "field_name": "Thermal Pressure Index",
+      "definition": "Composite of throttled time (ATR), temperature margin to slowdown (ATM) and cooling headroom (CHD). Raises the router’s energy price for that pool",
+      "unit": "0–1",
+      "frequency": "1–5 min",
+      "applies_to": "Infra",
+      "derived": true,
+      "section": "21.9.4"
+    },
+    {
+      "code": "D-HHS",
+      "field_name": "Hardware Health Score",
+      "definition": "Predicted remaining reliable life from ERR trends, thermal history and age. Feeds refresh decisions (RCP, §8.8.8) and the lifecycle record (§22.8)",
+      "unit": "0–100",
+      "frequency": "Daily",
+      "applies_to": "Infra",
+      "derived": true,
+      "section": "21.9.4"
+    },
+    {
+      "code": "D-STR",
+      "field_name": "Stranded Power",
+      "definition": "Provisioned but unused power capacity (from RKP); the facility counterpart of idle compute (IDC, §21.2)",
+      "unit": "kW",
+      "frequency": "Daily",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.9.4"
+    },
+    {
+      "code": "SNR",
+      "field_name": "Sensor Descriptor ID",
+      "definition": "Unique identifier of a registered sensor type",
+      "unit": "string",
+      "frequency": "Static",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.9.5"
+    },
+    {
+      "code": "QKD",
+      "field_name": "Quantity Kind",
+      "definition": "What is measured, as a QUDT quantity-kind identifier (power, temperature, flow, and so on)",
+      "unit": "URI",
+      "frequency": "Static",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.9.5"
+    },
+    {
+      "code": "UCM",
+      "field_name": "Unit of Measure",
+      "definition": "UCUM unit code, such as W, Cel or L/min",
+      "unit": "code",
+      "frequency": "Static",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.9.5"
+    },
+    {
+      "code": "SCP",
+      "field_name": "Scope Level",
+      "definition": "Component, device, node, rack, row, hall, site, or grid",
+      "unit": "enum",
+      "frequency": "Static",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.9.5"
+    },
+    {
+      "code": "ACC",
+      "field_name": "Measurement Uncertainty",
+      "definition": "Stated accuracy, which sets the reading’s confidence tier (§8.1–§8.3); calibration is tracked with SCT (§20.5)",
+      "unit": "± % or unit",
+      "frequency": "Per calibration",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.9.5"
+    },
+    {
+      "code": "SMP",
+      "field_name": "Sampling Interval",
+      "definition": "Native sampling period and how readings are aggregated (mean, max, or counter delta)",
+      "unit": "s + enum",
+      "frequency": "Static",
+      "applies_to": "All",
+      "derived": false,
+      "section": "21.9.5"
     },
     {
       "code": "REN",

@@ -2,7 +2,13 @@
 
 ## Specification
 
-- [`stardust-spec-v1.4.docx`](stardust-spec-v1.4.docx): **current.** *AIForE Sustainable Ecosystems SDK with Telemetry for Big Data*, product specification v1.4 (draft).
+- [`stardust-spec-v1.6.docx`](stardust-spec-v1.6.docx): **current.** *AIForE Sustainable Ecosystems SDK with Telemetry for Big Data*, product specification v1.6 (draft).
+  - New in v1.6 (merged from Telemetry Specification T1.4 and the T1.5 time patch):
+    - §7, interval, factor-resolution, price, demand-charge and matching fields
+    - §21.7, the time dimension: fields `IVL`, `FTR`, `FVW`, `FBS`, `DMD`, `PKD`, `HMS`, `D-DCC` and `D-TMC`, and a new §21.7.4 on temporal resolution and matching rules
+    - §21.8, energy-aware routing telemetry and method
+    - §21.9, accelerator, node and facility runtime telemetry
+- [`stardust-spec-v1.4.docx`](stardust-spec-v1.4.docx): the previous version, kept for reference.
   - New in v1.3:
     - §8.8.8, component-level embodied carbon and hardware refresh cycles
     - §11.5, harmonization rules: reuse OpenTelemetry `hw.*` and `host.*` and DMTF Redfish first, and propose vendor-neutral names upstream
@@ -13,7 +19,8 @@
     - §23, the MCP interface: Subscriber reporting, Provider insights and Operator lifecycle servers, with their tools, OAuth scopes and response conventions
     - §12.2 and §22.8.2 now say that write tools exist only on the operator server
 - [`stardust-spec-v1.2.docx`](stardust-spec-v1.2.docx): the previous version, kept for reference.
-- [`stardust-telemetry-spec-T1.2.docx`](stardust-telemetry-spec-T1.2.docx): the Telemetry Specification, a subset of v1.4 holding only the telemetry sections, for editing on its own. Edits merge back into the master with [`tools/stardust_telemetry_sync.py`](tools/stardust_telemetry_sync.py).
+- [`stardust-telemetry-spec-T1.5.docx`](stardust-telemetry-spec-T1.5.docx): the Telemetry Specification, a subset of v1.6 holding only the telemetry sections, for editing on its own. Edits merge back into the master with [`tools/stardust_telemetry_sync.py`](tools/stardust_telemetry_sync.py).
+- [`stardust-telemetry-spec-T1.2.docx`](stardust-telemetry-spec-T1.2.docx): the earlier Telemetry Specification (a subset of v1.4), kept for reference.
 - [`stardust-summary.pdf`](stardust-summary.pdf): four-page project summary with the data-flow, marketplace and right-sizing diagrams (written for v0.9).
 
 Section references in the code (like `§8.4`) point to the spec. Every version since v0.9 has kept earlier section numbers and only inserted new sections, so older references are still correct.
@@ -21,6 +28,10 @@ Section references in the code (like `§8.4`) point to the spec. Every version s
 ### Machine-readable spec files
 
 `tools/stardust_telemetry_sync.py export` writes three files into [`schema/`](../schema/): the spec version, every field code and every MCP tool. They're generated from the spec, so change the spec and re-export rather than editing them (see [`schema/README.md`](../schema/README.md)).
+
+## RFCs
+
+- [`rfc/`](rfc/): proposed open standards, published for public comment. [RFC 0001](rfc/0001-unified-telemetry.md), the unified telemetry specification, is open for 60 days of comment.
 
 ## Architecture
 
