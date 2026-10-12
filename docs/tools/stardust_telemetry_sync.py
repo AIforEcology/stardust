@@ -431,7 +431,7 @@ def match_formatting(new_els, old_els, master_els, key):
 # ---------------------------------------------------------------- change detection
 # merge compares units by what a reader sees, not by raw XML: Word rewrites a document's XML on
 # every save (revision ids, split runs, dropped default values, widths copied onto every cell,
-# fonts, letter spacing and page-break settings dropped where a style already gives them,
+# fonts, letter spacing, kerning and page-break settings dropped where a style already gives them,
 # default section settings added or dropped)
 # without changing how it looks. A fingerprint records text plus visible formatting, with
 # defaults and inherited values filled in, so only real edits count as changes.
@@ -523,11 +523,15 @@ def switch(tag):
         return None if n is None else is_on(n)
     return read
 
-BREAKS = {(q(W, "br"), "page"): "\f", (q(W, "br"), None): "\n", (q(W, "br"), "textWrapping"): "\n", (q(W, "cr"), None): "\n"}
+BREAKS = {(q(W, "br"), "page"): "\f", (q(W, "br"), "column"): "\v",
+          (q(W, "br"), None): "\n", (q(W, "br"), "textWrapping"): "\n", (q(W, "cr"), None): "\n"}
 
-def letter_spacing(rpr):
-    n = rpr.find(q(W, "spacing"))
-    return None if n is None or n.get(q(W, "val")) is None else num(n.get(q(W, "val")))
+def run_value(tag):
+    """Reader for a run property's value, such as letter spacing or kerning, for `inherited`."""
+    def read(rpr):
+        n = rpr.find(q(W, tag))
+        return None if n is None or n.get(q(W, "val")) is None else num(n.get(q(W, "val")))
+    return read
 
 def section_print(sp):
     """A section break's visible settings, with Word's defaults filled in (header and footer
@@ -543,12 +547,12 @@ def section_print(sp):
             toggle(sp, "titlePg"), prop(sp, "w:vAlign", default="top"))
 
 # Named so a fingerprint can be read field by field; they compare like plain tuples.
-RunLook = namedtuple("RunLook", "font letter_spacing bold italic strike caps underline size colour highlight vert_align char_style")
+RunLook = namedtuple("RunLook", "font letter_spacing kerning bold italic strike caps underline size colour highlight vert_align char_style")
 ParaLook = namedtuple("ParaLook", "style align space_before space_after line line_rule indent_left indent_right "
                                   "hanging first_line numbering keep_next page_break_before section")
 
-def run_print(rpr, font="", spacing="0"):
-    return RunLook(font, "" if spacing == "0" else spacing, toggle(rpr, "b"), toggle(rpr, "i"), toggle(rpr, "strike"),
+def run_print(rpr, font="", spacing="0", kern="0"):
+    return RunLook(font, "" if spacing == "0" else spacing, "" if kern == "0" else kern, toggle(rpr, "b"), toggle(rpr, "i"), toggle(rpr, "strike"),
                    toggle(rpr, "caps"), prop(rpr, "w:u", default="none"), prop(rpr, "w:sz"), colour(prop(rpr, "w:color")),
                    prop(rpr, "w:highlight", default="none"), prop(rpr, "w:vertAlign", default="baseline"), prop(rpr, "w:rStyle"))
 
@@ -573,15 +577,16 @@ def para_print(p, ctx):
              section_print(ppr.find(q(W, "sectPr")) if ppr is not None else None))
     runs = []
     for r in p.iter(q(W, "r")):   # runs Word split or joined with the same formatting read as one
-        # text, with a page break as "\f" and a line break as "\n" (Word's lastRenderedPageBreak is a
-        # layout cache, not a break)
+        # text, with a page break as "\f", a column break as "\v" and a line break as "\n" (Word's
+        # lastRenderedPageBreak is a layout cache, not a break)
         t = "".join(BREAKS.get((c.tag, c.get(q(W, "type"))), "") if c.tag != q(W, "t") else (c.text or "") for c in r)
         if not t: continue
         rpr = r.find(q(W, "rPr"))
         rstyle = rpr.find(q(W, "rStyle")).get(q(W, "val")) if rpr is not None and rpr.find(q(W, "rStyle")) is not None else None
         styles = [x for x in (rstyle, pstyle) if x]
         font = inherited(ctx, rpr, styles, "rPr", font_name(ctx)) or WORD_FONT
-        f = run_print(rpr, font, inherited(ctx, rpr, styles, "rPr", letter_spacing) or "0")
+        f = run_print(rpr, font, inherited(ctx, rpr, styles, "rPr", run_value("spacing")) or "0",
+                      inherited(ctx, rpr, styles, "rPr", run_value("kern")) or "0")
         if runs and runs[-1][0] == f: runs[-1] = (f, runs[-1][1] + t)
         else: runs.append((f, t))
     return ("p", props, tuple(runs))
