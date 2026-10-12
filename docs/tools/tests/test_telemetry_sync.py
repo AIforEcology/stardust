@@ -97,7 +97,7 @@ STYLES = ('<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name 
           + '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/></w:style>')
 
 
-def make_docx(path, body, version="v1.5", extra_styles=""):
+def make_docx(path, body, version="v1.5", extra_styles="", theme_minor=None):
     doc = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
            f'<w:document xmlns:w="{W_NS}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
            f'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:body>'
@@ -126,6 +126,11 @@ def make_docx(path, body, version="v1.5", extra_styles=""):
                                '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>'),
         "word/document.xml": doc,
     }
+    if theme_minor:
+        a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        parts["word/theme/theme1.xml"] = (f'<a:theme xmlns:a="{a}"><a:themeElements><a:fontScheme name="t">'
+                                          f'<a:majorFont><a:latin typeface="Arial"/></a:majorFont>'
+                                          f'<a:minorFont><a:latin typeface="{theme_minor}"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>')
     with zipfile.ZipFile(path, "w") as z:
         for name, data in parts.items():
             z.writestr(name, data)
@@ -234,6 +239,8 @@ FORMAT_EDITS = {
     "paragraph spacing": (P("Time intro."), P("Time intro.").replace('w:after="140"', 'w:after="400"')),
     "table header colour": (TBL(FIELDS), TBL(FIELDS, fill="7A1E1E")),
     "bullet to plain text": (BUL(" Forecasts are kept.", "Forecast integrity."), P(" Forecasts are kept.", lead="Forecast integrity.")),
+    "font": (P("Time intro."), P("Time intro.").replace("<w:rPr>", '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>')),
+    "keep with next": (P("Time intro."), P("Time intro.").replace("<w:pPr>", "<w:pPr><w:keepNext/>")),
 }
 
 
@@ -243,9 +250,9 @@ def test_formatting_only_change_is_merged(master, tmp_path, capsys, edit):
     assert old in MASTER_721
     out = merge(master, make_docx(tmp_path / "sub.docx", MASTER_721.replace(old, new)), tmp_path / "out.docx", capsys)
     assert "§21.7: UPDATED (formatting only)" in out and "Master version: v1.5 -> v1.6" in out
-    after = doc(tmp_path / "out.docx")
-    after_print = sync.fingerprint(list(after.find(W + "body")), {("1", "0"): ("720", "360")})
-    new_print = sync.fingerprint(list(etree.fromstring(f'<w:body xmlns:w="{W_NS}">{new}</w:body>')), {("1", "0"): ("720", "360")})
+    look = sync.doc_context(sync.read_docx(master))
+    after_print = sync.fingerprint(list(doc(tmp_path / "out.docx").find(W + "body")), look)
+    new_print = sync.fingerprint(list(etree.fromstring(f'<w:body xmlns:w="{W_NS}">{new}</w:body>')), look)
     assert new_print[0] in after_print
 
 
@@ -259,13 +266,15 @@ def word_resave(xml):
     xml = xml.replace('<w:ind w:left="720" w:hanging="360"/>', "")         # bullet indent equal to the list's
     xml = xml.replace('<w:b w:val="1"/>', "<w:b/>").replace(MASTER_FILL, MASTER_FILL.upper())    # spelling of values
     xml = re.sub(r'<w:tcW w:w="\d+" w:type="dxa"/>', '<w:tcW w:w="0" w:type="auto"/>', xml)        # widths from the grid
+    xml = xml.replace("<w:rPr>", '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>')  # the font Word uses anyway
+    xml = xml.replace("<w:pPr>", '<w:pPr><w:keepNext w:val="0"/>')                                          # keep-with-next already off
     xml = xml.replace('<w:tblW w:w="9600" w:type="dxa"/>', '<w:tblW w:w="9600.0" w:type="dxa"/><w:jc w:val="left"/>')
     return xml
 
 
 def test_word_resave_markup_is_not_a_change(master, tmp_path, capsys):
     noisy = word_resave(MASTER_721)
-    assert noisy != MASTER_721 and "proofErr" in noisy and "<w:ind" not in noisy and "9600.0" in noisy
+    assert noisy != MASTER_721 and "proofErr" in noisy and "<w:ind" not in noisy and "9600.0" in noisy and "rFonts" in noisy
     out = merge(master, make_docx(tmp_path / "sub.docx", noisy), tmp_path / "out.docx", capsys)
     assert "§21.7: unchanged" in out and "Master version" not in out
 
@@ -274,6 +283,47 @@ def test_word_resave_markup_does_not_hide_a_real_change(master, tmp_path, capsys
     noisy = word_resave(MASTER_721).replace(MASTER_FILL.upper(), "7A1E1E")   # recolour the table header
     out = merge(master, make_docx(tmp_path / "sub.docx", noisy), tmp_path / "out.docx", capsys)
     assert "§21.7: UPDATED (formatting only)" in out
+
+
+FONT_STYLES = ('<w:style w:type="paragraph" w:styleId="Body"><w:name w:val="Body"/><w:basedOn w:val="BodyBase"/></w:style>'
+               '<w:style w:type="paragraph" w:styleId="BodyBase"><w:name w:val="Body Base"/>'
+               '<w:pPr><w:keepNext/></w:pPr><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi"/></w:rPr></w:style>')
+
+
+def styled_intro(direct_font=None, direct_keep=None):
+    rf = f'<w:rFonts w:ascii="{direct_font}" w:hAnsi="{direct_font}"/>' if direct_font else ""
+    kn = f'<w:keepNext w:val="{direct_keep}"/>' if direct_keep is not None else ""
+    return (f'<w:p><w:pPr><w:pStyle w:val="Body"/>{kn}<w:spacing w:after="140"/></w:pPr>'
+            f'<w:r><w:rPr>{rf}<w:sz w:val="21"/></w:rPr><w:t>Time intro.</w:t></w:r></w:p>')
+
+
+def test_fonts_and_keep_with_next_are_read_through_styles_and_theme(tmp_path):
+    # Body is based on BodyBase, which sets keep-with-next and the theme's minor font (Georgia)
+    look = sync.doc_context(sync.read_docx(make_docx(tmp_path / "m.docx", "", extra_styles=FONT_STYLES, theme_minor="Georgia")))
+    body = lambda xml: list(etree.fromstring(f'<w:body xmlns:w="{W_NS}">{xml}</w:body>'))
+    inherited, = sync.fingerprint(body(styled_intro()), look)
+    spelled_out, = sync.fingerprint(body(styled_intro(direct_font="Georgia", direct_keep="1")), look)
+    overridden, = sync.fingerprint(body(styled_intro(direct_font="Arial", direct_keep="0")), look)
+    assert inherited == spelled_out                  # writing out what the style gives changes nothing
+    assert inherited != overridden
+    assert inherited[2][0][0][0] == "Georgia" and inherited[1][-1] is True
+    assert overridden[2][0][0][0] == "Arial" and overridden[1][-1] is False
+    # with no font anywhere, Word uses Times New Roman
+    plain, = sync.fingerprint(body(P("Time intro.")), sync.doc_context(sync.read_docx(make_docx(tmp_path / "n.docx", ""))))
+    assert plain[2][0][0][0] == "Times New Roman"
+
+
+def test_content_is_compared_as_it_will_look_in_the_master(tmp_path, capsys):
+    # the sub-document's default font is Georgia, but its paragraphs don't set a font of their own:
+    # once merged they render in the master's font, exactly as the master's copy does
+    master = make_docx(tmp_path / "master.docx", MASTER_BODY)
+    sub = make_docx(tmp_path / "sub.docx", MASTER_721)
+    parts = sync.read_docx(sub)
+    parts["word/styles.xml"] = parts["word/styles.xml"].replace(
+        b"<w:style ", b'<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/></w:rPr></w:rPrDefault></w:docDefaults><w:style ', 1)
+    sync.write_docx(parts, sub)
+    out = merge(master, sub, tmp_path / "out.docx", capsys, dry=True)
+    assert "§21.7: unchanged" in out
 
 
 # --- merge: styles ----------------------------------------------------------------------------

@@ -429,9 +429,10 @@ def match_formatting(new_els, old_els, master_els, key):
 
 # ---------------------------------------------------------------- change detection
 # merge compares units by what a reader sees, not by raw XML: Word rewrites a document's XML on
-# every save (revision ids, split runs, dropped default values, widths copied onto every cell)
-# without changing how it looks. A fingerprint records text plus visible formatting, with
-# defaults filled in, so only real edits count as changes.
+# every save (revision ids, split runs, dropped default values, widths copied onto every cell,
+# fonts and keep-with-next dropped where a style already gives them) without changing how it
+# looks. A fingerprint records text plus visible formatting, with defaults and inherited values
+# filled in, so only real edits count as changes.
 def num(v):
     try:
         f = float(v); return str(int(f)) if f == int(f) else str(f)
@@ -465,30 +466,88 @@ def list_indents(parts):
             out[(m.get(q(W, "numId")), lvl.get(q(W, "ilvl")))] = (prop(ind, ".", "left", "0"), prop(ind, ".", "hanging", "0"))
     return out
 
-def run_print(rpr):
-    return (toggle(rpr, "b"), toggle(rpr, "i"), toggle(rpr, "strike"), toggle(rpr, "caps"), prop(rpr, "w:u", default="none"),
+WORD_FONT = "Times New Roman"   # what Word renders when no style, default or theme sets a font
+A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+def doc_context(parts):
+    """What a document's paragraphs inherit: list indents, styles, defaults and theme fonts."""
+    root = parse(parts["word/styles.xml"]) if "word/styles.xml" in parts else None
+    styles = {st.get(q(W, "styleId")): st for st in (root.iter(q(W, "style")) if root is not None else [])}
+    default_p = next((st.get(q(W, "styleId")) for st in (root.iter(q(W, "style")) if root is not None else [])
+                      if st.get(q(W, "type")) == "paragraph" and is_on_attr(st, "default")), None)
+    theme = {}
+    for name in parts:
+        if name.startswith("word/theme/") and name.endswith(".xml"):
+            t = parse(parts[name])
+            for kind in ("major", "minor"):
+                latin = t.find(f".//{{{A_NS}}}{kind}Font/{{{A_NS}}}latin")
+                if latin is not None: theme[kind] = latin.get("typeface")
+            break
+    docdef = root.find(q(W, "docDefaults")) if root is not None else None
+    return {"lists": list_indents(parts), "styles": styles, "default_p": default_p, "theme": theme,
+            "rdef": docdef.find("w:rPrDefault/w:rPr", NS) if docdef is not None else None,
+            "pdef": docdef.find("w:pPrDefault/w:pPr", NS) if docdef is not None else None}
+
+def is_on_attr(el, attr):
+    return el.get(q(W, attr)) in ("1", "true", "on")
+
+def inherited(ctx, direct, style_ids, tag, read):
+    """First value `read` finds: on the element, then up each style's basedOn chain, then the defaults."""
+    if direct is not None and read(direct) is not None: return read(direct)
+    for sid in style_ids:
+        for _ in range(20):                       # basedOn chains are short; this guards loops
+            st = ctx["styles"].get(sid)
+            if st is None: break
+            props = st.find(q(W, tag))
+            if props is not None and read(props) is not None: return read(props)
+            based = st.find(q(W, "basedOn"))
+            sid = based.get(q(W, "val")) if based is not None else None
+    d = ctx["rdef"] if tag == "rPr" else ctx["pdef"]
+    return read(d) if d is not None else None
+
+def font_name(ctx):
+    def read(rpr):
+        rf = rpr.find(q(W, "rFonts"))
+        if rf is None: return None
+        th = rf.get(q(W, "asciiTheme")) or rf.get(q(W, "hAnsiTheme"))
+        if th: return ctx["theme"].get("major" if th.startswith("major") else "minor")
+        return rf.get(q(W, "ascii")) or rf.get(q(W, "hAnsi"))
+    return read
+
+def keep_next(ppr):
+    n = ppr.find(q(W, "keepNext"))
+    return None if n is None else is_on(n)
+
+def run_print(rpr, font=""):
+    return (font, toggle(rpr, "b"), toggle(rpr, "i"), toggle(rpr, "strike"), toggle(rpr, "caps"), prop(rpr, "w:u", default="none"),
             prop(rpr, "w:sz"), colour(prop(rpr, "w:color")), prop(rpr, "w:highlight", default="none"),
             prop(rpr, "w:vertAlign", default="baseline"), prop(rpr, "w:rStyle"))
 
-def para_print(p, lists):
+def para_print(p, ctx):
     ppr = p.find(q(W, "pPr"))
+    pstyle = (ppr.find(q(W, "pStyle")).get(q(W, "val")) if ppr is not None and ppr.find(q(W, "pStyle")) is not None
+              else ctx["default_p"])
     numbering = None
     if ppr is not None and ppr.find(q(W, "numPr")) is not None:
         numbering = (prop(ppr, "w:numPr/w:numId", default="0"), prop(ppr, "w:numPr/w:ilvl"))
         if not numbering[0]: numbering = None
     left, hanging = prop(ppr, "w:ind", "left", "0"), prop(ppr, "w:ind", "hanging", "0")
     if numbering and ppr.find(q(W, "ind")) is None:   # a bullet without its own indent takes its list's
-        left, hanging = lists.get((numbering[0], numbering[1] or "0"), ("", ""))
+        left, hanging = ctx["lists"].get((numbering[0], numbering[1] or "0"), ("", ""))
     rule = prop(ppr, "w:spacing", "lineRule", "auto")
     props = (prop(ppr, "w:pStyle", default="Normal"), prop(ppr, "w:jc", default="left"),
              prop(ppr, "w:spacing", "before", "0"), prop(ppr, "w:spacing", "after", "0"),
              prop(ppr, "w:spacing", "line", "240" if not rule else ""), rule,
-             left, prop(ppr, "w:ind", "right", "0"), hanging, prop(ppr, "w:ind", "firstLine", "0"), numbering)
+             left, prop(ppr, "w:ind", "right", "0"), hanging, prop(ppr, "w:ind", "firstLine", "0"), numbering,
+             bool(inherited(ctx, ppr, [pstyle], "pPr", keep_next)))
     runs = []
     for r in runs_of(p):   # runs Word split or joined with the same formatting read as one
         t = "".join(x.text or "" for x in r.iter(q(W, "t")))
         if not t: continue
-        f = run_print(r.find(q(W, "rPr")))
+        rpr = r.find(q(W, "rPr"))
+        rstyle = rpr.find(q(W, "rStyle")).get(q(W, "val")) if rpr is not None and rpr.find(q(W, "rStyle")) is not None else None
+        font = inherited(ctx, rpr, [x for x in (rstyle, pstyle) if x], "rPr", font_name(ctx)) or WORD_FONT
+        f = run_print(rpr, font)
         if runs and runs[-1][0] == f: runs[-1] = (f, runs[-1][1] + t)
         else: runs.append((f, t))
     return ("p", props, tuple(runs))
@@ -499,7 +558,7 @@ def border(el, side):
 
 SIDES = ("top", "left", "bottom", "right", "insideH", "insideV")
 
-def table_print(t, lists):
+def table_print(t, ctx):
     tp = t.find(q(W, "tblPr"))
     tb = tp.find(q(W, "tblBorders")) if tp is not None else None
     grid = [int(float(g.get(q(W, "w")) or 0)) for g in t.findall("w:tblGrid/w:gridCol", NS)]
@@ -517,15 +576,16 @@ def table_print(t, lists):
             vm = cp.find(q(W, "vMerge")) if cp is not None else None
             merge_ = (vm.get(q(W, "val")) or "continue") if vm is not None else ""
             cells.append((width, colour(prop(cp, "w:shd", "fill")), str(span), merge_,
-                          tuple(border(cb, s) for s in SIDES[:4]), tuple(para_print(p, lists) for p in tc.findall(q(W, "p")))))
+                          tuple(border(cb, s) for s in SIDES[:4]), tuple(para_print(p, ctx) for p in tc.findall(q(W, "p")))))
         rows.append((toggle(tr.find(q(W, "trPr")), "tblHeader"), tuple(cells)))
     return ("tbl", props, tuple(rows))
 
-def fingerprint(elements, lists):
+def fingerprint(elements, ctx):
+    """Text and visible formatting of master-body elements, as they render under `ctx`."""
     out = []
     for e in elements:
-        if e.tag == q(W, "p"): out.append(para_print(e, lists))
-        elif e.tag == q(W, "tbl"): out.append(table_print(e, lists))
+        if e.tag == q(W, "p"): out.append(para_print(e, ctx))
+        elif e.tag == q(W, "tbl"): out.append(table_print(e, ctx))
     return out
 
 # ---------------------------------------------------------------- merge
@@ -548,7 +608,8 @@ def merge(master_path, sub_path, out_path, bump=True, dry=False, keep_formatting
     for key, _ in UNITS:
         if key not in sub_keys: warn.append(f"Unit {key} missing from sub-document; master copy left unchanged.")
 
-    mlists, slists = list_indents(mp), list_indents(sp)
+    # both sides are compared as they will look in the master, whose styles the merged content takes on
+    look = doc_context(mp)
     mrels_root, mrels = rels_map(mp)
     _, srels = rels_map(sp)
     used_ids = {p.get(q(W14, "paraId")) for p in mroot.iter(q(W, "p")) if p.get(q(W14, "paraId"))}
@@ -619,7 +680,7 @@ def merge(master_path, sub_path, out_path, bump=True, dry=False, keep_formatting
         new_txt = "\n".join(text_of(e) for e in new_els)
         if mrg:
             old_txt = "\n".join(text_of(e) for e in mk[mrg[0]:mrg[1]])
-            same_look = fingerprint(mk[mrg[0]:mrg[1]], mlists) == fingerprint(new_els, slists)
+            same_look = fingerprint(mk[mrg[0]:mrg[1]], look) == fingerprint(new_els, look)
             if old_txt == new_txt and same_look:
                 report.append(f"  §{key}: unchanged"); continue
             old_heads = {heading_info(e)[1] for e in mk[mrg[0]:mrg[1]] if heading_info(e) and heading_info(e)[1]}
