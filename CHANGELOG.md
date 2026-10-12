@@ -11,6 +11,12 @@ Versions follow [Semantic Versioning](https://semver.org/). The format follows [
 ## Unreleased
 
 ### Added
+- **stardust-mcp 0.1.0** (new, `mcp/`, Python 3.10+): the Subscriber reporting MCP server (spec §23.3).
+  - Four read-only tools: `get_usage_summary`, `get_impact_summary`, `explain_metric`, `quote_credits` (carbon only, quote only).
+  - Authenticated with Core API keys as bearer tokens. Every answer is limited to the key's organization and user.
+  - Built on the official MCP Python SDK 2.x. Has its own CI job on Python 3.12.
+- **stardust-core:** `GET /v1/auth/principal` returns the organization, user and scopes a key grants. It's refused while subscriber auth is off.
+- Conformance: MCP servers built so far are checked against `schema/mcp-tools.json`, and tools not built yet are reported as a warning.
 - **stardust-core 0.3.0:** subscriber API keys and tenant isolation (spec §23.6, MCP plan step M1). Off by default.
   - `STARDUST_SUBSCRIBER_AUTH` = `off`, `optional` or `required`.
   - Keys belong to an organization, and optionally one user in it, and carry §23.6 scopes.

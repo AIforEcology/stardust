@@ -250,6 +250,18 @@ def create_app(
             "database": store.stats(),
         }
 
+    @app.get("/v1/auth/principal")
+    def whoami(caller: Optional[Principal] = Depends(principal)) -> dict:
+        """The organization, user and scopes a key grants, for services acting on a subscriber's
+        behalf (the MCP servers, docs/architecture/mcp.md). Refused when subscriber auth is off,
+        because every read would then be unscoped."""
+        if settings.subscriber_auth == "off":
+            raise AuthError(404, "not_found", "subscriber auth is off (STARDUST_SUBSCRIBER_AUTH)")
+        if caller is None:
+            raise AuthError(401, "unauthorized", "an API key is required (Authorization: Bearer <key>)")
+        return {"key_id": caller.key_id, "org_id": str(caller.org_id),
+                "user_id": str(caller.user_id) if caller.user_id else None, "scopes": sorted(caller.scopes)}
+
     @app.get("/v1/pricing/status")
     def pricing_status() -> dict:
         return refresher.status

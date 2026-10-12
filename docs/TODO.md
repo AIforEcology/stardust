@@ -72,10 +72,12 @@ Time-of-use, embodied carbon and hardware lifecycle ([time-embodied-lifecycle.md
 MCP interface ([mcp.md](architecture/mcp.md)):
 
 - [x] Decide where the MCP servers live: a new `mcp/` package
-- [ ] Approve an MCP SDK dependency (needed for M2)
+- [x] Approve an MCP SDK dependency: the official `mcp` Python SDK 2.x (needs Python 3.10+)
 - [x] M1: subscriber API keys with §23.6 scopes, and tenant isolation on Core's reads
 - [ ] Keys on ingestion and remediation endpoints, stamping the key's organization on events
-- [ ] M2: Subscriber reporting server, first tools
+- [x] M2a: Subscriber reporting server, first tools, with Core keys as bearer tokens
+- [ ] Choose an OAuth provider for the MCP servers
+- [ ] M2b: OAuth sign-in for the reporting server
 - [ ] M3: Provider insights server, first tools
 - [ ] M4: remaining reporting tools, as Core gains the data
 - [ ] M5: Operator lifecycle server (after L1)
