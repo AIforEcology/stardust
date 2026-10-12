@@ -430,9 +430,9 @@ def match_formatting(new_els, old_els, master_els, key):
 # ---------------------------------------------------------------- change detection
 # merge compares units by what a reader sees, not by raw XML: Word rewrites a document's XML on
 # every save (revision ids, split runs, dropped default values, widths copied onto every cell,
-# fonts and keep-with-next dropped where a style already gives them) without changing how it
-# looks. A fingerprint records text plus visible formatting, with defaults and inherited values
-# filled in, so only real edits count as changes.
+# fonts, letter spacing and page-break settings dropped where a style already gives them)
+# without changing how it looks. A fingerprint records text plus visible formatting, with
+# defaults and inherited values filled in, so only real edits count as changes.
 def num(v):
     try:
         f = float(v); return str(int(f)) if f == int(f) else str(f)
@@ -514,12 +514,19 @@ def font_name(ctx):
         return rf.get(q(W, "ascii")) or rf.get(q(W, "hAnsi"))
     return read
 
-def keep_next(ppr):
-    n = ppr.find(q(W, "keepNext"))
-    return None if n is None else is_on(n)
+def switch(tag):
+    """Reader for an on/off paragraph property such as keepNext, for `inherited`."""
+    def read(ppr):
+        n = ppr.find(q(W, tag))
+        return None if n is None else is_on(n)
+    return read
 
-def run_print(rpr, font=""):
-    return (font, toggle(rpr, "b"), toggle(rpr, "i"), toggle(rpr, "strike"), toggle(rpr, "caps"), prop(rpr, "w:u", default="none"),
+def letter_spacing(rpr):
+    n = rpr.find(q(W, "spacing"))
+    return None if n is None or n.get(q(W, "val")) is None else num(n.get(q(W, "val")))
+
+def run_print(rpr, font="", spacing="0"):
+    return (font, "" if spacing == "0" else spacing, toggle(rpr, "b"), toggle(rpr, "i"), toggle(rpr, "strike"), toggle(rpr, "caps"), prop(rpr, "w:u", default="none"),
             prop(rpr, "w:sz"), colour(prop(rpr, "w:color")), prop(rpr, "w:highlight", default="none"),
             prop(rpr, "w:vertAlign", default="baseline"), prop(rpr, "w:rStyle"))
 
@@ -539,15 +546,19 @@ def para_print(p, ctx):
              prop(ppr, "w:spacing", "before", "0"), prop(ppr, "w:spacing", "after", "0"),
              prop(ppr, "w:spacing", "line", "240" if not rule else ""), rule,
              left, prop(ppr, "w:ind", "right", "0"), hanging, prop(ppr, "w:ind", "firstLine", "0"), numbering,
-             bool(inherited(ctx, ppr, [pstyle], "pPr", keep_next)))
+             bool(inherited(ctx, ppr, [pstyle], "pPr", switch("keepNext"))),
+             bool(inherited(ctx, ppr, [pstyle], "pPr", switch("pageBreakBefore"))))
     runs = []
-    for r in runs_of(p):   # runs Word split or joined with the same formatting read as one
-        t = "".join(x.text or "" for x in r.iter(q(W, "t")))
+    for r in p.iter(q(W, "r")):   # runs Word split or joined with the same formatting read as one
+        # text, with a page break as "\f" (Word's lastRenderedPageBreak is a layout cache, not a break)
+        t = "".join((c.text or "") if c.tag == q(W, "t") else "\f" for c in r
+                    if c.tag == q(W, "t") or (c.tag == q(W, "br") and c.get(q(W, "type")) == "page"))
         if not t: continue
         rpr = r.find(q(W, "rPr"))
         rstyle = rpr.find(q(W, "rStyle")).get(q(W, "val")) if rpr is not None and rpr.find(q(W, "rStyle")) is not None else None
-        font = inherited(ctx, rpr, [x for x in (rstyle, pstyle) if x], "rPr", font_name(ctx)) or WORD_FONT
-        f = run_print(rpr, font)
+        styles = [x for x in (rstyle, pstyle) if x]
+        font = inherited(ctx, rpr, styles, "rPr", font_name(ctx)) or WORD_FONT
+        f = run_print(rpr, font, inherited(ctx, rpr, styles, "rPr", letter_spacing) or "0")
         if runs and runs[-1][0] == f: runs[-1] = (f, runs[-1][1] + t)
         else: runs.append((f, t))
     return ("p", props, tuple(runs))

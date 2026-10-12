@@ -241,6 +241,9 @@ FORMAT_EDITS = {
     "bullet to plain text": (BUL(" Forecasts are kept.", "Forecast integrity."), P(" Forecasts are kept.", lead="Forecast integrity.")),
     "font": (P("Time intro."), P("Time intro.").replace("<w:rPr>", '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>')),
     "keep with next": (P("Time intro."), P("Time intro.").replace("<w:pPr>", "<w:pPr><w:keepNext/>")),
+    "page break before": (P("Time intro."), P("Time intro.").replace("<w:pPr>", "<w:pPr><w:pageBreakBefore/>")),
+    "letter spacing": (P("Time intro."), P("Time intro.").replace("<w:rPr>", '<w:rPr><w:spacing w:val="20"/>')),
+    "page break in text": (P("Time intro."), P("Time intro.").replace("<w:t ", '<w:br w:type="page"/><w:t ')),
 }
 
 
@@ -267,7 +270,9 @@ def word_resave(xml):
     xml = xml.replace('<w:b w:val="1"/>', "<w:b/>").replace(MASTER_FILL, MASTER_FILL.upper())    # spelling of values
     xml = re.sub(r'<w:tcW w:w="\d+" w:type="dxa"/>', '<w:tcW w:w="0" w:type="auto"/>', xml)        # widths from the grid
     xml = xml.replace("<w:rPr>", '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>')  # the font Word uses anyway
-    xml = xml.replace("<w:pPr>", '<w:pPr><w:keepNext w:val="0"/>')                                          # keep-with-next already off
+    xml = xml.replace("<w:pPr>", '<w:pPr><w:keepNext w:val="0"/><w:pageBreakBefore w:val="0"/>')            # already off
+    xml = xml.replace("<w:sz ", '<w:spacing w:val="0"/><w:sz ')                                              # normal letter spacing
+    xml = xml.replace("</w:t></w:r>", '</w:t><w:lastRenderedPageBreak/></w:r>', 1)                          # a layout cache, not a break
     xml = xml.replace('<w:tblW w:w="9600" w:type="dxa"/>', '<w:tblW w:w="9600.0" w:type="dxa"/><w:jc w:val="left"/>')
     return xml
 
@@ -275,6 +280,7 @@ def word_resave(xml):
 def test_word_resave_markup_is_not_a_change(master, tmp_path, capsys):
     noisy = word_resave(MASTER_721)
     assert noisy != MASTER_721 and "proofErr" in noisy and "<w:ind" not in noisy and "9600.0" in noisy and "rFonts" in noisy
+    assert "pageBreakBefore" in noisy and '<w:spacing w:val="0"/>' in noisy and "lastRenderedPageBreak" in noisy
     out = merge(master, make_docx(tmp_path / "sub.docx", noisy), tmp_path / "out.docx", capsys)
     assert "§21.7: unchanged" in out and "Master version" not in out
 
@@ -287,30 +293,38 @@ def test_word_resave_markup_does_not_hide_a_real_change(master, tmp_path, capsys
 
 FONT_STYLES = ('<w:style w:type="paragraph" w:styleId="Body"><w:name w:val="Body"/><w:basedOn w:val="BodyBase"/></w:style>'
                '<w:style w:type="paragraph" w:styleId="BodyBase"><w:name w:val="Body Base"/>'
-               '<w:pPr><w:keepNext/></w:pPr><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi"/></w:rPr></w:style>')
+               '<w:pPr><w:keepNext/><w:pageBreakBefore/></w:pPr>'
+               '<w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi"/><w:spacing w:val="10"/></w:rPr></w:style>')
 
 
-def styled_intro(direct_font=None, direct_keep=None):
-    rf = f'<w:rFonts w:ascii="{direct_font}" w:hAnsi="{direct_font}"/>' if direct_font else ""
-    kn = f'<w:keepNext w:val="{direct_keep}"/>' if direct_keep is not None else ""
-    return (f'<w:p><w:pPr><w:pStyle w:val="Body"/>{kn}<w:spacing w:after="140"/></w:pPr>'
-            f'<w:r><w:rPr>{rf}<w:sz w:val="21"/></w:rPr><w:t>Time intro.</w:t></w:r></w:p>')
+def styled_intro(font=None, on=None, spacing=None):
+    rf = f'<w:rFonts w:ascii="{font}" w:hAnsi="{font}"/>' if font else ""
+    sp = f'<w:spacing w:val="{spacing}"/>' if spacing is not None else ""
+    flags = f'<w:keepNext w:val="{on}"/><w:pageBreakBefore w:val="{on}"/>' if on is not None else ""
+    return (f'<w:p><w:pPr><w:pStyle w:val="Body"/>{flags}<w:spacing w:after="140"/></w:pPr>'
+            f'<w:r><w:rPr>{rf}{sp}<w:sz w:val="21"/></w:rPr><w:t>Time intro.</w:t></w:r></w:p>')
 
 
-def test_fonts_and_keep_with_next_are_read_through_styles_and_theme(tmp_path):
-    # Body is based on BodyBase, which sets keep-with-next and the theme's minor font (Georgia)
+# readers for one paragraph's fingerprint: ("p", props, ((run format, text), ...))
+font_of = lambda fp: fp[2][0][0][0]
+letter_spacing_of = lambda fp: fp[2][0][0][1]
+keep_next_of, page_break_before_of = (lambda fp: fp[1][-2]), (lambda fp: fp[1][-1])
+
+
+def test_inherited_formatting_is_read_through_styles_and_theme(tmp_path):
+    # Body is based on BodyBase, which sets keep-with-next, page-break-before, letter spacing
+    # and the theme's minor font (Georgia)
     look = sync.doc_context(sync.read_docx(make_docx(tmp_path / "m.docx", "", extra_styles=FONT_STYLES, theme_minor="Georgia")))
     body = lambda xml: list(etree.fromstring(f'<w:body xmlns:w="{W_NS}">{xml}</w:body>'))
     inherited, = sync.fingerprint(body(styled_intro()), look)
-    spelled_out, = sync.fingerprint(body(styled_intro(direct_font="Georgia", direct_keep="1")), look)
-    overridden, = sync.fingerprint(body(styled_intro(direct_font="Arial", direct_keep="0")), look)
+    spelled_out, = sync.fingerprint(body(styled_intro(font="Georgia", on="1", spacing="10")), look)
+    overridden, = sync.fingerprint(body(styled_intro(font="Arial", on="0", spacing="0")), look)
     assert inherited == spelled_out                  # writing out what the style gives changes nothing
-    assert inherited != overridden
-    assert inherited[2][0][0][0] == "Georgia" and inherited[1][-1] is True
-    assert overridden[2][0][0][0] == "Arial" and overridden[1][-1] is False
-    # with no font anywhere, Word uses Times New Roman
+    assert (font_of(inherited), letter_spacing_of(inherited), keep_next_of(inherited), page_break_before_of(inherited)) == ("Georgia", "10", True, True)
+    assert (font_of(overridden), letter_spacing_of(overridden), keep_next_of(overridden), page_break_before_of(overridden)) == ("Arial", "", False, False)
+    # with nothing set anywhere: Word's Times New Roman, normal spacing, no keep or break
     plain, = sync.fingerprint(body(P("Time intro.")), sync.doc_context(sync.read_docx(make_docx(tmp_path / "n.docx", ""))))
-    assert plain[2][0][0][0] == "Times New Roman"
+    assert (font_of(plain), letter_spacing_of(plain), keep_next_of(plain), page_break_before_of(plain)) == ("Times New Roman", "", False, False)
 
 
 def test_content_is_compared_as_it_will_look_in_the_master(tmp_path, capsys):
