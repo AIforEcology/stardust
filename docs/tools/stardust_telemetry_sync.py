@@ -394,8 +394,9 @@ def match_formatting(new_els, old_els, master_els, key):
         out.append(e)
         if e.tag == q(W, "tbl"):
             if not foreign: continue
-            tmpl = next((t for t in loc["tables"] + glob["tables"] if ncols(t) == ncols(e)), None) or \
-                   next(iter(loc["tables"] + glob["tables"]), None)
+            candidates = loc["tables"] + glob["tables"]
+            tmpl = next((t for t in candidates if ncols(t) == ncols(e)), None)
+            if tmpl is None and candidates: tmpl = candidates[0]
             if tmpl is not None: dress_table(e, tmpl); changed = True
             out.append(None)                                   # spacer slot, filled below
             continue
