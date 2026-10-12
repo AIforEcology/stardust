@@ -34,6 +34,7 @@ Commands
 Requires: Python 3.8+, lxml  (pip install lxml)
 """
 import sys, re, copy, zipfile, os, datetime
+from collections import namedtuple
 
 from lxml import etree
 
@@ -430,7 +431,8 @@ def match_formatting(new_els, old_els, master_els, key):
 # ---------------------------------------------------------------- change detection
 # merge compares units by what a reader sees, not by raw XML: Word rewrites a document's XML on
 # every save (revision ids, split runs, dropped default values, widths copied onto every cell,
-# fonts, letter spacing and page-break settings dropped where a style already gives them)
+# fonts, letter spacing and page-break settings dropped where a style already gives them,
+# default section settings added or dropped)
 # without changing how it looks. A fingerprint records text plus visible formatting, with
 # defaults and inherited values filled in, so only real edits count as changes.
 def num(v):
@@ -521,14 +523,34 @@ def switch(tag):
         return None if n is None else is_on(n)
     return read
 
+BREAKS = {(q(W, "br"), "page"): "\f", (q(W, "br"), None): "\n", (q(W, "br"), "textWrapping"): "\n", (q(W, "cr"), None): "\n"}
+
 def letter_spacing(rpr):
     n = rpr.find(q(W, "spacing"))
     return None if n is None or n.get(q(W, "val")) is None else num(n.get(q(W, "val")))
 
+def section_print(sp):
+    """A section break's visible settings, with Word's defaults filled in (header and footer
+    references are left out: their relationship ids differ from file to file)."""
+    if sp is None: return None
+    cols = sp.find(q(W, "cols"))
+    return (prop(sp, "w:type", default="nextPage"), prop(sp, "w:pgSz", "w"), prop(sp, "w:pgSz", "h"),
+            prop(sp, "w:pgSz", "orient", "portrait"),
+            tuple(prop(sp, "w:pgMar", side, "0") for side in ("top", "right", "bottom", "left", "header", "footer", "gutter")),
+            prop(sp, "w:cols", "num", "1"), prop(sp, "w:cols", "space", "720"),
+            tuple((num(c.get(q(W, "w"))), num(c.get(q(W, "space")))) for c in cols.findall(q(W, "col"))) if cols is not None else (),
+            prop(sp, "w:pgNumType", "start"), prop(sp, "w:pgNumType", "fmt", "decimal"),
+            toggle(sp, "titlePg"), prop(sp, "w:vAlign", default="top"))
+
+# Named so a fingerprint can be read field by field; they compare like plain tuples.
+RunLook = namedtuple("RunLook", "font letter_spacing bold italic strike caps underline size colour highlight vert_align char_style")
+ParaLook = namedtuple("ParaLook", "style align space_before space_after line line_rule indent_left indent_right "
+                                  "hanging first_line numbering keep_next page_break_before section")
+
 def run_print(rpr, font="", spacing="0"):
-    return (font, "" if spacing == "0" else spacing, toggle(rpr, "b"), toggle(rpr, "i"), toggle(rpr, "strike"), toggle(rpr, "caps"), prop(rpr, "w:u", default="none"),
-            prop(rpr, "w:sz"), colour(prop(rpr, "w:color")), prop(rpr, "w:highlight", default="none"),
-            prop(rpr, "w:vertAlign", default="baseline"), prop(rpr, "w:rStyle"))
+    return RunLook(font, "" if spacing == "0" else spacing, toggle(rpr, "b"), toggle(rpr, "i"), toggle(rpr, "strike"),
+                   toggle(rpr, "caps"), prop(rpr, "w:u", default="none"), prop(rpr, "w:sz"), colour(prop(rpr, "w:color")),
+                   prop(rpr, "w:highlight", default="none"), prop(rpr, "w:vertAlign", default="baseline"), prop(rpr, "w:rStyle"))
 
 def para_print(p, ctx):
     ppr = p.find(q(W, "pPr"))
@@ -542,17 +564,18 @@ def para_print(p, ctx):
     if numbering and ppr.find(q(W, "ind")) is None:   # a bullet without its own indent takes its list's
         left, hanging = ctx["lists"].get((numbering[0], numbering[1] or "0"), ("", ""))
     rule = prop(ppr, "w:spacing", "lineRule", "auto")
-    props = (prop(ppr, "w:pStyle", default="Normal"), prop(ppr, "w:jc", default="left"),
+    props = ParaLook(prop(ppr, "w:pStyle", default="Normal"), prop(ppr, "w:jc", default="left"),
              prop(ppr, "w:spacing", "before", "0"), prop(ppr, "w:spacing", "after", "0"),
              prop(ppr, "w:spacing", "line", "240" if not rule else ""), rule,
              left, prop(ppr, "w:ind", "right", "0"), hanging, prop(ppr, "w:ind", "firstLine", "0"), numbering,
              bool(inherited(ctx, ppr, [pstyle], "pPr", switch("keepNext"))),
-             bool(inherited(ctx, ppr, [pstyle], "pPr", switch("pageBreakBefore"))))
+             bool(inherited(ctx, ppr, [pstyle], "pPr", switch("pageBreakBefore"))),
+             section_print(ppr.find(q(W, "sectPr")) if ppr is not None else None))
     runs = []
     for r in p.iter(q(W, "r")):   # runs Word split or joined with the same formatting read as one
-        # text, with a page break as "\f" (Word's lastRenderedPageBreak is a layout cache, not a break)
-        t = "".join((c.text or "") if c.tag == q(W, "t") else "\f" for c in r
-                    if c.tag == q(W, "t") or (c.tag == q(W, "br") and c.get(q(W, "type")) == "page"))
+        # text, with a page break as "\f" and a line break as "\n" (Word's lastRenderedPageBreak is a
+        # layout cache, not a break)
+        t = "".join(BREAKS.get((c.tag, c.get(q(W, "type"))), "") if c.tag != q(W, "t") else (c.text or "") for c in r)
         if not t: continue
         rpr = r.find(q(W, "rPr"))
         rstyle = rpr.find(q(W, "rStyle")).get(q(W, "val")) if rpr is not None and rpr.find(q(W, "rStyle")) is not None else None

@@ -244,6 +244,8 @@ FORMAT_EDITS = {
     "page break before": (P("Time intro."), P("Time intro.").replace("<w:pPr>", "<w:pPr><w:pageBreakBefore/>")),
     "letter spacing": (P("Time intro."), P("Time intro.").replace("<w:rPr>", '<w:rPr><w:spacing w:val="20"/>')),
     "page break in text": (P("Time intro."), P("Time intro.").replace("<w:t ", '<w:br w:type="page"/><w:t ')),
+    "line break in text": (P("Time intro."), P("Time intro.").replace("<w:t ", '<w:br/><w:t ')),
+    "section break": (P("Time intro."), P("Time intro.").replace("</w:pPr>", '<w:sectPr><w:type w:val="continuous"/></w:sectPr></w:pPr>')),
 }
 
 
@@ -305,10 +307,9 @@ def styled_intro(font=None, on=None, spacing=None):
             f'<w:r><w:rPr>{rf}{sp}<w:sz w:val="21"/></w:rPr><w:t>Time intro.</w:t></w:r></w:p>')
 
 
-# readers for one paragraph's fingerprint: ("p", props, ((run format, text), ...))
-font_of = lambda fp: fp[2][0][0][0]
-letter_spacing_of = lambda fp: fp[2][0][0][1]
-keep_next_of, page_break_before_of = (lambda fp: fp[1][-2]), (lambda fp: fp[1][-1])
+def looks(fp):
+    """(ParaLook, first run's RunLook) of a paragraph fingerprint ("p", props, ((run look, text), ...))."""
+    return fp[1], fp[2][0][0]
 
 
 def test_inherited_formatting_is_read_through_styles_and_theme(tmp_path):
@@ -320,11 +321,13 @@ def test_inherited_formatting_is_read_through_styles_and_theme(tmp_path):
     spelled_out, = sync.fingerprint(body(styled_intro(font="Georgia", on="1", spacing="10")), look)
     overridden, = sync.fingerprint(body(styled_intro(font="Arial", on="0", spacing="0")), look)
     assert inherited == spelled_out                  # writing out what the style gives changes nothing
-    assert (font_of(inherited), letter_spacing_of(inherited), keep_next_of(inherited), page_break_before_of(inherited)) == ("Georgia", "10", True, True)
-    assert (font_of(overridden), letter_spacing_of(overridden), keep_next_of(overridden), page_break_before_of(overridden)) == ("Arial", "", False, False)
+    for fp, expect in ((inherited, ("Georgia", "10", True, True)), (overridden, ("Arial", "", False, False))):
+        para, first_run = looks(fp)
+        assert (first_run.font, first_run.letter_spacing, para.keep_next, para.page_break_before) == expect
     # with nothing set anywhere: Word's Times New Roman, normal spacing, no keep or break
     plain, = sync.fingerprint(body(P("Time intro.")), sync.doc_context(sync.read_docx(make_docx(tmp_path / "n.docx", ""))))
-    assert (font_of(plain), letter_spacing_of(plain), keep_next_of(plain), page_break_before_of(plain)) == ("Times New Roman", "", False, False)
+    para, first_run = looks(plain)
+    assert (first_run.font, first_run.letter_spacing, para.keep_next, para.page_break_before) == ("Times New Roman", "", False, False)
 
 
 def test_content_is_compared_as_it_will_look_in_the_master(tmp_path, capsys):
@@ -338,6 +341,46 @@ def test_content_is_compared_as_it_will_look_in_the_master(tmp_path, capsys):
     sync.write_docx(parts, sub)
     out = merge(master, sub, tmp_path / "out.docx", capsys, dry=True)
     assert "§21.7: unchanged" in out
+
+
+SECTION = ('<w:sectPr><w:pgSz w:w="12240" w:h="15840" w:orient="portrait"/>'
+           '<w:pgMar w:top="1080" w:right="1260" w:bottom="1080" w:left="1260" w:header="708" w:footer="708"/></w:sectPr>')
+
+
+def with_breaks(sect=SECTION, line="<w:br/>"):
+    """§21.7 with a section break after its intro and a line break in its first bullet."""
+    return (MASTER_721.replace(P("Time intro."), P("Time intro.").replace("</w:pPr>", sect + "</w:pPr>"))
+                      .replace("<w:t xml:space=\"preserve\"> Savings", line + "<w:t xml:space=\"preserve\"> Savings"))
+
+
+BREAK_SPELLINGS = {
+    "section re-saved by Word": with_breaks(sect=(
+        '<w:sectPr w:rsidR="00AB12CD"><w:headerReference w:type="default" r:id="rId9"/><w:type w:val="nextPage"/>'
+        '<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1080" w:right="1260" w:bottom="1080" w:left="1260" '
+        'w:header="708" w:footer="708" w:gutter="0"/><w:pgNumType w:fmt="decimal"/><w:cols w:space="720"/></w:sectPr>')),
+    "carriage return": with_breaks(line="<w:cr/>"),
+    "text-wrapping break": with_breaks(line='<w:br w:type="textWrapping"/>'),
+}
+BREAK_CHANGES = {
+    "landscape": with_breaks(sect=SECTION.replace('w:w="12240" w:h="15840" w:orient="portrait"', 'w:w="15840" w:h="12240" w:orient="landscape"')),
+    "two columns": with_breaks(sect=SECTION.replace("</w:sectPr>", '<w:cols w:num="2"/></w:sectPr>')),
+    "continuous break": with_breaks(sect=SECTION.replace("<w:sectPr>", '<w:sectPr><w:type w:val="continuous"/>')),
+    "line break removed": with_breaks(line=""),
+}
+
+
+@pytest.mark.parametrize("case", BREAK_SPELLINGS)
+def test_equivalent_break_markup_is_not_a_change(tmp_path, capsys, case):
+    master = make_docx(tmp_path / "master.docx", MASTER_BODY.replace(MASTER_721, with_breaks()))
+    out = merge(master, make_docx(tmp_path / "sub.docx", BREAK_SPELLINGS[case]), tmp_path / "out.docx", capsys, dry=True)
+    assert "§21.7: unchanged" in out
+
+
+@pytest.mark.parametrize("case", BREAK_CHANGES)
+def test_break_changes_are_detected(tmp_path, capsys, case):
+    master = make_docx(tmp_path / "master.docx", MASTER_BODY.replace(MASTER_721, with_breaks()))
+    out = merge(master, make_docx(tmp_path / "sub.docx", BREAK_CHANGES[case]), tmp_path / "out.docx", capsys, dry=True)
+    assert "§21.7: UPDATED (formatting only)" in out
 
 
 # --- merge: styles ----------------------------------------------------------------------------
