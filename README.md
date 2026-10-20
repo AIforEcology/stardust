@@ -8,8 +8,10 @@ A project of [AI for Ecology](https://aifore.org). See the [spec (v1.4) and summ
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="stardust-technical-architecture-dark.png">
-  <img src="stardust-technical-architecture.png" alt="Stardust technical architecture: subscriber-side clients (chat plugin, browser extension, cloud and infra agent, database agent) send events through the ingestion API (REST and gRPC) to the middleware and telemetry core, which holds the Net Impact Ledger; three MCP servers (subscriber reporting, provider insights, operator lifecycle) query the core; provider drivers (direct air capture, point-source, nature-based, ocean-based) send verified telemetry through the provider driver interface.">
+  <img src="stardust-technical-architecture.png" alt="Stardust technical architecture: subscriber-side clients (chat plugin, browser extension, cloud and infra agent, database agent, and an EAC marketplace plugin) send events through the ingestion API (REST and gRPC) to the middleware and telemetry core, which holds the Net Impact Ledger; three MCP servers (subscriber reporting, provider insights, operator lifecycle) query the core; provider drivers (direct air capture, point-source, nature-based, ocean-based) send verified telemetry through the provider driver interface; a subscriber credit path takes verified positive impact from the Net Impact Ledger through an EAC claim builder to environmental attribute certificate (EAC) marketplaces and registries, and returns credits and revenue to the subscriber.">
 </picture>
+
+The purple **subscriber credit path** is a design concept, not yet in the spec: an OS plugin that lets a subscriber earn environmental attribute certificates (EACs) for its own verified eco-positive actions, such as on-site renewables, heat reuse and water recycling. The diagrams are drawn by [`docs/tools/stardust_architecture_diagram.py`](docs/tools/stardust_architecture_diagram.py).
 
 ```
  subscriber-client/            middleware/                     providers-service/
