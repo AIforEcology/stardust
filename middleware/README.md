@@ -35,6 +35,7 @@ To set other options, such as `STARDUST_OTLP_ENDPOINT`, put them in `~/Library/A
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/v1/events` | Send a usage event; returns the enriched event. A repeated `event_id` returns the original and isn't counted twice |
+| `POST` | `/v1/installs` | Register a browser extension install; returns its own key, once (`STARDUST_SELF_REGISTRATION`) |
 | `POST` | `/v1/traces` | OTLP/HTTP trace receiver (protobuf or JSON, optionally gzipped). GenAI spans become events |
 | `GET` | `/v1/events?user_id=&limit=` | Recent enriched events. With a key, only the key's organization (and user) |
 | `GET` | `/v1/summary?user_id=&org_id=&since=&until=` | Totals plus an aggregate indicator code, for a user, an org or everything, over an optional time window |
@@ -89,7 +90,7 @@ With a key:
 
 Keys carry the spec's OAuth scopes: `reporting.read` (the default and the one these endpoints need), `provider.read`, `operator.lifecycle.read` and `operator.lifecycle.write`.
 
-**Not covered yet:** ingestion (`POST /v1/events`, `/v1/traces`) and the remediation endpoints still accept calls without a key. `/healthz` shows the current mode.
+**Ingestion** is covered by `STARDUST_INGEST_AUTH` (above). **Not covered yet:** the remediation endpoints still accept calls without a key. `/healthz` shows the current mode.
 
 ## Configuration
 
@@ -114,6 +115,10 @@ Keys carry the spec's OAuth scopes: `reporting.read` (the default and the one th
 | `STARDUST_DATABASE_PATH` | `~/Library/Application Support/stardust/core.db` on macOS (the user data directory elsewhere). Keep it on a local disk, not a network share or USB drive |
 | `STARDUST_RETENTION_DAYS` | unset (keep forever). Delete events older than this, at startup and every 6 hours |
 | `STARDUST_SUBSCRIBER_AUTH` | `off`. `optional` or `required` limits the read endpoints to the caller's key ([above](#subscriber-api-keys)) |
+| `STARDUST_INGEST_AUTH` | `off`. `optional` or `required` puts keys on ingestion (`POST /v1/events`, `/v1/traces`); events are recorded under the key's organization and user. Keys need the `ingest.write` scope. The gRPC receiver refuses spans when this is `required` |
+| `STARDUST_SELF_REGISTRATION` | `off`. `on` enables `POST /v1/installs`: a browser extension install gets its own user-level key (`reporting.read`, `ingest.write`) in the public organization |
+| `STARDUST_PUBLIC_ORG_ID` | A fixed UUID derived from aifore.org. The organization self-registered installs belong to |
+| `STARDUST_REGISTRATIONS_PER_IP_PER_HOUR` | `20`. Limits scripted sign-ups |
 | `STARDUST_OTLP_GRPC_LISTEN` | unset (off). Address for the OTLP/gRPC receiver, e.g. `0.0.0.0:4317`. The HTTP receiver at `/v1/traces` is always on |
 
 ## Tech operations fee

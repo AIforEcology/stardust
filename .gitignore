@@ -15,3 +15,6 @@ target/
 ._*
 *.egg-info/
 .pytest_cache/
+deploy/.env
+deploy/backups/
+subscriber-client/browser-extension/stardust-extension.zip

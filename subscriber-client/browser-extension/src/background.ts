@@ -3,13 +3,12 @@
 
 import { isoWithOffset } from "./estimate.ts";
 import { badgeText, GRADE_COLORS } from "./format.ts";
-import { getSettings } from "./settings.ts";
+import { coreFetch, currentUserId, getSettings } from "./settings.ts";
 import { siteById } from "./sites.ts";
 import type { EnrichedEvent, Message, TabState, UsageEvent } from "./types.ts";
 
 async function send(event: UsageEvent): Promise<EnrichedEvent> {
-  const { apiBase } = await getSettings();
-  const r = await fetch(`${apiBase}/v1/events`, {
+  const { r } = await coreFetch("/v1/events", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(event),
@@ -35,7 +34,8 @@ async function record(tabId: number, event: UsageEvent): Promise<void> {
 
 chrome.runtime.onMessage.addListener((msg: Message, sender) => {
   void (async () => {
-    const { userId, enabledSites } = await getSettings();
+    const { enabledSites } = await getSettings();
+    const userId = await currentUserId();
     if (msg.type === "stardust:usage") {
       const tabId = sender.tab?.id;
       const site = siteById(msg.siteId);

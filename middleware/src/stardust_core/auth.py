@@ -26,15 +26,18 @@ AUTH_MODES = ("off", "optional", "required")
 
 # OAuth scopes from spec §23.6. Keys can carry any of them; M1 enforces reporting.read.
 REPORTING_READ = "reporting.read"
-SCOPES = frozenset({REPORTING_READ, "provider.read", "operator.lifecycle.read", "operator.lifecycle.write"})
+# Sending usage events (POST /v1/events, /v1/traces), enforced by STARDUST_INGEST_AUTH.
+INGEST_WRITE = "ingest.write"
+SCOPES = frozenset({REPORTING_READ, INGEST_WRITE, "provider.read", "operator.lifecycle.read",
+                    "operator.lifecycle.write"})
 
 KEY_PREFIX = "sdk_"
 
 
-def parse_auth_mode(value: str) -> str:
+def parse_auth_mode(value: str, name: str = "STARDUST_SUBSCRIBER_AUTH") -> str:
     v = value.strip().lower() or "off"
     if v not in AUTH_MODES:
-        raise ValueError(f"STARDUST_SUBSCRIBER_AUTH must be one of {', '.join(AUTH_MODES)}, got {value!r}")
+        raise ValueError(f"{name} must be one of {', '.join(AUTH_MODES)}, got {value!r}")
     return v
 
 
@@ -113,5 +116,26 @@ def narrow(principal: Optional[Principal], scope: str, user_id: Optional[UUID],
     if principal.user_id is not None:
         if user_id is not None and user_id != principal.user_id:
             raise AuthError(403, "forbidden_scope", "this key can't read another user")
+        user_id = principal.user_id
+    return user_id, principal.org_id
+
+
+def pin(principal: Optional[Principal], user_id: Optional[UUID],
+        org_id: Optional[UUID]) -> Tuple[Optional[UUID], Optional[UUID]]:
+    """The (user_id, org_id) an ingested event is recorded under.
+
+    Without a principal the event's own ids stand. With one, the event needs ``ingest.write`` and is
+    recorded under the key's organization (and user, for a user-level key); an event that names a
+    different organization or user is refused, so a key can't write into someone else's data.
+    """
+    if principal is None:
+        return user_id, org_id
+    if INGEST_WRITE not in principal.scopes:
+        raise AuthError(403, "forbidden_scope", f"this key lacks the {INGEST_WRITE} scope")
+    if org_id is not None and org_id != principal.org_id:
+        raise AuthError(403, "forbidden_scope", "this key can't write to another organization")
+    if principal.user_id is not None:
+        if user_id is not None and user_id != principal.user_id:
+            raise AuthError(403, "forbidden_scope", "this key can't write for another user")
         user_id = principal.user_id
     return user_id, principal.org_id

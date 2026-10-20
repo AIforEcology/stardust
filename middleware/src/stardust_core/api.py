@@ -10,10 +10,12 @@ import asyncio
 import hmac
 import logging
 import threading
+import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
-from uuid import UUID
+from typing import Deque, Dict, List, Optional, Tuple
+from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -139,19 +141,27 @@ def create_app(
                 log.exception("Database maintenance failed")
             await asyncio.sleep(MAINTENANCE_INTERVAL_S)
 
-    def ingest_spans(spans: List[OtlpSpan]) -> Tuple[int, str]:
+    def ingest_spans(spans: List[OtlpSpan], caller: Optional[Principal] = None) -> Tuple[int, str]:
         """Shared by the HTTP and gRPC receivers. Returns (rejected spans, error message)."""
         rejected, errors = 0, []
         for span in spans:
             try:
                 event = span_to_event(span)
-            except ValueError as e:
+                if event is not None:
+                    event = pinned(event, caller)
+            except (ValueError, AuthError) as e:
                 rejected += 1
                 errors.append(f"{span.name or span.span_id}: {str(e).splitlines()[0]}")
                 continue
             if event is not None:
                 record(event)
         return rejected, "; ".join(errors[:5])
+
+    def grpc_ingest(spans: List[OtlpSpan]) -> Tuple[int, str]:
+        # The gRPC receiver doesn't carry keys yet, so it can't accept spans when keys are required.
+        if settings.ingest_auth == "required":
+            return len(spans), "API keys are required for ingestion; use OTLP/HTTP /v1/traces with a key"
+        return ingest_spans(spans)
 
     owned_http = http is None
     client = http or httpx.AsyncClient()
@@ -170,7 +180,7 @@ def create_app(
     async def lifespan(app: FastAPI):
         grpc_server = None
         if settings.otlp_grpc_listen:
-            grpc_server, app.state.otlp_grpc_port = await start_grpc_receiver(settings.otlp_grpc_listen, ingest_spans)
+            grpc_server, app.state.otlp_grpc_port = await start_grpc_receiver(settings.otlp_grpc_listen, grpc_ingest)
         maintenance = asyncio.create_task(run_maintenance())
         task = None
         if settings.pricing_refresh_hours is not None:
@@ -209,9 +219,8 @@ def create_app(
         if not x_stardust_admin_token or not hmac.compare_digest(x_stardust_admin_token, settings.admin_token):
             raise HTTPException(401, "invalid admin token")
 
-    def principal(authorization: Optional[str] = Header(default=None)) -> Optional[Principal]:
-        """The caller's key, per STARDUST_SUBSCRIBER_AUTH (auth.py). None means "serve as before"."""
-        mode = settings.subscriber_auth
+    def resolve(authorization: Optional[str], mode: str) -> Optional[Principal]:
+        """The caller's key under an auth mode (auth.py). None means "serve as before"."""
         if mode == "off":
             return None
         key = auth.bearer(authorization)
@@ -226,6 +235,23 @@ def create_app(
         return Principal(key_id=stored["key_id"], org_id=UUID(stored["org_id"]),
                          user_id=UUID(stored["user_id"]) if stored["user_id"] else None,
                          scopes=frozenset(stored["scopes"]))
+
+    def principal(authorization: Optional[str] = Header(default=None)) -> Optional[Principal]:
+        """Read endpoints, per STARDUST_SUBSCRIBER_AUTH."""
+        return resolve(authorization, settings.subscriber_auth)
+
+    def writer(authorization: Optional[str] = Header(default=None)) -> Optional[Principal]:
+        """Ingestion endpoints, per STARDUST_INGEST_AUTH."""
+        return resolve(authorization, settings.ingest_auth)
+
+    def pinned(event: UsageEvent, caller: Optional[Principal]) -> UsageEvent:
+        user_id, org_id = auth.pin(caller, event.user_id, event.org_id)
+        if (user_id, org_id) == (event.user_id, event.org_id):
+            return event
+        return event.model_copy(update={"user_id": user_id, "org_id": org_id})
+
+    # Sliding one-hour window of registrations per client IP (in memory; one Core instance).
+    registrations: Dict[str, Deque[float]] = defaultdict(deque)
 
     def reporting(principal: Optional[Principal], user_id: Optional[UUID],
                   org_id: Optional[UUID]) -> Tuple[Optional[UUID], Optional[UUID]]:
@@ -247,6 +273,8 @@ def create_app(
             } if settings.otlp_endpoint else None,
             "otlp_grpc_receiver": settings.otlp_grpc_listen,
             "subscriber_auth": settings.subscriber_auth,
+            "ingest_auth": settings.ingest_auth,
+            "self_registration": settings.self_registration,
             "database": store.stats(),
         }
 
@@ -272,8 +300,35 @@ def create_app(
         return cfg
 
     @app.post("/v1/events", response_model=EnrichedEvent)
-    def ingest(event: UsageEvent) -> EnrichedEvent:
-        return record(event)[0]
+    def ingest(event: UsageEvent, caller: Optional[Principal] = Depends(writer)) -> EnrichedEvent:
+        return record(pinned(event, caller))[0]
+
+    @app.post("/v1/installs")
+    def register_install(request: Request) -> dict:
+        """Give a new browser extension install its own key (hosted Core, STARDUST_SELF_REGISTRATION).
+
+        The server picks the user id, so an install can never claim someone else's. The key is
+        user-level in the public organization, with reporting.read and ingest.write: it can send its
+        own usage and read its own totals, nothing else. Shown once; Core keeps only its hash.
+        """
+        if not settings.self_registration:
+            raise AuthError(404, "not_found", "self-registration is off (STARDUST_SELF_REGISTRATION)")
+        ip = request.client.host if request.client else "unknown"
+        now, window = time.monotonic(), registrations[ip]
+        while window and now - window[0] > 3600:
+            window.popleft()
+        if len(window) >= settings.registrations_per_ip_per_hour:
+            return JSONResponse({"detail": "too many registrations from this address; try later",
+                                 "reason": "rate_limited"}, status_code=429, headers={"Retry-After": "3600"})
+        window.append(now)
+        user_id = uuid4()
+        key_id, key, key_hash = auth.new_key()
+        scopes = sorted({auth.REPORTING_READ, auth.INGEST_WRITE})
+        store.save_api_key(key_id, key_hash, settings.public_org_id, user_id, scopes, "browser-extension install",
+                           datetime.now(timezone.utc))
+        log.info("Registered install %s (key %s)", user_id, key_id)
+        return {"key": key, "key_id": key_id, "user_id": str(user_id), "org_id": str(settings.public_org_id),
+                "scopes": scopes}
 
     @app.post("/v1/traces")
     async def otlp_traces(request: Request) -> Response:
@@ -287,7 +342,8 @@ def create_app(
         except OtlpDecodeError as e:
             raise HTTPException(400, str(e))
 
-        rejected, message = ingest_spans(spans)
+        caller = writer(request.headers.get("authorization"))
+        rejected, message = ingest_spans(spans, caller)
         payload, media_type = encode_response(content_type, rejected, message)
         return Response(content=payload, media_type=media_type)
 
