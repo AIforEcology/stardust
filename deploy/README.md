@@ -3,7 +3,7 @@
 One small Linux server runs Core, Caddy (automatic HTTPS) and a nightly backup, with Docker Compose.
 Core is a single process with a SQLite file, so it needs a real persistent disk, not a serverless platform.
 
-- **Beta host:** Oracle Cloud Always Free, one Ampere A1 VM (2 OCPU, 12 GB, Arm64). $0.
+- **Beta host:** Oracle Cloud Always Free, one Ampere A1 VM (Arm64), 1 OCPU and 6 GB or more. $0. Core runs comfortably in 1 OCPU / 6 GB (about 100 MB used by all three containers).
 - **Long-term host:** Azure, paid from AIforE's nonprofit Azure grant. Same steps on an Ubuntu VM.
 
 Moving between them: stop Core, copy `core.db` from the volume, start Core on the new server.
@@ -11,7 +11,7 @@ Moving between them: stop Core, copy `core.db` from the volume, start Core on th
 ## 1. Create the server (Oracle Cloud)
 
 1. Sign up for Oracle Cloud with an AIforE address. Pick a home region close to users (e.g. US West, Phoenix or San Jose); it can't be changed later.
-2. **Compute → Instances → Create instance.** Image: Canonical Ubuntu 24.04. Shape: Ampere, `VM.Standard.A1.Flex`, 2 OCPU, 12 GB. Add your SSH public key. If you get "out of capacity", try another availability domain or retry later.
+2. **Compute → Instances → Create instance.** Image: Canonical Ubuntu 24.04. Shape: Ampere, `VM.Standard.A1.Flex`, at the largest size the console marks Always Free (1 OCPU / 6 GB is enough). Don't pick a size the console shows a price for. Add your SSH public key. If you get "out of capacity", try another availability domain or retry later.
 3. **Networking:** in the instance's subnet security list, add ingress rules for TCP 80 and 443 from `0.0.0.0/0`. Ubuntu images on Oracle also block ports in iptables; on the server run:
 
    ```bash
@@ -84,4 +84,4 @@ The `backup` service writes `deploy/backups/core-YYYYMMDD.db` nightly and keeps 
 
 ## Cost checks
 
-Oracle: stay within 2 OCPU / 12 GB on Ampere and 200 GB of block storage. Set a budget alert at $1 under Billing so any accidental paid resource shows up at once.
+Oracle: stay on shapes and sizes the console marks Always Free, and within 200 GB of block storage. Set a budget alert at $1 under Billing so any accidental paid resource shows up at once.
