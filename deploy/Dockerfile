@@ -8,8 +8,11 @@ WORKDIR /app
 # Core reads its factors from schema/ at the repo root, so keep the repo layout.
 COPY schema/ schema/
 COPY middleware/ middleware/
+# pip is removed once Core is installed: it isn't needed at runtime, and it vendors its own copies of
+# msgpack, urllib3 and setuptools (pkg_resources) that lag their fixed releases and fail the image scan.
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* \
- && pip install --upgrade pip && pip install -e middleware && useradd --system --uid 10001 stardust && mkdir -p /data && chown stardust /data
+ && pip install --upgrade pip && pip install -e middleware && pip uninstall -y pip \
+ && useradd --system --uid 10001 stardust && mkdir -p /data && chown stardust /data
 
 USER stardust
 ENV STARDUST_DATABASE_PATH=/data/core.db \
