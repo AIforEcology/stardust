@@ -1,0 +1,45 @@
+name: Release extension
+
+# Push a tag like extension-v0.1.1 to build the store package and attach it to a GitHub Release.
+# Upload that zip to the Chrome Web Store and Microsoft Edge Add-ons dashboards.
+#
+# Later: both stores have publish APIs (Chrome Web Store API, Edge Add-ons API). Add their
+# credentials as repository secrets and an upload step here to publish automatically.
+
+on:
+  push:
+    tags: ["extension-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: subscriber-client/browser-extension
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Tag matches package.json version
+        run: |
+          want="extension-v$(node -p 'require("./package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json (expected $want)"; exit 1
+          fi
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:store
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" stardust-extension.zip \
+            --title "Stardust browser extension ${GITHUB_REF_NAME#extension-v}" \
+            --notes "Store package for the Chrome Web Store and Microsoft Edge Add-ons. Default Core: https://core.aifore.org."

@@ -13,12 +13,14 @@
     "watch": "node build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types test/*.test.ts",
-    "build:store": "STARDUST_API_BASE=${STARDUST_API_BASE:-https://core.aifore.org} node build.mjs && cd dist && rm -f ../stardust-extension.zip && zip -qr ../stardust-extension.zip . && cd .. && echo 'Store package: stardust-extension.zip'"
+    "build:store": "STARDUST_API_BASE=${STARDUST_API_BASE:-https://core.aifore.org} node build.mjs && cd dist && rm -f ../stardust-extension.zip && zip -qr ../stardust-extension.zip . && cd .. && echo 'Store package: stardust-extension.zip'",
+    "screenshots": "STARDUST_API_BASE=https://core.aifore.org node build.mjs && node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",
     "@types/node": "^22.20.4",
     "esbuild": "^0.28.2",
+    "playwright": "^1.56.0",
     "typescript": "^5.5.0"
   }
 }
