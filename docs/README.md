@@ -39,6 +39,7 @@ Section references in the code (like `§8.4`) point to the spec. Every version s
 - [`architecture/impact-credits.md`](architecture/impact-credits.md): the v1.2 extension from carbon to five impact dimensions (carbon, electricity, water, heat, materials) and lifecycle emissions. It covers the target architecture, how it maps onto today's code, and the incremental, non-destructive build plan. Its ground rules apply to all the plans below.
 - [`architecture/time-embodied-lifecycle.md`](architecture/time-embodied-lifecycle.md): the v1.3 telemetry for time-of-use and load shifting, component-level embodied carbon, and the hardware lifecycle record.
 - [`architecture/mcp.md`](architecture/mcp.md): the v1.4 MCP interface. It maps each tool to today's Core endpoints and plans the three servers.
+- [`tools/stardust_architecture_diagram.py`](tools/stardust_architecture_diagram.py): draws the README's architecture diagrams, including the proposed subscriber EAC credit path. It needs matplotlib. Run `python docs/tools/stardust_architecture_diagram.py light` and `… dark` from the repo root to regenerate `stardust-technical-architecture.png` and `stardust-technical-architecture-dark.png`.
 
 ## Operations
 
