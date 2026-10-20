@@ -9,7 +9,7 @@ WORKDIR /app
 COPY schema/ schema/
 COPY middleware/ middleware/
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* \
- && pip install -e middleware && useradd --system --uid 10001 stardust && mkdir -p /data && chown stardust /data
+ && pip install --upgrade pip && pip install -e middleware && useradd --system --uid 10001 stardust && mkdir -p /data && chown stardust /data
 
 USER stardust
 ENV STARDUST_DATABASE_PATH=/data/core.db \

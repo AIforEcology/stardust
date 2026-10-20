@@ -1,0 +1,19 @@
+# Opens a PR when a dependency has a security fix or a new version. Security PRs come as soon as an
+# advisory is published (turn on Dependabot security updates in the repo's Settings → Code security).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /middleware
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /subscriber-client/browser-extension
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /subscriber-client/sdk-js
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
