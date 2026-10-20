@@ -1,5 +1,5 @@
 import { energySourceLabel, fmt, fmtUsd } from "./format.ts";
-import { DEFAULT_API_BASE, getSettings, setApiBase, setSiteEnabled } from "./settings.ts";
+import { coreFetch, currentUserId, DEFAULT_API_BASE, getSettings, setApiBase, setSiteEnabled } from "./settings.ts";
 import { siteForHost } from "./sites.ts";
 import type { EnrichedEvent, Summary, TabState } from "./types.ts";
 
@@ -25,9 +25,10 @@ function renderEvent(e: EnrichedEvent): void {
   $("sji").textContent = e.job_sji;
 }
 
-async function renderSummary(apiBase: string, userId: string): Promise<void> {
+async function renderSummary(apiBase: string): Promise<void> {
   try {
-    const r = await fetch(`${apiBase}/v1/summary?user_id=${encodeURIComponent(userId)}`);
+    const userId = await currentUserId();
+    const { r } = await coreFetch(`/v1/summary?user_id=${encodeURIComponent(userId)}`);
     if (!r.ok) throw new Error(String(r.status));
     const s = (await r.json()) as Summary;
     $("summary").innerHTML = [
@@ -38,6 +39,7 @@ async function renderSummary(apiBase: string, userId: string): Promise<void> {
       row("CO₂e", fmt(s.co2e_g, "g")),
       row("Water", fmt(s.water_ml, "mL")),
     ].join("");
+    $("install-id").textContent = `Install ID: ${userId}`;
   } catch {
     $("summary").textContent = `Can't reach Stardust Core at ${apiBase}.`;
   }
@@ -80,13 +82,14 @@ async function main(): Promise<void> {
     ev.preventDefault();
     const url = new URL(api.value.trim() || DEFAULT_API_BASE);
     const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
-    // A remote Core needs a host permission the user grants explicitly.
-    if (!local && !(await chrome.permissions.request({ origins: [`${url.origin}/*`] }))) return;
+    // A Core other than the built-in ones needs a host permission the user grants explicitly.
+    const builtIn = local || url.origin === new URL(DEFAULT_API_BASE).origin;
+    if (!builtIn && !(await chrome.permissions.request({ origins: [`${url.origin}/*`] }))) return;
     await setApiBase(url.origin);
     location.reload();
   });
 
-  await renderSummary(settings.apiBase, settings.userId);
+  await renderSummary(settings.apiBase);
 }
 
 void main();

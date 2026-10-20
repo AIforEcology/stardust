@@ -1,0 +1,11 @@
+{$STARDUST_DOMAIN} {
+	encode gzip
+	# Admin endpoints stay reachable only from the server itself (ssh in and use curl on localhost:8080
+	# via `docker compose exec core ...`), never from the internet.
+	@admin path /v1/admin/*
+	respond @admin 404
+	request_body {
+		max_size 10MB
+	}
+	reverse_proxy core:8080
+}

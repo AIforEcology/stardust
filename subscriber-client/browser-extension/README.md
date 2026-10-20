@@ -51,3 +51,22 @@ Live checks on ChatGPT and Gemini (2026-09-24), via read-only page inspection pl
 ## Scripts
 
 `npm run typecheck`, `npm test`, `npm run build`, `npm run watch`
+
+## Hosted Core and store builds
+
+`npm run build:store` builds with the hosted Core (`https://core.aifore.org`, or set `STARDUST_API_BASE`) as the default and writes `stardust-extension.zip`, the package for both the Chrome Web Store and Microsoft Edge Add-ons. The hosted Core's address is in the manifest's host permissions, so users aren't asked for it.
+
+On first use the extension registers with the Core (`POST /v1/installs`) and gets its own key and user ID. The key goes with every event and summary request; if the Core no longer knows it, the extension registers again. Keys are kept per Core address, so switching to a self-hosted Core never sends it the hosted key. A Core without self-registration (a local one) answers 404, and the extension uses its local pseudonymous ID with no key, as before.
+
+Store listing text, permission justifications and the privacy policy draft are in [`store/`](store/).
+
+### Store screenshots
+
+`npm run screenshots` renders the real popup (built for the hosted Core) with Chromium and writes the store images to `store/screenshots/`: three 1280×800 screenshots and a 440×280 promo tile. The numbers shown come from `store/screenshots/fixtures.json`, events that Core actually enriched. Regenerate the images after any change to the popup's look.
+
+### Releasing
+
+1. Bump `version` in `package.json` (for example `0.1.0` → `0.1.1`) and merge to main.
+2. Tag and push: `git tag extension-v0.1.1 && git push origin extension-v0.1.1`.
+3. The **Release extension** workflow checks the tag matches `package.json`, runs the tests, builds `stardust-extension.zip` and attaches it to a GitHub Release.
+4. Upload that zip in the Chrome Web Store and Edge Add-ons dashboards. Once each store approves it, users update automatically.

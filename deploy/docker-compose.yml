@@ -1,0 +1,38 @@
+# Hosted Stardust Core: Core + Caddy (automatic HTTPS) + nightly SQLite backups.
+# On the server: cp .env.example .env, edit it, then `docker compose up -d --build`.
+services:
+  core:
+    build: { context: .., dockerfile: deploy/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    volumes: ["core-data:/data"]
+
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment: { STARDUST_DOMAIN: "${STARDUST_DOMAIN}" }
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", "caddy-data:/data", "caddy-config:/config"]
+    depends_on: [core]
+
+  backup:
+    # Online SQLite backup every night, keeps 14 days. Copy /backups off the server too (see README).
+    image: python:3.12-slim
+    restart: unless-stopped
+    volumes: ["core-data:/data:ro", "./backups:/backups"]
+    command:
+      - python
+      - -c
+      - |
+        import sqlite3, time, glob, os, datetime
+        while True:
+            name = datetime.datetime.utcnow().strftime("/backups/core-%Y%m%d.db")
+            try:
+                src = sqlite3.connect("file:/data/core.db?mode=ro", uri=True); dst = sqlite3.connect(name)
+                src.backup(dst); dst.close(); src.close(); print("backup", name, flush=True)
+                for old in sorted(glob.glob("/backups/core-*.db"))[:-14]: os.remove(old)
+            except Exception as e:
+                print("backup failed:", e, flush=True)
+            time.sleep(86400)
+
+volumes: { core-data: {}, caddy-data: {}, caddy-config: {} }

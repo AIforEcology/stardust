@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+from uuid import UUID, uuid5, NAMESPACE_URL
 
 from .auth import parse_auth_mode
 from .fees import DEFAULT_FEE_PCT
@@ -27,6 +28,8 @@ DEFAULT_PRICING = _REPO_ROOT / "middleware" / "data" / "model_prices_and_context
 DEFAULT_PRICING_CACHE = _REPO_ROOT / "middleware" / "data" / "cache" / "model_prices_and_context_window.json"
 DEFAULT_PRICING_URL = "https://raw.githubusercontent.com/BerriAI/litellm/{ref}/model_prices_and_context_window.json"
 DEFAULT_DONATION_URL = "https://www.paypal.com/ncp/payment/BRVT8CAGDWN8J"
+# The organization that self-registered installs (POST /v1/installs) belong to on a hosted Core.
+DEFAULT_PUBLIC_ORG_ID = uuid5(NAMESPACE_URL, "https://aifore.org/stardust/public")
 
 
 def parse_refresh(value: str) -> Optional[float]:
@@ -106,6 +109,13 @@ class Settings:
     operating_cost_monthly_usd: Optional[float] = None
     # Subscriber authentication on the read endpoints (auth.py): off, optional or required.
     subscriber_auth: str = "off"
+    # Keys on ingestion (POST /v1/events, /v1/traces): off, optional or required (auth.py).
+    ingest_auth: str = "off"
+    # POST /v1/installs: lets a browser extension install get its own user-level key (hosted Core).
+    self_registration: bool = False
+    public_org_id: UUID = DEFAULT_PUBLIC_ORG_ID
+    # New installs allowed per client IP per hour, to slow down scripted sign-ups.
+    registrations_per_ip_per_hour: int = 20
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -135,6 +145,12 @@ class Settings:
                 if os.environ.get("STARDUST_OPERATING_COST_MONTHLY_USD") else None
             ),
             subscriber_auth=parse_auth_mode(os.environ.get("STARDUST_SUBSCRIBER_AUTH", "off")),
+            ingest_auth=parse_auth_mode(os.environ.get("STARDUST_INGEST_AUTH", "off"), "STARDUST_INGEST_AUTH"),
+            self_registration=os.environ.get("STARDUST_SELF_REGISTRATION", "off").strip().lower()
+            in ("on", "true", "1", "yes"),
+            public_org_id=UUID(os.environ["STARDUST_PUBLIC_ORG_ID"]) if os.environ.get("STARDUST_PUBLIC_ORG_ID")
+            else DEFAULT_PUBLIC_ORG_ID,
+            registrations_per_ip_per_hour=int(os.environ.get("STARDUST_REGISTRATIONS_PER_IP_PER_HOUR", "20")),
         )
 
 
