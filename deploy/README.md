@@ -37,6 +37,28 @@ curl -s https://core.aifore.org/healthz
 
 `/healthz` should show `"ingest_auth": "required"`, `"subscriber_auth": "required"` and `"self_registration": true`. Caddy gets the HTTPS certificate automatically on first request (DNS must already point at the server).
 
+### Oracle Linux 9 instead of Ubuntu
+
+Oracle's default image is Oracle Linux 9 (user `opc`). Tested on Oracle Linux 9.8, aarch64. Replace steps 1.3 and 3 with:
+
+```bash
+sudo dnf -y update && sudo systemctl reboot   # reboot if a new kernel was installed
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin git dnf-automatic
+sudo systemctl enable --now docker
+sudo usermod -aG docker opc && newgrp docker
+# Automatic security updates
+sudo sed -i "s/^upgrade_type.*/upgrade_type = security/; s/^apply_updates.*/apply_updates = yes/" /etc/dnf/automatic.conf
+sudo systemctl enable --now dnf-automatic.timer
+# The OS firewall is firewalld, not iptables
+sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload
+```
+
+Then clone, create `.env` and run `docker compose up -d --build` as in step 3.
+
+**SELinux:** Oracle Linux runs SELinux in enforcing mode, but Docker CE leaves its SELinux support off by default, so the `./Caddyfile` and `./backups` bind mounts work without a `:Z` label. If you turn on `"selinux-enabled": true` in `/etc/docker/daemon.json`, add `:Z` to both mounts in `docker-compose.yml`.
+
 ## 4. Update
 
 ```bash
@@ -54,7 +76,7 @@ The database lives in the `core-data` volume and survives rebuilds.
   docker compose exec core sh -c 'curl -s -H "X-Stardust-Admin-Token: $STARDUST_ADMIN_TOKEN" localhost:8080/v1/admin/keys'
   ```
 - Revoke an abusive install: `.../v1/admin/keys/<key_id>/revoke` the same way.
-- Keep the OS patched: `sudo apt-get install -y unattended-upgrades`.
+- Keep the OS patched: `sudo apt-get install -y unattended-upgrades` (Ubuntu) or `dnf-automatic` (Oracle Linux, above).
 
 ## Backups
 

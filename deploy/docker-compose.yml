@@ -31,8 +31,10 @@ services:
                 src = sqlite3.connect("file:/data/core.db?mode=ro", uri=True); dst = sqlite3.connect(name)
                 src.backup(dst); dst.close(); src.close(); print("backup", name, flush=True)
                 for old in sorted(glob.glob("/backups/core-*.db"))[:-14]: os.remove(old)
+                time.sleep(86400)
             except Exception as e:
-                print("backup failed:", e, flush=True)
-            time.sleep(86400)
+                # On first start core.db may not exist yet; retry soon instead of waiting a day.
+                print("backup failed, retrying in 5 minutes:", e, flush=True)
+                time.sleep(300)
 
 volumes: { core-data: {}, caddy-data: {}, caddy-config: {} }
