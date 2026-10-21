@@ -46,6 +46,7 @@ async function renderSummary(apiBase: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  $("version").textContent = `v${chrome.runtime.getManifest().version}`;
   const settings = await getSettings();
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const host = tab?.url ? new URL(tab.url).hostname : "";
