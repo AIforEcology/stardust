@@ -1,0 +1,10 @@
+[Unit]
+Description=Copy Stardust Core backups to Oracle Object Storage nightly
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

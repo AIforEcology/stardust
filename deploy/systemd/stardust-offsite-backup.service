@@ -1,0 +1,10 @@
+[Unit]
+Description=Copy Stardust Core backups to Oracle Object Storage
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=opc
+# Run through bash: SELinux won't let systemd execute a script that lives in a home directory.
+ExecStart=/bin/bash /home/opc/stardust/deploy/offsite-backup.sh
