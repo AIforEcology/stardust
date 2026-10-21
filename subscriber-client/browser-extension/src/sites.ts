@@ -14,6 +14,8 @@ export interface SiteAdapter {
   userSelector: string;
   /** Within a user turn, the parts holding the typed text (excludes hidden labels); all matches are summed. */
   userTextSelector?: string;
+  /** Within a reply, the parts holding the answer (excludes hidden headings, status lines, buttons); all matches are summed. */
+  replyTextSelector?: string;
   /** Ancestor attribute that is "true" while a reply is still streaming. */
   streamingAttr?: string;
   /** Placeholders a virtualized transcript uses for turns it hasn't rendered. */
@@ -66,13 +68,17 @@ export const SITES: SiteAdapter[] = [
     name: "Claude",
     provider: "anthropic",
     hosts: ["claude.ai"],
-    assistantSelector: ".font-claude-response",
+    // October 2026: replies became [data-testid="assistant-message"], which also holds a
+    // screen-reader heading, a turn-status line ("thought for…", tool activity) and the action
+    // bar, so only the markdown answer is counted.
+    assistantSelector: '[data-testid="assistant-message"]',
+    replyTextSelector: ".standard-markdown, .progressive-markdown",
     userSelector: '[data-testid="user-message"]',
     streamingAttr: "data-is-streaming",
     spacerSelector: '[data-testid="transcript-spacer"]',
     modelSelector: '[data-testid="model-selector-dropdown"]',
     parseModel: parseClaudeModel,
-    verified: "2026-09-24",
+    verified: "2026-10-21",
   },
   {
     id: "gemini",

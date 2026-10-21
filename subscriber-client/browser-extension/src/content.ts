@@ -7,6 +7,7 @@ import { accountTurn, fingerprint, hiddenCharsEstimate, remember } from "./conte
 import { estimateTokens } from "./estimate.ts";
 import { siteForHost, type SiteAdapter } from "./sites.ts";
 import { ReplyTracker, type Turn } from "./tracker.ts";
+import { turnChars, turnText } from "./turns.ts";
 import type { UsageMessage } from "./types.ts";
 
 const POLL_MS = 1000;
@@ -22,17 +23,6 @@ const tracker = new ReplyTracker<Element>(STABLE_POLLS);
 // reply the page unmounts and re-renders (virtualized transcripts) isn't counted twice.
 const reportedPrints = new Set<string>();
 
-function textLength(el: Element): number {
-  return (el.textContent ?? "").trim().length;
-}
-
-/** Characters a turn contributes: for user turns with a text selector, only the typed text. */
-function turnChars(adapter: SiteAdapter, el: Element): number {
-  if (adapter.userTextSelector && el.matches(adapter.userSelector)) {
-    return Array.from(el.querySelectorAll(adapter.userTextSelector)).reduce((n, part) => n + textLength(part), 0);
-  }
-  return textLength(el);
-}
 
 function precedes(a: Element, b: Element): boolean {
   return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -107,7 +97,7 @@ function tick(): void {
   });
 
   for (const { reply, user } of tracker.observe(turns)) {
-    const print = `${conversationKey()}|${fingerprint((reply.el.textContent ?? "").trim())}`;
+    const print = `${conversationKey()}|${fingerprint(turnText(site, reply.el))}`;
     if (reportedPrints.has(print)) continue; // the same reply, re-rendered
     reportedPrints.add(print);
     void report(site, reply.el, reply.chars, user?.el);
