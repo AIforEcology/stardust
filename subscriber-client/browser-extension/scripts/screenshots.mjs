@@ -11,6 +11,7 @@ import { extname, join } from "node:path";
 const OUT = "store/screenshots";
 const fixtures = JSON.parse(readFileSync(join(OUT, "fixtures.json"), "utf8"));
 const HOSTED = "https://core.aifore.org";
+const VERSION = JSON.parse(readFileSync("package.json", "utf8")).version;
 if (!existsSync("dist/popup.js")) throw new Error("Run npm run build first");
 
 const scenes = [
@@ -41,7 +42,7 @@ const scenes = [
 ];
 
 // Runs in the popup frame before its script: just enough of chrome.* for popup.ts.
-function stubs({ scene, fixtures, hosted }) {
+function stubs({ scene, fixtures, hosted, version }) {
   if (window.top === window) return;
   const local = {
     apiBase: hosted, enabledSites: scene.sites, userId: fixtures.user_id,
@@ -58,7 +59,7 @@ function stubs({ scene, fixtures, hosted }) {
       session: { get: async (k) => pick(session, k), set: async () => {} },
     },
     tabs: { query: async () => [{ id: 1, url: scene.url }], reload: async () => {} },
-    runtime: { sendMessage: async () => {} },
+    runtime: { sendMessage: async () => {}, getManifest: () => ({ version }) },
     permissions: { request: async () => true },
   };
   window.fetch = async (url) => {
@@ -93,7 +94,7 @@ try {
       if (!existsSync(file)) return route.fulfill({ status: 404, body: "" });
       return route.fulfill({ contentType: types[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     });
-    await page.addInitScript(stubs, { scene, fixtures, hosted: HOSTED });
+    await page.addInitScript(stubs, { scene, fixtures, hosted: HOSTED, version: VERSION });
     await page.goto("https://ext.local/frame.html");
     const popup = page.frames().find((f) => f.url().endsWith("/popup.html"));
     await popup.waitForFunction(() => !document.getElementById("summary").textContent.includes("Loading"));
