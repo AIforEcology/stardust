@@ -1,6 +1,6 @@
 {
   "name": "@stardust/browser-extension",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Stardust browser extension (Chrome/Edge, Manifest V3): meters AI chat usage and shows the Stardust indicator code.",
   "license": "Apache-2.0",

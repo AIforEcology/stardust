@@ -13,13 +13,13 @@ function renderEvent(e: EnrichedEvent): void {
   $("code").textContent = e.indicator_code;
   $("code").dataset.grade = e.indicator_code[0];
   $("breakdown").innerHTML = [
-    row("Model", e.model === "unknown" ? "not shown by site" : e.model),
+    row("Model", e.model === "unknown" ? "not detected on this page" : e.model),
     row("Tokens in / out", `${e.tokens_in ?? "?"} / ${e.tokens_out ?? "?"}${e.tokens_estimated ? " (est.)" : ""}`),
-    row("Cost", fmtUsd(e.cost_usd)),
+    row("Cost", e.cost_usd == null ? (e.model === "unknown" ? "unknown (no model to price)" : "unknown (model not priced yet)") : fmtUsd(e.cost_usd)),
     row("Electricity", fmt(e.energy_wh, "Wh")),
     row("CO₂e", fmt(e.co2e_g, "g")),
     row("Water", fmt(e.water_ml, "mL")),
-    row("Energy source", energySourceLabel(e)),
+    row("Energy source", e.energy_source_code === "UNK" && e.provider === "test" ? "unknown (old test event)" : energySourceLabel(e)),
     row("Confidence", e.confidence_tier),
   ].join("");
   $("sji").textContent = e.job_sji;
@@ -70,8 +70,12 @@ async function main(): Promise<void> {
     else if (state.error) $("breakdown").textContent = state.error;
 
     $("test").addEventListener("click", async () => {
+      const button = $<HTMLButtonElement>("test");
+      button.disabled = true;
+      button.textContent = "Sending…";
+      // Waits until Core has answered (background.ts responds after recording the event).
       await chrome.runtime.sendMessage({ type: "stardust:test-event", tabId: tab.id });
-      setTimeout(() => location.reload(), 500);
+      location.reload();
     });
   }
 
