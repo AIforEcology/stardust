@@ -7,6 +7,12 @@ import { coreFetch, currentUserId, getSettings } from "./settings.ts";
 import { siteById } from "./sites.ts";
 import type { EnrichedEvent, Message, TabState, UsageEvent } from "./types.ts";
 
+/**
+ * What the Test button sends: a realistic reply on a real, priced model, so the popup shows a
+ * cost and an energy source like a real chat would. Change the model here when it's retired.
+ */
+export const TEST_SAMPLE = { provider: "anthropic", model: "claude-sonnet-5-5", tokensIn: 1000, tokensOut: 250 };
+
 async function send(event: UsageEvent): Promise<EnrichedEvent> {
   const { r } = await coreFetch("/v1/events", {
     method: "POST",
@@ -32,7 +38,7 @@ async function record(tabId: number, event: UsageEvent): Promise<void> {
   await chrome.storage.session.set({ [`tab:${tabId}`]: state });
 }
 
-chrome.runtime.onMessage.addListener((msg: Message, sender) => {
+chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
   void (async () => {
     const { enabledSites } = await getSettings();
     const userId = await currentUserId();
@@ -54,17 +60,18 @@ chrome.runtime.onMessage.addListener((msg: Message, sender) => {
     } else if (msg.type === "stardust:test-event") {
       await record(msg.tabId, {
         source_layer: "browser_ext",
-        provider: "test",
-        model: "unknown",
+        provider: TEST_SAMPLE.provider,
+        model: TEST_SAMPLE.model,
         timestamp: isoWithOffset(new Date()),
-        tokens_in: 1000,
-        tokens_out: 250,
+        tokens_in: TEST_SAMPLE.tokensIn,
+        tokens_out: TEST_SAMPLE.tokensOut,
         tokens_estimated: true,
         user_id: userId,
       });
     }
-  })();
-  return false;
+  })().finally(() => sendResponse({ done: true }));
+  // Keep the channel open so the popup can wait for Core's answer instead of guessing.
+  return true;
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
