@@ -1,7 +1,7 @@
 import { energySourceLabel, fmt, fmtUsd } from "./format.ts";
 import { coreFetch, currentUserId, DEFAULT_API_BASE, getSettings, setApiBase, setSiteEnabled } from "./settings.ts";
 import { siteForHost } from "./sites.ts";
-import type { EnrichedEvent, Summary, TabState } from "./types.ts";
+import type { EnrichedEvent, PageStatus, Summary, TabState } from "./types.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -45,6 +45,30 @@ async function renderSummary(apiBase: string): Promise<void> {
   }
 }
 
+/** Whether this tab is actually being measured, asked of the content script itself. */
+async function renderTabStatus(tabId: number): Promise<void> {
+  const el = $("tab-status");
+  let status: PageStatus | undefined;
+  try {
+    status = (await chrome.tabs.sendMessage(tabId, { type: "stardust:status" })) as PageStatus | undefined;
+  } catch {
+    // No content script answered: the page was open before Stardust was installed or reloaded.
+  }
+  if (!status) {
+    el.dataset.state = "warn";
+    el.textContent = "Not running on this tab yet. Reload the page to start measuring.";
+  } else if (!status.measuring) {
+    el.dataset.state = "warn";
+    el.textContent = "Measure was off when this page loaded. Reload the page to start measuring.";
+  } else {
+    el.dataset.state = status.repliesOnPage ? "ok" : "";
+    const sent = `${status.repliesSent} new ${status.repliesSent === 1 ? "reply" : "replies"} sent`;
+    el.textContent = status.repliesOnPage
+      ? `Measuring this tab: ${sent} since the page loaded.`
+      : `Measuring this tab, but no replies found on the page${status.repliesSent ? "" : " yet"}.`;
+  }
+}
+
 async function main(): Promise<void> {
   $("version").textContent = `v${chrome.runtime.getManifest().version}`;
   const settings = await getSettings();
@@ -60,6 +84,7 @@ async function main(): Promise<void> {
       await setSiteEnabled(site.id, toggle.checked);
       if (tab?.id != null) await chrome.tabs.reload(tab.id);
     });
+    if (toggle.checked && tab?.id != null) void renderTabStatus(tab.id);
   } else {
     $("site").hidden = true;
   }

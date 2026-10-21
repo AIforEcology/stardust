@@ -24,6 +24,7 @@
     button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; cursor: pointer; }
     button:hover { border-color: var(--accent); }
     .note { color: var(--muted); font-size: 11px; margin: 6px 0 0; }
+    #tab-status[data-state="ok"] { color: var(--accent); } #tab-status[data-state="warn"] { color: #f0a030; }
     footer { padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }
     a { color: var(--accent); }
   </style>
@@ -34,6 +35,7 @@
   <section id="site">
     <label class="switch"><span>Measure <strong id="site-name"></strong></span><input type="checkbox" id="site-toggle" /></label>
     <p class="note">Only character counts are sent, never your messages.</p>
+    <p class="note" id="tab-status"></p>
   </section>
 
   <section>
