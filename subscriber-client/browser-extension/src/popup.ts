@@ -1,12 +1,47 @@
-import { energySourceLabel, fmt, fmtUsd } from "./format.ts";
+import { codeParts, energySourceLabel, fmt, fmtArea, fmtUsd, forestM2, fossilCo2G, treeIcons } from "./format.ts";
 import { coreFetch, currentUserId, DEFAULT_API_BASE, getSettings, setApiBase, setSiteEnabled } from "./settings.ts";
 import { siteForHost } from "./sites.ts";
 import type { EnrichedEvent, Summary, TabState } from "./types.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-function row(label: string, value: string): string {
-  return `<div class="row"><span>${label}</span><span>${value}</span></div>`;
+function row(label: string, value: string, cls = "row"): string {
+  return `<div class="${cls}"><span>${label}</span><span>${value}</span></div>`;
+}
+
+const TREE_SVG =
+  '<svg viewBox="0 0 16 20" width="11" height="14" aria-hidden="true"><path d="M8 1 12.5 7H10.5L14 12H11L15 17H1L5 12H2L5.5 7H3.5Z" fill="currentColor"/><rect x="7" y="17" width="2" height="3" fill="currentColor"/></svg>';
+
+interface Figures {
+  code: string | null;
+  energyWh: number;
+  co2eG: number;
+  waterOnsiteMl?: number | null;
+  waterOffsiteMl?: number | null;
+  /** Water Core recorded before splitting it by source. */
+  waterUnsplitMl?: number;
+}
+
+/** The calculator's extra comparisons, folded away under "More detail". */
+function moreDetail(f: Figures): string {
+  const parts: string[] = [];
+  if (f.code) parts.push(`<p class="note">${codeParts(f.code)}</p>`);
+  if (f.waterOnsiteMl != null && f.waterOffsiteMl != null) {
+    parts.push('<div class="sublabel">Water</div>',
+      row("Data-center cooling", fmt(f.waterOnsiteMl, "mL"), "row sub"),
+      row("Power generation", fmt(f.waterOffsiteMl, "mL"), "row sub"));
+    if (f.waterUnsplitMl) parts.push(row("Not split (older events)", fmt(f.waterUnsplitMl, "mL"), "row sub"));
+  }
+  parts.push('<div class="sublabel">Same electricity, if generated entirely from:</div>',
+    row("Natural gas", fmt(fossilCo2G(f.energyWh, "gas"), "g CO₂"), "row sub"),
+    row("Coal", fmt(fossilCo2G(f.energyWh, "coal"), "g CO₂"), "row sub"),
+    row("Oil", fmt(fossilCo2G(f.energyWh, "oil"), "g CO₂"), "row sub"));
+  const m2 = forestM2(f.co2eG);
+  const n = treeIcons(m2);
+  parts.push('<div class="sublabel">Young Pacific Northwest conifer forest needed to absorb this CO₂e:</div>',
+    `<div class="row forest"><span class="trees" role="img" aria-label="About ${n} icons, each about 0.1 square meters of young forest">${TREE_SVG.repeat(n)}</span><span>${fmtArea(m2)} · 1 yr</span></div>`,
+    '<p class="note">Fossil figures: U.S. EIA (2023). Forest: Gray, Whittier &amp; Harmon, Ecosphere (2016); excludes soil carbon. Same method as the <a href="https://aifore.org/#calculator" target="_blank" rel="noopener">Token Cost Calculator</a>.</p>');
+  return `<details class="more"><summary>More detail</summary>${parts.join("")}</details>`;
 }
 
 function renderEvent(e: EnrichedEvent): void {
@@ -19,8 +54,13 @@ function renderEvent(e: EnrichedEvent): void {
     row("Electricity", fmt(e.energy_wh, "Wh")),
     row("CO₂e", fmt(e.co2e_g, "g")),
     row("Water", fmt(e.water_ml, "mL")),
+    row("Heat released", fmt(e.heat_rejected_wh ?? e.energy_wh, "Wh")),
     row("Energy source", e.energy_source_code === "UNK" && e.provider === "test" ? "unknown (old test event)" : energySourceLabel(e)),
     row("Confidence", e.confidence_tier),
+    moreDetail({
+      code: e.indicator_code, energyWh: e.energy_wh, co2eG: e.co2e_g,
+      waterOnsiteMl: e.water_onsite_ml, waterOffsiteMl: e.water_offsite_ml,
+    }),
   ].join("");
   $("sji").textContent = e.job_sji;
 }
@@ -38,6 +78,11 @@ async function renderSummary(apiBase: string): Promise<void> {
       row("Electricity", fmt(s.energy_wh, "Wh")),
       row("CO₂e", fmt(s.co2e_g, "g")),
       row("Water", fmt(s.water_ml, "mL")),
+      row("Heat released", fmt(s.heat_rejected_wh ?? s.energy_wh, "Wh")),
+      moreDetail({
+        code: s.indicator_code, energyWh: s.energy_wh, co2eG: s.co2e_g,
+        waterOnsiteMl: s.water_onsite_ml, waterOffsiteMl: s.water_offsite_ml, waterUnsplitMl: s.water_unsplit_ml,
+      }),
     ].join("");
     $("install-id").textContent = `Install ID: ${userId}`;
   } catch {

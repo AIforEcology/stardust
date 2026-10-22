@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { estimateTokens, isoWithOffset } from "../src/estimate.ts";
-import { badgeText, energySourceLabel, fmtUsd } from "../src/format.ts";
+import { badgeText, codeParts, energySourceLabel, fmtArea, fmtUsd, forestM2, fossilCo2G, treeIcons } from "../src/format.ts";
 import { siteForHost } from "../src/sites.ts";
 
 test("estimateTokens", () => {
@@ -39,4 +39,23 @@ test("site lookup", () => {
   assert.equal(siteForHost("chatgpt.com")?.provider, "openai");
   assert.equal(siteForHost("Claude.ai")?.provider, "anthropic");
   assert.equal(siteForHost("example.com"), undefined);
+});
+
+test("codeParts spells out the indicator code like the calculator", () => {
+  assert.equal(codeParts("C4-M"), "Impact C (moderate) · Cost tier 4 · Size M");
+  assert.equal(codeParts("AX-XL"), "Impact A (very low) · Cost tier X (unknown) · Size XL");
+});
+
+test("fossil and forest comparisons use the calculator's constants", () => {
+  // 0.8 Wh: the Claude screenshot fixture.
+  assert.ok(Math.abs(fossilCo2G(0.8, "gas") - 0.352) < 1e-9);
+  assert.ok(Math.abs(fossilCo2G(0.8, "coal") - 0.84) < 1e-9);
+  assert.ok(Math.abs(fossilCo2G(0.8, "oil") - 0.896) < 1e-9);
+  assert.ok(Math.abs(forestM2(550) - 1) < 1e-9);
+  assert.equal(fmtArea(forestM2(0.2936)), "5 cm²");
+  assert.equal(fmtArea(1.234), "1.23 m²");
+  assert.equal(fmtArea(12.34), "12.3 m²");
+  assert.equal(treeIcons(0), 1);
+  assert.equal(treeIcons(0.3), 3);
+  assert.equal(treeIcons(50), 10);
 });
