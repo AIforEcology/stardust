@@ -9,6 +9,7 @@
     body { margin: 0; width: 320px; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
     header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
     header h1 { margin: 0; font-size: 14px; color: var(--accent); letter-spacing: .02em; }
+    #version { font-weight: 400; font-size: 11px; color: var(--muted); }
     section { padding: 10px 14px; border-bottom: 1px solid var(--line); }
     h2 { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
     #code { font: 700 26px/1 ui-monospace, monospace; color: var(--accent); }
@@ -23,16 +24,23 @@
     button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; cursor: pointer; }
     button:hover { border-color: var(--accent); }
     .note { color: var(--muted); font-size: 11px; margin: 6px 0 0; }
+    details.more { margin-top: 6px; }
+    details.more summary { cursor: pointer; color: var(--accent); font-size: 12px; padding: 2px 0; }
+    .sublabel { color: var(--muted); font-size: 11px; margin: 8px 0 2px; }
+    .row.sub span:first-child { padding-left: 10px; }
+    .row.forest { align-items: center; }
+    .trees { display: flex; gap: 1px; color: var(--accent); }
     footer { padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }
     a { color: var(--accent); }
   </style>
 </head>
 <body>
-  <header><h1>Stardust</h1><button id="test" title="Send a sample event to check the connection">Test</button></header>
+  <header><h1>Stardust <span id="version"></span></h1><button id="test" title="Send a sample Claude Sonnet 5.5 reply (1,000 tokens in, 250 out) to check the connection">Test</button></header>
 
   <section id="site">
     <label class="switch"><span>Measure <strong id="site-name"></strong></span><input type="checkbox" id="site-toggle" /></label>
     <p class="note">Only character counts are sent, never your messages.</p>
+    <p class="note" id="tab-status"></p>
   </section>
 
   <section>

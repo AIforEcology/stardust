@@ -24,6 +24,10 @@ export interface EnrichedEvent extends UsageEvent {
   grid_intensity_g_per_kwh: number;
   co2e_g: number;
   water_ml: number;
+  /** Data-center cooling and power-generation shares of water_ml (absent from older Core versions). */
+  water_onsite_ml?: number | null;
+  water_offsite_ml?: number | null;
+  heat_rejected_wh?: number | null;
   confidence_tier: ConfidenceTier;
   indicator_code: string;
   energy_source_code: string;
@@ -44,6 +48,11 @@ export interface Summary {
   energy_wh: number;
   co2e_g: number;
   water_ml: number;
+  water_onsite_ml?: number;
+  water_offsite_ml?: number;
+  /** Water from events recorded before Core split it by source. */
+  water_unsplit_ml?: number;
+  heat_rejected_wh?: number | null;
   indicator_code: string | null;
 }
 
@@ -63,6 +72,22 @@ export interface TestEventMessage {
 }
 
 export type Message = UsageMessage | TestEventMessage;
+
+/** Popup → content script: is this tab being measured? */
+export interface StatusRequest {
+  type: "stardust:status";
+}
+
+/** Content script → popup. Counts only. */
+export interface PageStatus {
+  siteId: string;
+  /** Measure was on for this site when the page loaded (measurement starts at page load). */
+  measuring: boolean;
+  /** Replies on the page at the last check, history included. */
+  repliesOnPage: number;
+  /** New replies sent to Stardust since the page loaded. */
+  repliesSent: number;
+}
 
 export interface TabState {
   last?: EnrichedEvent;

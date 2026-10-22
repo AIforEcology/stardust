@@ -7,7 +7,8 @@ import { accountTurn, fingerprint, hiddenCharsEstimate, remember } from "./conte
 import { estimateTokens } from "./estimate.ts";
 import { siteForHost, type SiteAdapter } from "./sites.ts";
 import { ReplyTracker, type Turn } from "./tracker.ts";
-import type { UsageMessage } from "./types.ts";
+import { turnChars, turnText } from "./turns.ts";
+import type { PageStatus, StatusRequest, UsageMessage } from "./types.ts";
 
 const POLL_MS = 1000;
 /** A reply counts as finished once its length is unchanged for this many polls (and it isn't streaming). */
@@ -22,17 +23,6 @@ const tracker = new ReplyTracker<Element>(STABLE_POLLS);
 // reply the page unmounts and re-renders (virtualized transcripts) isn't counted twice.
 const reportedPrints = new Set<string>();
 
-function textLength(el: Element): number {
-  return (el.textContent ?? "").trim().length;
-}
-
-/** Characters a turn contributes: for user turns with a text selector, only the typed text. */
-function turnChars(adapter: SiteAdapter, el: Element): number {
-  if (adapter.userTextSelector && el.matches(adapter.userSelector)) {
-    return Array.from(el.querySelectorAll(adapter.userTextSelector)).reduce((n, part) => n + textLength(part), 0);
-  }
-  return textLength(el);
-}
 
 function precedes(a: Element, b: Element): boolean {
   return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -106,18 +96,28 @@ function tick(): void {
     };
   });
 
+  status.repliesOnPage = turns.filter((t) => t.kind === "reply").length;
   for (const { reply, user } of tracker.observe(turns)) {
-    const print = `${conversationKey()}|${fingerprint((reply.el.textContent ?? "").trim())}`;
+    const print = `${conversationKey()}|${fingerprint(turnText(site, reply.el))}`;
     if (reportedPrints.has(print)) continue; // the same reply, re-rendered
     reportedPrints.add(print);
+    status.repliesSent += 1;
     void report(site, reply.el, reply.chars, user?.el);
   }
 }
 
+// What the popup shows about this tab, so a page the script isn't running on (or a site whose
+// markup changed) is visible instead of silently measuring nothing.
+const status: PageStatus = { siteId: site?.id ?? "", measuring: false, repliesOnPage: 0, repliesSent: 0 };
+
 async function start(): Promise<void> {
   if (!site) return;
+  chrome.runtime.onMessage.addListener((msg: StatusRequest, _sender, sendResponse) => {
+    if (msg?.type === "stardust:status") sendResponse(status);
+  });
   const { enabledSites } = await chrome.storage.local.get("enabledSites");
   if (!(enabledSites as string[] | undefined)?.includes(site.id)) return;
+  status.measuring = true;
   setInterval(tick, POLL_MS);
 }
 
