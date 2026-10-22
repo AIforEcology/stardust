@@ -50,10 +50,10 @@
     "methodology_version": "0.2.0"
   },
   "chatgpt": {
-    "event_id": "29d0ef2d-62c2-4544-8804-b15cea3c4bd6",
+    "event_id": "9e79d968-99a4-4d68-a970-7f84ebeeb927",
     "source_layer": "browser_ext",
     "provider": "openai",
-    "model": "gpt-4o",
+    "model": "gpt-5.6",
     "region": null,
     "timestamp": "2026-10-20T11:15:00Z",
     "tokens_in": 1400,
@@ -68,8 +68,8 @@
     "org_id": null,
     "otel_trace_id": null,
     "otel_span_id": null,
-    "job_sji": "1908F1FF-NGP-4876-49F6-94F6BBDC2A28",
-    "cost_usd": 0.0097,
+    "job_sji": "689A0EAB-NGP-29B2-4487-96EB681EE770",
+    "cost_usd": 0.018000000000000002,
     "energy_wh": 0.722,
     "grid_intensity_g_per_kwh": 367.0,
     "co2e_g": 0.264974,
@@ -81,7 +81,7 @@
     "particulate_mg": null,
     "ewaste_mg": null,
     "confidence_tier": "estimated",
-    "indicator_code": "C2-M",
+    "indicator_code": "C3-M",
     "energy_source_code": "NGP",
     "energy_mix_breakdown": {
       "NGP": 43.0,
