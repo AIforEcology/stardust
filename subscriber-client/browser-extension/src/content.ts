@@ -8,7 +8,7 @@ import { estimateTokens } from "./estimate.ts";
 import { siteForHost, type SiteAdapter } from "./sites.ts";
 import { ReplyTracker, type Turn } from "./tracker.ts";
 import { turnChars, turnText } from "./turns.ts";
-import type { UsageMessage } from "./types.ts";
+import type { PageStatus, StatusRequest, UsageMessage } from "./types.ts";
 
 const POLL_MS = 1000;
 /** A reply counts as finished once its length is unchanged for this many polls (and it isn't streaming). */
@@ -96,18 +96,28 @@ function tick(): void {
     };
   });
 
+  status.repliesOnPage = turns.filter((t) => t.kind === "reply").length;
   for (const { reply, user } of tracker.observe(turns)) {
     const print = `${conversationKey()}|${fingerprint(turnText(site, reply.el))}`;
     if (reportedPrints.has(print)) continue; // the same reply, re-rendered
     reportedPrints.add(print);
+    status.repliesSent += 1;
     void report(site, reply.el, reply.chars, user?.el);
   }
 }
 
+// What the popup shows about this tab, so a page the script isn't running on (or a site whose
+// markup changed) is visible instead of silently measuring nothing.
+const status: PageStatus = { siteId: site?.id ?? "", measuring: false, repliesOnPage: 0, repliesSent: 0 };
+
 async function start(): Promise<void> {
   if (!site) return;
+  chrome.runtime.onMessage.addListener((msg: StatusRequest, _sender, sendResponse) => {
+    if (msg?.type === "stardust:status") sendResponse(status);
+  });
   const { enabledSites } = await chrome.storage.local.get("enabledSites");
   if (!(enabledSites as string[] | undefined)?.includes(site.id)) return;
+  status.measuring = true;
   setInterval(tick, POLL_MS);
 }
 

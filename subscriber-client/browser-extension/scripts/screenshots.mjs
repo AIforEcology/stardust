@@ -58,7 +58,7 @@ function stubs({ scene, fixtures, hosted, version }) {
       local: { get: async (k) => pick(local, k), set: async () => {}, remove: async () => {} },
       session: { get: async (k) => pick(session, k), set: async () => {} },
     },
-    tabs: { query: async () => [{ id: 1, url: scene.url }], reload: async () => {} },
+    tabs: { query: async () => [{ id: 1, url: scene.url }], reload: async () => {}, sendMessage: async () => ({ siteId: "", measuring: scene.sites.length > 0, repliesOnPage: 12, repliesSent: 3 }) },
     runtime: { sendMessage: async () => {}, getManifest: () => ({ version }) },
     permissions: { request: async () => true },
   };

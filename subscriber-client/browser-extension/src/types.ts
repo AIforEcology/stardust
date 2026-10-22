@@ -73,6 +73,22 @@ export interface TestEventMessage {
 
 export type Message = UsageMessage | TestEventMessage;
 
+/** Popup → content script: is this tab being measured? */
+export interface StatusRequest {
+  type: "stardust:status";
+}
+
+/** Content script → popup. Counts only. */
+export interface PageStatus {
+  siteId: string;
+  /** Measure was on for this site when the page loaded (measurement starts at page load). */
+  measuring: boolean;
+  /** Replies on the page at the last check, history included. */
+  repliesOnPage: number;
+  /** New replies sent to Stardust since the page loaded. */
+  repliesSent: number;
+}
+
 export interface TabState {
   last?: EnrichedEvent;
   error?: string;
