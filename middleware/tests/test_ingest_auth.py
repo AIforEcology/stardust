@@ -88,7 +88,8 @@ def test_revoked_install_key_stops_working(pricing_file):
     with client(pricing_file) as c:
         reg = c.post("/v1/installs").json()
         c.post(f"/v1/admin/keys/{reg['key_id']}/revoke", headers=ADMIN)
-        assert c.post("/v1/events", json=event(), headers=bearer(reg["key"])).status_code == 401
+        r = c.post("/v1/events", json=event(), headers=bearer(reg["key"]))
+        assert r.status_code == 401 and r.json()["key_revoked"] is True
 
 
 def test_registration_is_off_by_default_and_rate_limited(pricing_file):

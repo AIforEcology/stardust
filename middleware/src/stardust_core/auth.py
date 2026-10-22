@@ -19,7 +19,7 @@ import hashlib
 import hmac
 import secrets
 from dataclasses import dataclass
-from typing import FrozenSet, Iterable, Optional, Tuple
+from typing import Dict, FrozenSet, Iterable, Optional, Tuple
 from uuid import UUID
 
 AUTH_MODES = ("off", "optional", "required")
@@ -62,11 +62,14 @@ class Principal:
 
 
 class AuthError(Exception):
-    """``status`` is the HTTP status; ``reason`` is a §23.7 reason code."""
+    """``status`` is the HTTP status; ``reason`` is a §23.7 reason code. ``extra`` adds fields
+    to the error body without adding reason codes (``key_revoked`` tells a client not to
+    re-register)."""
 
-    def __init__(self, status: int, reason: str, message: str):
+    def __init__(self, status: int, reason: str, message: str, extra: Optional[Dict[str, object]] = None):
         super().__init__(message)
         self.status, self.reason, self.message = status, reason, message
+        self.extra = extra or {}
 
 
 def new_key() -> Tuple[str, str, str]:
