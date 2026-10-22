@@ -1,5 +1,7 @@
 # Stardust browser extension
 
+Technical design, with workflow diagrams: [`docs/architecture/browser-extension.md`](../../docs/architecture/browser-extension.md).
+
 Chrome/Edge extension (Manifest V3) that meters AI chat usage on ChatGPT, Claude and Gemini, sends it to Stardust Core, and shows the indicator code on the toolbar badge.
 
 ## Build and load
@@ -25,7 +27,7 @@ In Chrome or Edge, open `chrome://extensions`, turn on Developer mode, click **L
 
 | Site | Replies | Model | Checked |
 |---|---|---|---|
-| claude.ai | ✅ `.font-claude-response`, streaming via `data-is-streaming` | ✅ from the model picker, e.g. "Opus 5.5" → `claude-opus-5-5` | 2026-09-24, live |
+| claude.ai | ✅ `[data-testid="assistant-message"]`, counting only the answer (`.standard-markdown`), streaming via `data-is-streaming` | ✅ from the model picker, e.g. "Opus 5.5" → `claude-opus-5-5` | 2026-10-21, live (markup changed; was `.font-claude-response`) |
 | ChatGPT | ✅ `[data-message-author-role]`, clean text on both sides | ✅ **per reply** from `data-message-model-slug`, e.g. `gpt-5-6` → `gpt-5.6` | 2026-09-24, live |
 | Gemini | ✅ `model-response message-content`. User text from `.query-text-line`, since `user-query` also holds a hidden "You said …" copy | ⚠️ mode only ("Flash", "Pro") → `gemini-flash`, which sets the size tier. The app shows no version, so cost stays unknown | 2026-09-24, live |
 

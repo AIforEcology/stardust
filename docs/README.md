@@ -35,6 +35,7 @@ Section references in the code (like `§8.4`) point to the spec. Every version s
 
 ## Architecture
 
+- [`architecture/browser-extension.md`](architecture/browser-extension.md): technical design of the browser extension, with diagrams. It covers the architecture, workflows (install, opt-in, measuring a reply, popup, rejected keys), how new replies are told from history, token estimation, the data model, privacy and permissions, site adapters, diagnostics, and the build and release pipeline.
 - [`architecture/database.md`](architecture/database.md): how Stardust Core stores data. It covers why SQLite, the schema, write and read paths, durability, privacy controls, performance, operations, migrations and the path to PostgreSQL.
 - [`architecture/impact-credits.md`](architecture/impact-credits.md): the v1.2 extension from carbon to five impact dimensions (carbon, electricity, water, heat, materials) and lifecycle emissions. It covers the target architecture, how it maps onto today's code, and the incremental, non-destructive build plan. Its ground rules apply to all the plans below.
 - [`architecture/time-embodied-lifecycle.md`](architecture/time-embodied-lifecycle.md): the v1.3 telemetry for time-of-use and load shifting, component-level embodied carbon, and the hardware lifecycle record.
