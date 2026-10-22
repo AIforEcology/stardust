@@ -82,6 +82,37 @@ The database lives in the `core-data` volume and survives rebuilds.
 
 The `backup` service writes `deploy/backups/core-YYYYMMDD.db` nightly and keeps 14. Copy them off the server too, for example to the AIforE shared Drive or Oracle Object Storage (20 GB free). Restore: stop Core, copy a backup to the volume as `core.db`, start Core.
 
+### Off-server copies (Oracle Object Storage)
+
+`offsite-backup.sh` copies each finished nightly backup, gzipped, to a private Object Storage bucket every night at 02:30 UTC. The server signs in as itself (instance principal), so no keys are stored on it. The policy only lets it list and add objects, so a compromised server can't overwrite or delete the copies.
+
+In the Oracle console (home region):
+
+1. **Storage → Buckets → Create bucket** `stardust-core-backups`, Standard tier, in the instance's compartment. Leave it private.
+2. **Identity & Security → Domains → Default → Dynamic groups → Create** `stardust-core`, with the rule `instance.id = '<the instance OCID>'`.
+3. **Identity & Security → Policies → Create policy** in the root compartment, named `stardust-core-backups`:
+
+   ```
+   Allow dynamic-group stardust-core to inspect objects in tenancy where target.bucket.name = 'stardust-core-backups'
+   Allow dynamic-group stardust-core to manage objects in tenancy where all {target.bucket.name = 'stardust-core-backups', request.permission = 'OBJECT_CREATE'}
+   Allow service objectstorage-<region-id> to manage object-family in tenancy
+   ```
+
+   The third line lets Object Storage delete old copies for the lifecycle rule. Use your region's identifier, for example `objectstorage-us-phoenix-1`.
+4. In the bucket, **Lifecycle policy rules → Create rule**: Delete, objects older than 90 days, prefix `core-`.
+
+On the server (Oracle Linux):
+
+```bash
+sudo dnf -y install python39-oci-cli
+sudo cp ~/stardust/deploy/systemd/stardust-offsite-backup.* /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now stardust-offsite-backup.timer
+sudo systemctl start stardust-offsite-backup.service && journalctl -u stardust-offsite-backup -n 20
+```
+
+Restore from a copy: `oci os object get --auth instance_principal -bn stardust-core-backups --name core-YYYYMMDD.db.gz --file core.db.gz && gunzip core.db.gz`, then restore it as above.
+The copies stay well inside Always Free's 20 GB of Object Storage: a compressed backup is tens of KB now, and 90 days are kept.
+
 ## Cost checks
 
 Oracle: stay on shapes and sizes the console marks Always Free, and within 200 GB of block storage. Set a budget alert at $1 under Billing so any accidental paid resource shows up at once.
