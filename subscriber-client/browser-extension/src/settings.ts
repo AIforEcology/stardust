@@ -72,7 +72,28 @@ export async function clearCredentials(apiBase: string): Promise<void> {
   await chrome.storage.local.remove(credKey(apiBase));
 }
 
-/** Fetch from Core with this install's key, re-registering once if Core no longer knows the key. */
+/** Core revoked this install's key: the operator blocked it, so it must not register again. */
+export class KeyRevokedError extends Error {
+  constructor() {
+    super("This install's key was revoked by the Stardust Core operator, so nothing is being sent. Contact them to restore it.");
+    this.name = "KeyRevokedError";
+  }
+}
+
+/** Whether a 401 says the key was revoked (Core adds key_revoked: true), as opposed to unknown. */
+async function isRevoked(r: Response): Promise<boolean> {
+  try {
+    return (await r.clone().json())?.key_revoked === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch from Core with this install's key. If Core no longer knows the key (for example it was
+ * reset), register once more and retry. If Core says the key was revoked, never re-register:
+ * that would undo the revocation. Throws KeyRevokedError instead.
+ */
 export async function coreFetch(path: string, init: RequestInit = {}): Promise<{ r: Response; userId: string }> {
   const settings = await getSettings();
   for (let attempt = 0; ; attempt++) {
@@ -80,9 +101,12 @@ export async function coreFetch(path: string, init: RequestInit = {}): Promise<{
     const headers = new Headers(init.headers);
     if (creds.key) headers.set("authorization", `Bearer ${creds.key}`);
     const r = await fetch(`${settings.apiBase}${path}`, { ...init, headers });
-    if (r.status === 401 && creds.key && attempt === 0) {
-      await clearCredentials(settings.apiBase);
-      continue;
+    if (r.status === 401 && creds.key) {
+      if (await isRevoked(r)) throw new KeyRevokedError();
+      if (attempt === 0) {
+        await clearCredentials(settings.apiBase);
+        continue;
+      }
     }
     return { r, userId: creds.userId ?? settings.userId };
   }

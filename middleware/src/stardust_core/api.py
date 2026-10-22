@@ -211,7 +211,7 @@ def create_app(
     async def auth_error(_: Request, e: AuthError) -> Response:
         # §23.7 reason codes; 401s tell the client how to authenticate.
         headers = {"WWW-Authenticate": "Bearer"} if e.status == 401 else None
-        return JSONResponse({"detail": e.message, "reason": e.reason}, status_code=e.status, headers=headers)
+        return JSONResponse({"detail": e.message, "reason": e.reason, **e.extra}, status_code=e.status, headers=headers)
 
     def require_admin(x_stardust_admin_token: Optional[str] = Header(default=None)) -> None:
         if not settings.admin_token:
@@ -230,8 +230,12 @@ def create_app(
             return None
         key_id = auth.split_key(key)
         stored = store.load_api_key(key_id) if key_id else None
-        if stored is None or stored["revoked_at"] or not auth.matches(key, stored["key_hash"]):
-            raise AuthError(401, "unauthorized", "invalid or revoked API key")
+        if stored is None or not auth.matches(key, stored["key_hash"]):
+            raise AuthError(401, "unauthorized", "invalid API key")
+        if stored["revoked_at"]:
+            # Checked after the hash, so only the key's holder learns it was revoked. Clients
+            # that self-register (the browser extension) must not register again on this.
+            raise AuthError(401, "unauthorized", "this API key was revoked", {"key_revoked": True})
         return Principal(key_id=stored["key_id"], org_id=UUID(stored["org_id"]),
                          user_id=UUID(stored["user_id"]) if stored["user_id"] else None,
                          scopes=frozenset(stored["scopes"]))
