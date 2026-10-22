@@ -1,5 +1,7 @@
 # Stardust browser extension
 
+Technical design, with workflow diagrams: [`docs/architecture/browser-extension.md`](../../docs/architecture/browser-extension.md).
+
 Chrome/Edge extension (Manifest V3) that meters AI chat usage on ChatGPT, Claude and Gemini, sends it to Stardust Core, and shows the indicator code on the toolbar badge.
 
 ## Build and load
@@ -25,7 +27,7 @@ In Chrome or Edge, open `chrome://extensions`, turn on Developer mode, click **L
 
 | Site | Replies | Model | Checked |
 |---|---|---|---|
-| claude.ai | ✅ `.font-claude-response`, streaming via `data-is-streaming` | ✅ from the model picker, e.g. "Opus 5.5" → `claude-opus-5-5` | 2026-09-24, live |
+| claude.ai | ✅ `[data-testid="assistant-message"]`, counting only the answer (`.standard-markdown`), streaming via `data-is-streaming` | ✅ from the model picker, e.g. "Opus 5.5" → `claude-opus-5-5` | 2026-10-21, live (markup changed; was `.font-claude-response`) |
 | ChatGPT | ✅ `[data-message-author-role]`, clean text on both sides | ✅ **per reply** from `data-message-model-slug`, e.g. `gpt-5-6` → `gpt-5.6` | 2026-09-24, live |
 | Gemini | ✅ `model-response message-content`. User text from `.query-text-line`, since `user-query` also holds a hidden "You said …" copy | ⚠️ mode only ("Flash", "Pro") → `gemini-flash`, which sets the size tier. The app shows no version, so cost stays unknown | 2026-09-24, live |
 
@@ -62,11 +64,11 @@ Store listing text, permission justifications and the privacy policy draft are i
 
 ### Store screenshots
 
-`npm run screenshots` renders the real popup (built for the hosted Core) with Chromium and writes the store images to `store/screenshots/`: three 1280×800 screenshots and a 440×280 promo tile. The numbers shown come from `store/screenshots/fixtures.json`, events that Core actually enriched. Regenerate the images after any change to the popup's look.
+`npm run screenshots` renders the real popup (built for the hosted Core) with Chromium and writes the store images to `store/screenshots/`: three 1280×800 screenshots and a 440×280 promo tile. The numbers shown come from `store/screenshots/fixtures.json`, events that Core actually enriched (to change one, send the sample event to a local Core and paste its answer in). Each screenshot can crop the popup to the part it's about (`crop` in `scripts/screenshots.mjs`), so the text stays large as the popup grows. Regenerate the images after any change to the popup's look, and after every version bump, since the popup shows the version.
 
 ### Releasing
 
-1. Bump `version` in `package.json` (for example `0.1.0` → `0.1.1`) and merge to main.
+1. Bump `version` in `package.json` (for example `0.1.0` → `0.1.1`), run `npm run screenshots` so the store images show the new version, and merge to main.
 2. Tag and push: `git tag extension-v0.1.1 && git push origin extension-v0.1.1`.
 3. The **Release extension** workflow checks the tag matches `package.json`, runs the tests, builds `stardust-extension.zip` and attaches it to a GitHub Release.
 4. Upload that zip in the Chrome Web Store and Edge Add-ons dashboards. Once each store approves it, users update automatically.

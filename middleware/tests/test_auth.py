@@ -125,9 +125,18 @@ def test_revoked_key_stops_working(client):
     assert client.get("/v1/summary", headers=bearer(k)).status_code == 200
     r = client.post(f"/v1/admin/keys/{k['key_id']}/revoke", headers=ADMIN)
     assert r.status_code == 200 and r.json()["revoked_at"]
-    assert client.get("/v1/summary", headers=bearer(k)).status_code == 401
+    r2 = client.get("/v1/summary", headers=bearer(k))
+    assert r2.status_code == 401 and r2.json()["reason"] == "unauthorized" and r2.json()["key_revoked"] is True
     # Revoking again keeps the first time.
     assert client.post(f"/v1/admin/keys/{k['key_id']}/revoke", headers=ADMIN).json()["revoked_at"] == r.json()["revoked_at"]
+
+
+def test_unknown_key_is_not_reported_as_revoked(client):
+    k = key(client)
+    forged = k["key"][:-4] + ("AAAA" if not k["key"].endswith("AAAA") else "BBBB")
+    for bad in (forged, "sdk_0000000000000000_nope"):
+        r = client.get("/v1/summary", headers={"Authorization": f"Bearer {bad}"})
+        assert r.status_code == 401 and r.json()["reason"] == "unauthorized" and "key_revoked" not in r.json()
 
 
 # --- key administration ---------------------------------------------------------------------------

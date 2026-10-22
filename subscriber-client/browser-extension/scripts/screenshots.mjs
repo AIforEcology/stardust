@@ -22,6 +22,8 @@ const scenes = [
     url: "https://claude.ai/chat/1",
     sites: ["claude"],
     last: fixtures.claude,
+    // Header through the last reply, so the text stays large.
+    crop: { from: "header", to: "#breakdown" },
   },
   {
     file: "popup-total.png",
@@ -30,6 +32,8 @@ const scenes = [
     url: "https://chatgpt.com/c/1",
     sites: ["chatgpt", "claude", "gemini"],
     last: fixtures.chatgpt,
+    // The total with its More detail panel open: water split, fossil and forest equivalents.
+    crop: { from: "#summary", to: "#summary", open: "#summary details" },
   },
   {
     file: "popup-optin.png",
@@ -77,10 +81,11 @@ const frame = (s) => `<!doctype html><meta charset="utf-8"><style>
   .text { flex: 1; } h1 { font-size: 46px; line-height: 1.1; margin: 0 0 18px; color: #4AE87A; }
   p { font-size: 22px; line-height: 1.45; margin: 0; color: #b9cdc2; }
   .brand { margin-top: 34px; font-size: 15px; color: #8aa397; letter-spacing: .04em; }
-  iframe { border: 1px solid #23312a; border-radius: 10px; width: 320px; height: 560px; zoom: 1.3;
-           box-shadow: 0 24px 70px rgba(0,0,0,.55); background: #0d1411; }
+  .clip { border: 1px solid #23312a; border-radius: 10px; width: 320px; overflow: hidden; zoom: 1.3;
+          box-shadow: 0 24px 70px rgba(0,0,0,.55); background: #0d1411; }
+  iframe { border: 0; display: block; width: 320px; height: 560px; }
 </style><div class="text"><h1>${s.title}</h1><p>${s.sub}</p><div class="brand">STARDUST · AI FOR ECOLOGY</div></div>
-<iframe src="/popup.html"></iframe>`;
+<div class="clip"><iframe src="/popup.html"></iframe></div>`;
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".png": "image/png", ".json": "application/json" };
 const browser = await chromium.launch();
@@ -98,14 +103,22 @@ try {
     await page.goto("https://ext.local/frame.html");
     const popup = page.frames().find((f) => f.url().endsWith("/popup.html"));
     await popup.waitForFunction(() => !document.getElementById("summary").textContent.includes("Loading"));
-    // Fit the frame to the popup's content so nothing is cut off or padded.
-    const h = await popup.evaluate(() => document.documentElement.scrollHeight);
-    // and zoom it as large as fits in 800px with a margin.
-    await page.evaluate((h) => {
+    if (scene.crop?.open) await popup.evaluate((sel) => document.querySelectorAll(sel).forEach((d) => (d.open = true)), scene.crop.open);
+    // Show the whole popup, or just the part a scene is about (header or section edges), and zoom
+    // it as large as fits in 800px with a margin, so the text stays readable as the popup grows.
+    const { full, top, bottom } = await popup.evaluate((crop) => {
+      const edge = (sel) => document.querySelector(sel).closest("header, section").getBoundingClientRect();
+      const full = document.documentElement.scrollHeight;
+      return crop ? { full, top: edge(crop.from).top, bottom: edge(crop.to).bottom } : { full, top: 0, bottom: full };
+    }, scene.crop ?? null);
+    await page.evaluate(({ full, top, bottom }) => {
       const f = document.querySelector("iframe");
-      f.style.height = `${h}px`;
-      f.style.zoom = String(Math.min(1.3, 740 / h));
-    }, h);
+      f.style.height = `${full}px`;
+      f.style.marginTop = `${-top}px`;
+      const clip = document.querySelector(".clip");
+      clip.style.height = `${bottom - top}px`;
+      clip.style.zoom = String(Math.min(1.5, 740 / (bottom - top)));
+    }, { full, top, bottom });
     await page.screenshot({ path: join(OUT, scene.file) });
     console.log(`${OUT}/${scene.file}`);
     await page.close();
