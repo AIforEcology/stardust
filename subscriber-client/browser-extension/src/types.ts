@@ -24,6 +24,10 @@ export interface EnrichedEvent extends UsageEvent {
   grid_intensity_g_per_kwh: number;
   co2e_g: number;
   water_ml: number;
+  /** Data-center cooling and power-generation shares of water_ml (absent from older Core versions). */
+  water_onsite_ml?: number | null;
+  water_offsite_ml?: number | null;
+  heat_rejected_wh?: number | null;
   confidence_tier: ConfidenceTier;
   indicator_code: string;
   energy_source_code: string;
@@ -44,6 +48,11 @@ export interface Summary {
   energy_wh: number;
   co2e_g: number;
   water_ml: number;
+  water_onsite_ml?: number;
+  water_offsite_ml?: number;
+  /** Water from events recorded before Core split it by source. */
+  water_unsplit_ml?: number;
+  heat_rejected_wh?: number | null;
   indicator_code: string | null;
 }
 

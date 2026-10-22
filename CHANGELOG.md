@@ -24,6 +24,7 @@ Versions follow [Semantic Versioning](https://semver.org/). The format follows [
   - Admin endpoints: `POST /v1/admin/keys`, `GET /v1/admin/keys`, `POST /v1/admin/keys/{key_id}/revoke`.
   - `/healthz` reports `subscriber_auth` and counts `api_keys` rows.
 - Database schema v4: the `api_keys` table, which stores only key hashes.
+- **Browser extension:** the popup shows the same measures as the AIforE Token Cost Calculator. "Heat released" joins the main list for the last reply and the total. A "More detail" toggle holds the rest: what the indicator code means, water split into data-center cooling and power generation, the same electricity's CO₂ from natural gas, coal or oil (U.S. EIA 2023), and the young-forest area that would absorb the CO₂e (Gray, Whittier & Harmon 2016). Uses fields Core already returns; no Core change.
 
 ### Unchanged
 - With the default `off`, every endpoint behaves exactly as before.
