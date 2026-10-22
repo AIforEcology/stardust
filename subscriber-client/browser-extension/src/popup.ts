@@ -1,5 +1,5 @@
 import { codeParts, energySourceLabel, fmt, fmtArea, fmtUsd, forestM2, fossilCo2G, treeIcons } from "./format.ts";
-import { coreFetch, currentUserId, DEFAULT_API_BASE, getSettings, setApiBase, setSiteEnabled } from "./settings.ts";
+import { coreFetch, currentUserId, DEFAULT_API_BASE, getSettings, KeyRevokedError, setApiBase, setSiteEnabled } from "./settings.ts";
 import { siteForHost } from "./sites.ts";
 import type { EnrichedEvent, PageStatus, Summary, TabState } from "./types.ts";
 
@@ -85,8 +85,8 @@ async function renderSummary(apiBase: string): Promise<void> {
       }),
     ].join("");
     $("install-id").textContent = `Install ID: ${userId}`;
-  } catch {
-    $("summary").textContent = `Can't reach Stardust Core at ${apiBase}.`;
+  } catch (e) {
+    $("summary").textContent = e instanceof KeyRevokedError ? e.message : `Can't reach Stardust Core at ${apiBase}.`;
   }
 }
 
