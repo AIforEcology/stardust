@@ -68,7 +68,7 @@ Store listing text, permission justifications and the privacy policy draft are i
 
 ### Releasing
 
-1. Bump `version` in `package.json` (for example `0.1.0` → `0.1.1`), run `npm run screenshots` so the store images show the new version, and merge to main.
+1. Bump the version with `npm version patch --no-git-tag-version` (or `minor`), which also copies it into `static/manifest.json` (`scripts/sync-version.mjs`; `build:store` runs it too, and CI checks the two match). Run `npm run screenshots` so the store images show the new version, and merge to main.
 2. Tag and push: `git tag extension-v0.1.1 && git push origin extension-v0.1.1`.
 3. The **Release extension** workflow checks the tag matches `package.json`, runs the tests, builds `stardust-extension.zip` and attaches it to a GitHub Release.
 4. Upload that zip in the Chrome Web Store and Edge Add-ons dashboards. Once each store approves it, users update automatically.

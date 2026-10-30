@@ -44,4 +44,6 @@ Section references in the code (like `§8.4`) point to the spec. Every version s
 
 ## Operations
 
+- **Hosted Core is live** at https://core.aifore.org (health check: `/healthz`). Hosting, updates and backups: [`deploy/README.md`](../deploy/README.md). A daily workflow, [`core-uptime.yml`](../.github/workflows/core-uptime.yml), checks it.
+
 - [`TODO.md`](TODO.md): open work, and the recurring checklists, including the **weekly tech operations fee review**.
