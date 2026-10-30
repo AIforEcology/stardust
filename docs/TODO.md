@@ -40,6 +40,11 @@ The tech operations fee ([middleware README](../middleware/README.md#tech-operat
 
 ## One-off
 
+### Hosting
+
+- [x] Finish standing up the Oracle instance and DNS for core.aifore.org (done 2026-10-30: live at https://core.aifore.org, [deploy README](../deploy/README.md))
+- [ ] Confirm that the deployment test key was revoked (check 6 on the status sheet is still open). From the server, list keys with `GET /v1/admin/keys` and check that the test key shows as revoked
+
 ### Decisions
 
 - [ ] **Counsel review of the fee structure.** Confirm with counsel the tech operations fee invoiced under a technology-services agreement, and its unrelated-business-income treatment ([operating model](architecture/impact-credits.md#operating-model-technology-and-connection-not-financial-brokerage)).

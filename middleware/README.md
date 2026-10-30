@@ -2,6 +2,16 @@
 
 The service in the middle (spec §9.1, §10.4). It receives usage events from subscriber clients, enriches them with cost and environmental impact, computes the indicator code and job ID, and brokers remediation between subscribers and providers.
 
+## Hosted Core (production)
+
+AIforE runs Core in production at **https://core.aifore.org** (live since 2026-10-30). Check it with:
+
+```bash
+curl -s https://core.aifore.org/healthz
+```
+
+It should show `"ok": true`, `priced_models` over 1,000, and `"ingest_auth"` and `"subscriber_auth"` both `"required"`. Admin endpoints aren't reachable from the internet. Hosting, updates and backups are in [`deploy/`](../deploy/README.md).
+
 ## Run it
 
 ```bash

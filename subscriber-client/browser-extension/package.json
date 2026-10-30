@@ -13,7 +13,10 @@
     "watch": "node build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types test/*.test.ts",
-    "build:store": "STARDUST_API_BASE=${STARDUST_API_BASE:-https://core.aifore.org} node build.mjs && cd dist && rm -f ../stardust-extension.zip && zip -qr ../stardust-extension.zip . && cd .. && echo 'Store package: stardust-extension.zip'",
+    "sync-version": "node scripts/sync-version.mjs",
+    "check-version": "node scripts/sync-version.mjs --check",
+    "version": "node scripts/sync-version.mjs && git add static/manifest.json",
+    "build:store": "node scripts/sync-version.mjs && STARDUST_API_BASE=${STARDUST_API_BASE:-https://core.aifore.org} node build.mjs && cd dist && rm -f ../stardust-extension.zip && zip -qr ../stardust-extension.zip . && cd .. && echo 'Store package: stardust-extension.zip'",
     "screenshots": "STARDUST_API_BASE=https://core.aifore.org node build.mjs && node scripts/screenshots.mjs"
   },
   "devDependencies": {
