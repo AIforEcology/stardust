@@ -56,9 +56,7 @@ jobs:
 
   extension-version:
     # static/manifest.json must carry package.json's version (scripts/sync-version.mjs).
-    # TODO: drop continue-on-error once the current 0.1.0 vs 0.1.3 mismatch is fixed, so drift blocks merges.
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: subscriber-client/browser-extension
