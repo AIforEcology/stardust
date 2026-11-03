@@ -3,8 +3,18 @@
 One small Linux server runs Core, Caddy (automatic HTTPS) and a nightly backup, with Docker Compose.
 Core is a single process with a SQLite file, so it needs a real persistent disk, not a serverless platform.
 
-- **Beta host:** Oracle Cloud Always Free, one Ampere A1 VM (Arm64), 1 OCPU and 6 GB or more. $0. Core runs comfortably in 1 OCPU / 6 GB (about 100 MB used by all three containers).
-- **Long-term host:** Azure, paid from AIforE's nonprofit Azure grant. Same steps on an Ubuntu VM.
+## Production: live at https://core.aifore.org
+
+The hosted Core has been live in production since 2026-10-30, on Oracle Cloud (Oracle Linux 9, Arm64, reserved IP `129.153.92.171`), with Docker Compose and Caddy as described below.
+
+- **Health check:** `curl -s https://core.aifore.org/healthz` returns `"ok": true`, `priced_models` (over 3,000), and `"ingest_auth": "required"` and `"subscriber_auth": "required"`.
+- **Admin endpoints** (`/v1/admin/*`) return 404 from the internet.
+- **Uptime:** the [`core-uptime`](../.github/workflows/core-uptime.yml) workflow checks both every day at 17:07 UTC. A failure opens (or comments on) a GitHub issue labeled `ops-alert` and posts to #ops-alerts on Slack; the next good run closes the issue.
+
+## Hosts
+
+- **Production host (current):** Oracle Cloud Always Free, one Ampere A1 VM (Arm64), 1 OCPU and 6 GB or more. $0. Core runs comfortably in 1 OCPU / 6 GB (about 100 MB used by all three containers).
+- **Possible long-term host:** Azure, paid from AIforE's nonprofit Azure grant. Same steps on an Ubuntu VM.
 
 Moving between them: stop Core, copy `core.db` from the volume, start Core on the new server.
 
