@@ -1,0 +1,104 @@
+name: Core uptime
+
+# Daily check of the hosted Core (deploy/README.md). On failure: Slack #ops-alerts (if
+# SLACK_OPS_WEBHOOK is set) and one open `ops-alert` issue, commented on rather than duplicated.
+# On success: any open `ops-alert` issue is closed as recovered.
+on:
+  schedule:
+    - cron: "7 17 * * *" # 17:07 UTC, 10:07 PT (PDT)
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+concurrency:
+  group: core-uptime
+  cancel-in-progress: false
+
+env:
+  CORE_URL: https://core.aifore.org
+  MIN_PRICED_MODELS: "1000"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check /healthz and the admin block
+        id: check
+        shell: bash
+        run: |
+          set -uo pipefail
+          problems=""
+          for attempt in 1 2 3; do
+            problems=""
+            body=$(mktemp)
+            code=$(curl -sS -o "$body" -w '%{http_code}' --max-time 20 "$CORE_URL/healthz" || echo 000)
+            if [ "$code" != "200" ]; then
+              problems+="/healthz returned HTTP $code. "
+            elif ! jq -e . "$body" >/dev/null 2>&1; then
+              problems+="/healthz did not return JSON. "
+            else
+              jq -e '.ok == true' "$body" >/dev/null || problems+="ok is $(jq -c '.ok' "$body"), not true. "
+              jq -e --argjson min "$MIN_PRICED_MODELS" '(.priced_models | type) == "number" and .priced_models > $min' "$body" >/dev/null \
+                || problems+="priced_models is $(jq -c '.priced_models' "$body"), not over $MIN_PRICED_MODELS. "
+              jq -e '.ingest_auth == "required"' "$body" >/dev/null || problems+="ingest_auth is $(jq -c '.ingest_auth' "$body"), not \"required\". "
+              jq -e '.subscriber_auth == "required"' "$body" >/dev/null || problems+="subscriber_auth is $(jq -c '.subscriber_auth' "$body"), not \"required\". "
+            fi
+            admin=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$CORE_URL/v1/admin/keys" || echo 000)
+            [ "$admin" = "404" ] || problems+="/v1/admin/keys returned HTTP $admin, not 404. "
+            if [ -z "$problems" ]; then
+              echo "Attempt $attempt: all checks passed ($(jq -c '{ok, priced_models, ingest_auth, subscriber_auth}' "$body"))."
+              break
+            fi
+            echo "Attempt $attempt failed: $problems"
+            [ "$attempt" -lt 3 ] && sleep 30
+          done
+          echo "problems=$problems" >> "$GITHUB_OUTPUT"
+          [ -z "$problems" ]
+
+      - name: Alert Slack
+        if: failure() && steps.check.outcome == 'failure'
+        env:
+          SLACK_OPS_WEBHOOK: ${{ secrets.SLACK_OPS_WEBHOOK }}
+          PROBLEMS: ${{ steps.check.outputs.problems }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_OPS_WEBHOOK" ]; then
+            echo "SLACK_OPS_WEBHOOK is not set; skipping Slack."
+            exit 0
+          fi
+          jq -n --arg text ":rotating_light: Stardust Core uptime check failed for $CORE_URL: ${PROBLEMS:-the check did not finish} <$RUN_URL|Run log>" '{text: $text}' \
+            | curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "$SLACK_OPS_WEBHOOK"
+
+      - name: Open or update the ops-alert issue
+        if: failure() && steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PROBLEMS: ${{ steps.check.outputs.problems }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create ops-alert --color B60205 --description "Automated alert from the Core uptime check" 2>/dev/null || true
+          msg="Uptime check failed at $(date -u +%Y-%m-%dT%H:%MZ) after 3 attempts: ${PROBLEMS:-the check did not finish}
+
+          Run log: $RUN_URL"
+          issue=$(gh issue list --label ops-alert --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$msg"
+          else
+            gh issue create --label ops-alert --title "Core uptime check failing: $CORE_URL" --body "$msg
+
+          This issue closes itself when a later check passes. Hosting runbook: deploy/README.md."
+          fi
+
+      - name: Close any open ops-alert issue as recovered
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for issue in $(gh issue list --label ops-alert --state open --json number --jq '.[].number'); do
+            gh issue close "$issue" --comment "Recovered: all checks passed at $(date -u +%Y-%m-%dT%H:%MZ). Run log: $RUN_URL"
+          done

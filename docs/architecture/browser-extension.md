@@ -2,7 +2,7 @@
 
 How the Stardust browser extension (`subscriber-client/browser-extension/`) measures AI chat usage on ChatGPT, Claude and Gemini, what it sends to Stardust Core, and how it is built, tested and released. Spec references: §12.3–§12.4 (browser fallback path), §8.3 (confidence tiers), §14.1 (privacy).
 
-**Status:** version 0.1.1 is released ([`extension-v0.1.1`](https://github.com/AIforEcology/stardust/releases/tag/extension-v0.1.1)). `main` is at 0.1.2, which adds the per-tab status line ([§9](#9-failure-modes-and-diagnostics)) and the calculator's measures under **More detail**. The revoked-key handling in [§3.6](#36-rejected-keys-unknown-vs-revoked) is PR #44. The diagrams are Mermaid, which GitHub draws as pictures.
+**Status:** version 0.1.1 is released ([`extension-v0.1.1`](https://github.com/AIforEcology/stardust/releases/tag/extension-v0.1.1)). `main` is at 0.1.2, which adds the per-tab status line ([§9](#9-failure-modes-and-diagnostics)) and the calculator's measures under **More detail**. The revoked-key handling in [§3.6](#36-rejected-keys-unknown-vs-revoked) is PR #44. The hosted Core the extension uses by default is live in production at https://core.aifore.org (health check: `/healthz`; hosting in [`deploy/`](../../deploy/README.md)). The diagrams are Mermaid, which GitHub draws as pictures.
 
 **Contents**
 
