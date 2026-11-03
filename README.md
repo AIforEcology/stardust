@@ -39,6 +39,8 @@ The purple **subscriber credit path** is a design concept, not yet in the spec: 
 
 This is the Phase 1 foundation (§16). The methodology factors are a **draft**, and some are placeholders awaiting review (see [`schema/README.md`](schema/README.md)). Core stores its data in a single SQLite file (see [the database design](docs/architecture/database.md)), and the extension's figures are estimates.
 
+**Hosted Core is live in production** at [https://core.aifore.org](https://core.aifore.org/healthz), on Oracle Cloud with Docker Compose and Caddy. The browser extension's store build uses it by default. Check it with `curl -s https://core.aifore.org/healthz` (`"ok": true`, with ingest and subscriber auth `"required"`); a daily workflow watches it. Hosting and operations: [`deploy/`](deploy/).
+
 ## Where it's going
 
 Spec v1.2 extends Stardust beyond carbon to **five impact dimensions** (carbon, electricity, water, heat and materials), matched like for like with renewable energy certificates, water restoration certificates, heat-reuse and recycling credits through registry and market connectors. It also splits carbon into lifecycle components (inference, facility, training, embodied hardware). The architecture and the step-by-step plan for building this without disrupting what already runs are in [`docs/architecture/impact-credits.md`](docs/architecture/impact-credits.md).

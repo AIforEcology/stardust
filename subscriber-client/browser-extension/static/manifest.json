@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Stardust (AIforE Subscriber Plugin)",
   "short_name": "Stardust",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "description": "See the cost, energy, carbon and water behind your AI chats. An open-source AI for Ecology project.",
   "permissions": [
     "storage",
