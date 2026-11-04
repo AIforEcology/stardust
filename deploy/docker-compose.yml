@@ -1,4 +1,5 @@
-# Hosted Stardust Core: Core + Caddy (automatic HTTPS) + nightly SQLite backups.
+# Hosted Stardust Core: Core + Caddy (automatic HTTPS) + nightly SQLite backups,
+# plus the Data Center Resource Ledger (ledger, ledger-db, ledger-backup), served under /ledger/.
 # On the server: cp .env.example .env, edit it, then `docker compose up -d --build`.
 services:
   core:
@@ -37,4 +38,71 @@ services:
                 print("backup failed, retrying in 5 minutes:", e, flush=True)
                 time.sleep(300)
 
-volumes: { core-data: {}, caddy-data: {}, caddy-config: {} }
+  # --- Data Center Resource Ledger (docs/architecture/ledger.md) ------------------------------------
+  # Separate from Core: its own database, process and backups. Core neither reads it nor depends on it.
+  ledger-db:
+    # PostgreSQL 17 + PostGIS 3, built here because postgis/postgis publishes no arm64 image.
+    build: { context: ., dockerfile: ledger-db.Dockerfile }
+    restart: unless-stopped
+    # Kept small so Core is unaffected. No ports: only the ledger reaches it, on the Compose network.
+    command: ["postgres", "-c", "shared_buffers=256MB", "-c", "max_connections=30"]
+    mem_limit: 1536m
+    environment:
+      POSTGRES_DB: ledger
+      POSTGRES_USER: ledger
+      # Set in .env. If it is missing, only this service refuses to start; Core is untouched.
+      POSTGRES_PASSWORD: "${LEDGER_DB_PASSWORD:-}"
+    volumes: ["ledger-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger -d ledger"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  ledger:
+    build: { context: .., dockerfile: deploy/ledger.Dockerfile }
+    restart: unless-stopped
+    mem_limit: 384m
+    # Only the variables it needs (not env_file), so the ledger never sees Core's secrets.
+    environment:
+      PGHOST: ledger-db
+      PGDATABASE: ledger
+      PGUSER: ledger
+      PGPASSWORD: "${LEDGER_DB_PASSWORD:-}"
+      LEDGER_ADMIN_TOKEN: "${LEDGER_ADMIN_TOKEN:-}"
+      LEDGER_READS_PER_IP_PER_MINUTE: "${LEDGER_READS_PER_IP_PER_MINUTE:-120}"
+      LEDGER_WRITES_PER_IP_PER_MINUTE: "${LEDGER_WRITES_PER_IP_PER_MINUTE:-120}"
+    depends_on:
+      ledger-db: { condition: service_healthy }
+
+  ledger-backup:
+    # pg_dump -Fc every night to backups/ledger-YYYYMMDD.dump, keeps 14 (like the backup service).
+    # Copy them off the server too (offsite-backup.sh uploads them with Core's).
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      PGHOST: ledger-db
+      PGDATABASE: ledger
+      PGUSER: ledger
+      PGPASSWORD: "${LEDGER_DB_PASSWORD:-}"
+    volumes: ["./backups:/backups"]
+    depends_on:
+      ledger-db: { condition: service_healthy }
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        while true; do
+          f="/backups/ledger-$$(date -u +%Y%m%d).dump"
+          if pg_dump -Fc -f "$$f.tmp" && mv "$$f.tmp" "$$f"; then
+            echo "backup $$f"
+            ls -1 /backups/ledger-*.dump | sort | head -n -14 | xargs -r rm -f
+            sleep 86400
+          else
+            # e.g. the database is still starting: retry soon instead of waiting a day
+            echo "backup failed, retrying in 5 minutes"; rm -f "$$f.tmp"; sleep 300
+          fi
+        done
+
+volumes: { core-data: {}, caddy-data: {}, caddy-config: {}, ledger-data: {} }

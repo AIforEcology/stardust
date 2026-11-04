@@ -1,0 +1,5 @@
+ID,Date found,Facility,Operator / tenant,City / county,State / region,Country,Field group,Field,Value,Unit,Source title,Source URL,Source type,Source date,Method,Confidence (0-1),Review status,Notes,Facility ID
+OBS-0001,2026-10-29,Example Austin Campus,Example Cloud,Travis County,Texas,US,Status & size,Capacity,300,MW,Example tracker,https://example.org/tracker,Third-party tracker,2026-10-29,Reported by tracker,0.6,Needs review,Synthetic,DC-US-TX-0001
+OBS-0002,2026-10-29,Example Austin Campus,Example Cloud,Travis County,Texas,US,Power: grid,Utility,Example Utility,,Example filing,https://example.org/filing,Regulator filing,2026-10-01,Read from filing,1.5,Needs review,Confidence out of range on purpose,DC-US-TX-0001
+OBS-0003,2026-10-29,Example Austin Campus,,,,US,Bogus group,Thing,1,,Example,https://example.org/x,,,,0.4,Needs review,,DC-US-TX-0001
+OBS-0004,2026-10-30,Example Gas Plant,,,Texas,US,Emissions & air,NOx limit,100,short tons/yr,Example permit,https://example.org/permit,Permit,2026-09-01,Read from permit,0.9,Reviewed,,PWR-US-TX-0001

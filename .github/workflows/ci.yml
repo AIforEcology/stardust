@@ -81,3 +81,31 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  ledger:
+    # Data Center Resource Ledger (ledger/). Tests run against PostgreSQL 17 + PostGIS 3. GitHub runners
+    # are amd64, where the published postgis/postgis image works; production (arm64) builds its own
+    # image from deploy/ledger-db.Dockerfile, which this job also builds.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      LEDGER_TEST_DSN: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -e "ledger[dev]"
+      # With CI set, conftest fails instead of skipping when the database is missing.
+      - run: pytest ledger -ra
+      - run: docker build -f deploy/ledger-db.Dockerfile -t ledger-db:ci deploy
+      - run: docker run --rm --entrypoint sh ledger-db:ci -c 'ls /usr/share/postgresql/17/extension/postgis.control'
+      - run: docker build -f deploy/ledger.Dockerfile -t ledger:ci .
+      - run: docker run --rm ledger:ci python -c "import ledger.main"

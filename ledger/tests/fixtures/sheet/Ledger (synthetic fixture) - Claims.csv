@@ -1,0 +1,2 @@
+Claim ID,Facility ID,Facility,Claimant,Claim (exact words),Claim type,Claim date,Claim source title,Claim source URL,Record checked,Evidence supporting,Evidence against or complicating,Evidence observation IDs,Verdict,Reasoning,Confidence (0-1),Operator response,Next step,Last checked,Review status
+CLM-0001,DC-US-TX-0001,Example Austin Campus,Example Cloud,"""Zero water for cooling""",Water,2026-10-28,Example article,https://example.org/article,City records,,Summer peak use,OBS-0001 to OBS-0002,Unverified,No metered record,0.5,,Ask the city,2026-10-29,Needs review
