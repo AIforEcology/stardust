@@ -33,6 +33,7 @@ The purple **subscriber credit path** is a design concept, not yet in the spec: 
 | [`subscriber-client/`](subscriber-client/) | Clients that capture usage: the Chrome/Edge extension for now (TypeScript) | §6, §12, §23.3 |
 | [`providers-service/`](providers-service/) | The interface remediation providers implement, a mock provider, and carbon-capture telemetry models | §10.2, §20 |
 | [`mcp/`](mcp/) | MCP servers for asking Stardust questions from AI assistants: Subscriber reporting for now (Python 3.10+) | §9.5, §23 |
+| [`ledger/`](ledger/) | The Data Center Resource Ledger: an open, source-cited database of data centers and the power plants built for them, served at `core.aifore.org/ledger/` beside Core (Python/FastAPI, PostgreSQL + PostGIS). [Design](docs/architecture/ledger.md) | |
 | [`docs/`](docs/) | The product spec and summary | |
 
 ## Status: v0.1 scaffold

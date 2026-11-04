@@ -322,7 +322,9 @@ def prepare(folder: Path) -> Tuple[List[Batch], Report]:
                 continue
 
             raw = {c: v for c, v in zip(header, cells) if c}
-            rid = (raw.get(key) or "").strip().upper() if key else None
+            rid = (raw.get(key) or "").strip() if key else None
+            if key in ("facility_id", *ID_PATTERNS):
+                rid = rid.upper()  # IDs are upper case; names such as a source stay as written
             if key:
                 if not rid:
                     report.reject(tab, i, f"no {key}")

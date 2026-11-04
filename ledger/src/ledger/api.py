@@ -109,7 +109,10 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
             if owned:
                 state["pool"].close()
 
-    app = FastAPI(title="Data Center Resource Ledger", version=__version__, lifespan=lifespan)
+    # The docs pages are off: behind Caddy's stripped /ledger prefix they would fetch Core's /openapi.json.
+    # The schema itself is at /ledger/openapi.json.
+    app = FastAPI(title="Data Center Resource Ledger", version=__version__, lifespan=lifespan,
+                  docs_url=None, redoc_url=None)
     reads, writes = RateLimiter(settings.reads_per_ip_per_minute), RateLimiter(settings.writes_per_ip_per_minute)
 
     def tx(admin_key_id: Optional[str] = None):
