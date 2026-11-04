@@ -4,6 +4,14 @@
 	# via `docker compose exec core ...`), never from the internet.
 	@admin path /v1/admin/*
 	respond @admin 404
+	# Data Center Resource Ledger (docs/architecture/ledger.md). handle_path strips /ledger, so the
+	# service sees /v1/...; its admin endpoints are blocked inside the block (respond runs before
+	# reverse_proxy), just like Core's.
+	handle_path /ledger/* {
+		@ledger_admin path /v1/admin /v1/admin/*
+		respond @ledger_admin 404
+		reverse_proxy ledger:8090
+	}
 	request_body {
 		max_size 10MB
 	}

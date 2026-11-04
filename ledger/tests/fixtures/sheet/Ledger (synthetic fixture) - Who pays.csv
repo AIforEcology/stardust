@@ -1,0 +1,3 @@
+Item ID,Facility ID,Facility,Category,Who pays,Granting body or counterparty,Description,Value (USD),Value basis,Term,"Conditions, clawbacks or caveats",Year,Source title,Source URL,Evidence observation IDs,Confidence (0-1),Next step,Last checked,Review status
+WP-0001,DC-US-TX-0001,Example Austin Campus,Tax abatement,Public pays or forgoes revenue,Example County,50% abatement,"$1,900,000,000",Estimated by government,10 yrs,,2024,Example news,https://example.org/news,,0.75,,2026-10-29,Needs review
+WP-0002,DC-US-TX-0001,Example Austin Campus,Community payment,Operator pays,Example City,Community fund,Not quantified,,,,2025,Example news,https://example.org/news2,,0.6,,2026-10-29,Needs review

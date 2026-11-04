@@ -1,0 +1,2 @@
+Correction ID,Received,Submitter role,Record ID,Facility ID,Issue,Proposed,Evidence URLs,Proposed assessment (agent),Decision,Decision date,Reviewer note,Ledger change made,Public log ID,Submitter email
+COR-0001,2026-11-01,Operator,OBS-0001,DC-US-TX-0001,Capacity is out of date,350 MW,https://example.org/a; https://example.org/b,Plausible,,,,,,person@example.org

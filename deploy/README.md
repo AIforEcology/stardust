@@ -123,6 +123,84 @@ sudo systemctl start stardust-offsite-backup.service && journalctl -u stardust-o
 Restore from a copy: `oci os object get --auth instance_principal -bn stardust-core-backups --name core-YYYYMMDD.db.gz --file core.db.gz && gunzip core.db.gz`, then restore it as above.
 The copies stay well inside Always Free's 20 GB of Object Storage: a compressed backup is tens of KB now, and 90 days are kept.
 
+The same script also uploads the ledger's `ledger-YYYYMMDD.dump` files (next section). The policy above is scoped by bucket name, so it already covers them: no IAM change is needed. **Add a second lifecycle rule** in the bucket: Delete, objects older than 90 days, prefix `ledger-`.
+
+## Data Center Resource Ledger
+
+The ledger ([design, schema and API](../docs/architecture/ledger.md)) runs on the same server as three more Compose services: `ledger-db` (PostgreSQL 17 + PostGIS 3, built from `ledger-db.Dockerfile` because `postgis/postgis` has no arm64 image), `ledger` (the API) and `ledger-backup`. Caddy serves it at `https://core.aifore.org/ledger/` and returns 404 for `/ledger/v1/admin/*`. It is separate from Core: Core's code, database and routes don't change, and if the ledger is down Core keeps running. The database port is never published. `ledger-db` is capped at 1.5 GB of memory (`shared_buffers=256MB`, `max_connections=30`).
+
+### First deploy
+
+```bash
+ssh opc@core.aifore.org
+cd ~/stardust && git pull
+cd deploy
+echo "LEDGER_DB_PASSWORD=$(openssl rand -hex 24)" >> .env
+echo "LEDGER_ADMIN_TOKEN=$(openssl rand -hex 32)" >> .env
+docker compose up -d --build
+curl -s https://core.aifore.org/healthz          # Core still ok
+curl -s https://core.aifore.org/ledger/healthz   # {"ok": true, "service": "ledger", ...}
+curl -s -o /dev/null -w "%{http_code}\n" https://core.aifore.org/ledger/v1/admin/keys   # must be 404
+curl -s -o /dev/null -w "%{http_code}\n" https://core.aifore.org/v1/admin/keys          # still 404
+```
+
+The password is read when the database volume is first created. Changing `LEDGER_DB_PASSWORD` later also needs `docker compose exec ledger-db psql -U ledger -c "ALTER USER ledger PASSWORD '<new>'"`, then `docker compose up -d ledger ledger-backup`. The first build of `ledger-db` takes a few minutes on the A1.
+
+### Write keys for the agents
+
+Create one key per agent from the server, with only the scopes it needs (`observations:write`, `facilities:write`, `tracker:write`, `runlog:write`; `admin` only for people). The key is shown once; only its SHA-256 hash is stored.
+
+```bash
+docker compose exec ledger sh -c 'curl -s -X POST localhost:8090/v1/admin/keys \
+  -H "X-Ledger-Admin-Token: $LEDGER_ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"scopes\": [\"observations:write\", \"runlog:write\"], \"label\": \"daily scan agent\"}"'
+```
+
+Store each key as a secret in the agents' cloud environment (for example `LEDGER_KEY`), never in a prompt, the sheet or the repository. Agents send it as `X-Ledger-Key`.
+
+**Rotate a key:** create the new key, update the agent's secret, then revoke the old one:
+
+```bash
+docker compose exec ledger sh -c 'curl -s -H "X-Ledger-Admin-Token: $LEDGER_ADMIN_TOKEN" localhost:8090/v1/admin/keys'
+docker compose exec ledger sh -c 'curl -s -X POST -H "X-Ledger-Admin-Token: $LEDGER_ADMIN_TOKEN" localhost:8090/v1/admin/keys/<key_id>/revoke'
+```
+
+**Rotate the admin token:** put a new `LEDGER_ADMIN_TOKEN` in `.env` and run `docker compose up -d ledger`.
+
+### Import the sheet (once)
+
+Export each tab of the sheet as CSV (File → Download → Comma-separated values) into a folder on your computer, copy it to the server, and load it. Keep the folder out of the repository.
+
+```bash
+scp -r sheet-export opc@core.aifore.org:/tmp/
+docker compose cp /tmp/sheet-export ledger:/tmp/sheet-export
+docker compose exec ledger python /app/ledger/scripts/import_sheet.py /tmp/sheet-export --dry-run --report /tmp/import-report
+docker compose exec ledger python /app/ledger/scripts/import_sheet.py /tmp/sheet-export --dsn "" --report /tmp/import-report
+docker compose exec ledger cat /tmp/import-report.md
+```
+
+`--dsn ""` uses the container's database settings. It keeps every ID and can be re-run safely. Delete `/tmp/sheet-export` from the server afterwards.
+
+### Update
+
+Same as Core: `cd ~/stardust && git pull && cd deploy && docker compose up -d --build`. New migrations in `ledger/migrations/` apply when the ledger starts. Data lives in the `ledger-data` volume and survives rebuilds.
+
+### Backups and restore
+
+`ledger-backup` writes `deploy/backups/ledger-YYYYMMDD.dump` (`pg_dump -Fc`) every night and keeps 14. `offsite-backup.sh` uploads them to the `stardust-core-backups` bucket with `--no-overwrite`, beside Core's copies.
+
+Restore (replaces the ledger's data):
+
+```bash
+cd ~/stardust/deploy
+# from the bucket, if needed:
+oci os object get --auth instance_principal -bn stardust-core-backups --name ledger-YYYYMMDD.dump --file backups/ledger-YYYYMMDD.dump
+docker compose stop ledger ledger-backup
+docker compose exec -T ledger-db pg_restore -U ledger -d ledger --clean --if-exists --no-owner < backups/ledger-YYYYMMDD.dump
+docker compose start ledger ledger-backup
+curl -s https://core.aifore.org/ledger/healthz
+```
+
 ## Cost checks
 
 Oracle: stay on shapes and sizes the console marks Always Free, and within 200 GB of block storage. Set a budget alert at $1 under Billing so any accidental paid resource shows up at once.

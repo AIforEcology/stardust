@@ -1,0 +1,8 @@
+Facility ID,Facility,State,Stated load (MW),Load basis,Load source,Operating load (MW),Operating basis,Status,Land control (0-2),Local approvals (0-2),Power secured (0-2),Equipment & financing (0-2),Construction (0-2),Sponsor & tenant (0-2),Deliverability score (0-100),Tier,"Score-weighted MW (illustrative, not a forecast)",Evidence for scores,Red flags,Sources,Next step,Last checked,Review status
+DC-US-TX-0001,Example Austin Campus,US-TX,1050,Full build-out,,40,,Partly operating,2,2,2,1,2,2,92,Built or near-certain,966,,,https://example.org/load,,2026-10-30,Needs review
+,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,
+Market context,,,,,,,,,,,,,,,,,,,,,,,
+Measure,Value,Unit,As of,Source,Note,,,,,,,,,,,,,,,,,,
+Example announced pipeline,479,GW,2026-10-29,https://example.org/pipeline,Synthetic,,,,,,,,,,,,,,,,,,
+Example pipeline with signed agreements,331 / 195,GW,2026-07-30,https://example.org/pipeline2,,,,,,,,,,,,,,,,,,,

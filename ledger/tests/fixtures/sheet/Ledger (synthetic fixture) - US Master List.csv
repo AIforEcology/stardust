@@ -1,0 +1,7 @@
+Facility ID,Name,Operator,Type,Status,City,County,State,Latitude,Longitude,Location precision,Operational MW,Planned MW,Epoch AI power MW,Offtaker / tenant,Confidence (source),Sources,Compute Atlas ID,PeeringDB IDs,Epoch AI name,Source record URL,Curated Facilities ID,Review status,Notes
+DC-US-TX-0002,Example Austin Campus,Example Cloud,Data center,operational,Austin,Travis,TX,30.2672,-97.7431,approximate,300,"1,000",,,confirmed,Compute Atlas; PeeringDB,example-austin-tx,9001,,https://example.org/ca/austin,DC-US-TX-0001,"Imported, not reviewed",
+DC-US-TX-0003,Example Dallas DC1,Example Colo,Data center,operational,Dallas,Dallas,TX,32.7767,-96.797,approximate,100,,,,,Compute Atlas,example-dallas-dc1,,,,,"Imported, not reviewed",
+DC-US-TX-0003,Example Dallas DC1 (duplicate row),,,,,,TX,,,,,,,,,,,,,,,"Imported, not reviewed",
+DC-US-CA-0001,Example mislabeled site,Example Net,,,,,CA,35.68,139.69,,,,,,,PeeringDB,,"9002, 9003",,,,"Imported, not reviewed",Coordinates look like Tokyo
+DC-US-OH-0001,A different Ohio site,,,,,,OH,,,,,,,,,,,,,,,"Imported, not reviewed",
+bad-id,Row with a malformed ID,,,,,,TX,,,,,,,,,,,,,,,,

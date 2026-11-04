@@ -18,3 +18,11 @@ target/
 deploy/.env
 deploy/backups/
 subscriber-client/browser-extension/stardust-extension.zip
+
+# Data Center Resource Ledger: sheet exports and import reports never go in the repo (it is public,
+# and the sheet holds unreviewed notes). Only the synthetic test fixtures are committed.
+ledger/**/*.csv
+!ledger/tests/fixtures/sheet/*.csv
+import-report.md
+import-report.json
+sheet-export/
