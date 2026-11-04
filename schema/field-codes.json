@@ -1,5 +1,5 @@
 {
-  "spec_version": "1.6",
+  "spec_version": "1.7",
   "codes": [
     {
       "code": "NGP",
@@ -1582,6 +1582,196 @@
       "applies_to": "All",
       "derived": false,
       "section": "21.9.5"
+    },
+    {
+      "code": "FEV",
+      "field_name": "Flexibility Envelope",
+      "definition": "The site’s declared flexibility, versioned and timestamped: reducible kW for each mode (FMD), minimum notice, maximum duration per event, maximum events per day and per season, minimum recovery time between events, and the hours and months it applies. Declared before any event it is measured against and never revised afterward",
+      "unit": "object",
+      "frequency": "On change",
+      "applies_to": "Infra, Operator",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "FMD",
+      "field_name": "Flexibility Mode",
+      "definition": "How the reduction was achieved: power_cap, throttle, pause (checkpoint and stop), defer, migrate (to another site), shed (refuse or drop requests) or supply_substitution (on-site generation or battery). More than one may apply",
+      "unit": "enum[]",
+      "frequency": "Per event",
+      "applies_to": "Infra, Operator",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "FDS",
+      "field_name": "Flexibility Dispatch",
+      "definition": "Who called the event and why: issuing grid operator or utility, program ID, event ID (OpenADR 3.0 where available), event type (emergency, reliability, economic, capacity or test), requested reduction or power cap, and notice given. Extends DRS",
+      "unit": "object",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "DET",
+      "field_name": "Dispatch Event Timeline",
+      "definition": "UTC timestamps for signal received, acknowledged, first control action, target reached, release signal and return to baseline, each with its clock source",
+      "unit": "timestamps",
+      "frequency": "Per event",
+      "applies_to": "Infra, Operator",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "FBL",
+      "field_name": "Flexibility Baseline Method",
+      "definition": "The baseline the reduction is measured against (§21.10.3), with every parameter needed to recompute it: method, data window, excluded days, adjustment rule and a hash of the input data",
+      "unit": "object",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "BLV",
+      "field_name": "Baseline Load",
+      "definition": "Baseline load for the interval, at the same metering point and interval length as the actual load",
+      "unit": "kW",
+      "frequency": "Per interval during an event",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "FMT",
+      "field_name": "Flexibility Meter",
+      "definition": "The meter that measured delivered reduction: location (utility point of interconnection, site main, hall, rack or node), accuracy class, interval length, and whether it is revenue-grade or utility-owned. Registered in the sensor registry (§21.9.5)",
+      "unit": "object",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "LKG",
+      "field_name": "Load Displacement",
+      "definition": "Where the curtailed load went: energy migrated to other sites with each site’s grid zone or balancing authority, energy deferred to after the event, and energy served from on-site generation or battery",
+      "unit": "kWh by destination",
+      "frequency": "Per event",
+      "applies_to": "Infra, Operator",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "FRB",
+      "field_name": "Rebound Energy",
+      "definition": "Energy above baseline after release, until load returns within 5% of baseline or 24 hours pass, whichever comes first",
+      "unit": "kWh",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "FWI",
+      "field_name": "Flexibility Workload Impact",
+      "definition": "Requests refused or dropped, jobs paused or deferred, service-level objectives missed, and the change in D-EPT during the event. Counts and rates only; no content",
+      "unit": "object",
+      "frequency": "Per event",
+      "applies_to": "Infra",
+      "derived": false,
+      "section": "21.10.1"
+    },
+    {
+      "code": "D-FRL",
+      "field_name": "Flexibility Response Latency",
+      "definition": "Signal received (DET) to the first metered interval where load is at least 10% of the requested reduction below baseline. Reported with the meter interval length",
+      "unit": "s",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.10.2"
+    },
+    {
+      "code": "D-FRT",
+      "field_name": "Flexibility Time to Target",
+      "definition": "Signal received to the first interval where load is at or below the requested level and stays there for the next interval",
+      "unit": "s",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.10.2"
+    },
+    {
+      "code": "D-FDR",
+      "field_name": "Delivered Reduction",
+      "definition": "BLV minus metered load for each interval of the event, with its mean and minimum",
+      "unit": "kW",
+      "frequency": "Per interval / event",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.10.2"
+    },
+    {
+      "code": "D-FPR",
+      "field_name": "Flexibility Performance Ratio",
+      "definition": "D-FDR ÷ requested reduction for each interval; the event value is the time-weighted mean, reported with its minimum interval",
+      "unit": "ratio",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.10.2"
+    },
+    {
+      "code": "D-FSD",
+      "field_name": "Sustained Duration",
+      "definition": "Time from D-FRT until load first rises above the requested level before release",
+      "unit": "min",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.10.2"
+    },
+    {
+      "code": "D-FNR",
+      "field_name": "Net Grid Reduction",
+      "definition": "D-FDR minus load migrated to sites in the same balancing authority, minus energy from on-site generation and battery discharge. The headline figure; D-FDR is never reported without it",
+      "unit": "kW, kWh",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.10.2"
+    },
+    {
+      "code": "D-FEC",
+      "field_name": "Flexibility Emissions Effect",
+      "definition": "D-FNR × marginal intensity during the event, minus on-site generation emissions (fuel-based factor), minus rebound and deferred energy at the intensity of the hours they ran",
+      "unit": "gCO2e",
+      "frequency": "Per event",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.10.2"
+    },
+    {
+      "code": "D-FAV",
+      "field_name": "Flexibility Availability",
+      "definition": "Share of the hours covered by FEV in which the declared reduction was actually available, from test and live events counted separately",
+      "unit": "%",
+      "frequency": "Seasonal / yearly",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.10.2"
+    },
+    {
+      "code": "D-FCR",
+      "field_name": "Flexibility Compliance Record",
+      "definition": "Events dispatched, acknowledged, fully met (D-FPR ≥ 1.0 for the requested duration) and opted out of with reasons, and total shortfall",
+      "unit": "counts, kWh",
+      "frequency": "Seasonal / yearly",
+      "applies_to": "Operator",
+      "derived": true,
+      "section": "21.10.2"
     },
     {
       "code": "REN",

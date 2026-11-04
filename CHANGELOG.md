@@ -11,6 +11,7 @@ Versions follow [Semantic Versioning](https://semver.org/). The format follows [
 ## Unreleased
 
 ### Added
+- **Spec 1.7:** §21.10, grid flexibility telemetry. It defines how AI load curtailment capacity, response speed and compliance are measured and audited, with 19 field codes (`FEV`, `FMD`, `FDS`, `DET`, `FBL`, `BLV`, `FMT`, `LKG`, `FRB`, `FWI`, `D-FRL`, `D-FRT`, `D-FDR`, `D-FPR`, `D-FSD`, `D-FNR`, `D-FEC`, `D-FAV`, `D-FCR`), baseline rules and test-event and verification rules. New `docs/stardust-spec-v1.7.docx` and Telemetry Specification T1.6. `schema/` re-exported (218 field codes), and every package now declares spec 1.7. Proposed for public comment in RFC 0001 §6.1.
 - **stardust-mcp 0.1.0** (new, `mcp/`, Python 3.10+): the Subscriber reporting MCP server (spec §23.3).
   - Four read-only tools: `get_usage_summary`, `get_impact_summary`, `explain_metric`, `quote_credits` (carbon only, quote only).
   - Authenticated with Core API keys as bearer tokens. Every answer is limited to the key's organization and user.

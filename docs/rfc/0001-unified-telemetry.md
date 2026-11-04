@@ -4,7 +4,7 @@ AI for Ecology (AIforE.org) · Draft v0.1 · October 2026
 
 ## 1. Status and abstract
 
-**Status:** Working draft for public comment. Published by AI for Ecology (AIforE.org), a Washington State 501(c)(3) nonprofit. Licensed under CC BY 4.0, with reference code under Apache 2.0. Derived from Stardust Telemetry Specification T1.5 (master v1.6). Sections marked "proposed for v0.2" are listed in Appendix A.
+**Status:** Working draft for public comment. Published by AI for Ecology (AIforE.org), a Washington State 501(c)(3) nonprofit. Licensed under CC BY 4.0, with reference code under Apache 2.0. Derived from Stardust Telemetry Specification T1.6 (master v1.7). Sections marked "proposed for v0.2" are listed in Appendix A.
 
 **Abstract.** Organizations running AI inference cannot compare energy, carbon or water use across providers, because each one measures and reports differently. This RFC defines a vendor-neutral telemetry schema for inference energy accounting. Every measured AI operation is emitted as an OpenTelemetry span carrying:
 
@@ -113,7 +113,7 @@ Each measured operation (a chat turn, an API call or an inference request) is on
 
 **Stardust Job Identifier.** The SJI uses the GUID shape XXXXXXXX-ESC-XXXX-XXXX-XXXXXXXXXXXX, with the Energy Source Code in the second segment (for example 3F2A9C10-HYD-4E1A-9C3D-2B6F1A0E7C55). It is a companion identifier meant for humans to read. It never replaces the OTel trace\_id or span\_id.
 
-**No overstatement.** A specific plant code MUST NOT be assigned when the evidence only supports a category. If the plurality source holds less than 25% of the mix, displays MUST show the job as a mixed grid. The full list of energy source codes is in Stardust T1.5 §5.3.
+**No overstatement.** A specific plant code MUST NOT be assigned when the evidence only supports a category. If the plurality source holds less than 25% of the mix, displays MUST show the job as a mixed grid. The full list of energy source codes is in Stardust T1.6 §5.3.
 
 ### 4.1 Time and temporal matching
 
@@ -195,7 +195,7 @@ Prompt processing takes tens to hundreds of milliseconds. Sampling power every 1
 **Two methods.** Every D-EPT value MUST state which method produced it (EPB).
 
 - **Benchmark.** Controlled runs for one model × hardware × precision × batch-size band. Prompt-processing energy comes from runs that generate a single token. Generation energy comes from long-generation runs, minus their prompt-processing share. Each configuration is repeated at least five times, and the mean is reported with its 95% confidence interval. The device's idle power is measured first and subtracted, and reported separately.
-- **Production attribution.** For each interval (60 seconds or shorter, and no longer than the finest factor resolution in use), the device's counter delta is split between prompt processing and generation in proportion to the tokens the engine processed in each phase (from the vLLM, SGLang or TensorRT-LLM token counters), weighted by the ratio of the two from the benchmark for that band. It is then split across requests by their tokens, and across tenants by partition share (PTN). The split is modeled even though the total is measured, until per-request hardware energy counters are available (T1.5 §21.9.6).
+- **Production attribution.** For each interval (60 seconds or shorter, and no longer than the finest factor resolution in use), the device's counter delta is split between prompt processing and generation in proportion to the tokens the engine processed in each phase (from the vLLM, SGLang or TensorRT-LLM token counters), weighted by the ratio of the two from the benchmark for that band. It is then split across requests by their tokens, and across tenants by partition share (PTN). The split is modeled even though the total is measured, until per-request hardware energy counters are available (T1.6 §21.9.6).
 
 | Code | Attribute (interim) | Type | Req. | Notes |
 | --- | --- | --- | --- | --- |
@@ -205,9 +205,9 @@ Prompt processing takes tens to hundreds of milliseconds. Sampling power every 1
 
 ### 5.2 Facility power and on-site supply (proposed for v0.2)
 
-T1.5 §21.9.3 already defines rack power (RKP), node power (NPW), inlet temperature (INL), coolant loop state (CLT) and cooling headroom (CHD). Two gaps remain: how these readings are collected in facilities that run building-management protocols, and where the rack's power actually came from in a given interval.
+T1.6 §21.9.3 already defines rack power (RKP), node power (NPW), inlet temperature (INL), coolant loop state (CLT) and cooling headroom (CHD). Two gaps remain: how these readings are collected in facilities that run building-management protocols, and where the rack's power actually came from in a given interval.
 
-**Collection paths.** Facility readings MAY arrive over DMTF Redfish, IPMI DCMI, SNMP (power distribution unit MIBs), Modbus TCP or BACnet/IP. Each reading is registered with a sensor descriptor (T1.5 §21.9.5) stating its scope (rack, row, hall or site), its sampling interval and its accuracy. The protocol is recorded, because it limits the accuracy the reading can claim.
+**Collection paths.** Facility readings MAY arrive over DMTF Redfish, IPMI DCMI, SNMP (power distribution unit MIBs), Modbus TCP or BACnet/IP. Each reading is registered with a sensor descriptor (T1.6 §21.9.5) stating its scope (rack, row, hall or site), its sampling interval and its accuracy. The protocol is recorded, because it limits the accuracy the reading can claim.
 
 **Air-side cooling.** CLT covers liquid loops. Air-cooled halls need the same view of their air handlers and chilled-water plant.
 
@@ -226,7 +226,7 @@ T1.5 §21.9.3 already defines rack power (RKP), node power (NPW), inlet temperat
 
 **Carbon of stored and backup energy.** Battery discharge carries the charge-weighted intensity of the energy that charged it, divided by round-trip efficiency. It MUST NOT be reported as zero-carbon unless it was charged from zero-carbon supply, matched at the same granularity (§4.1, rule 3). Backup generation uses a fuel-based emission factor, never the grid factor.
 
-**Proposed Energy Source Codes.** Two codes are proposed for the board and technical review that governs the code table (T1.5 §5.3.1). Until they are accepted, implementations use the fallbacks.
+**Proposed Energy Source Codes.** Two codes are proposed for the board and technical review that governs the code table (T1.6 §5.3.1). Until they are accepted, implementations use the fallbacks.
 
 | Code | Name | Fallback | Rule |
 | --- | --- | --- | --- |
@@ -248,7 +248,7 @@ Any router or scheduler that claims energy savings MUST emit enough telemetry fo
 | D-RQR | Routing quality regret | MUST be reported alongside any savings claim |
 | D-ECE | Calibration error | Target at or below 0.05, measured against opt-in shadow evaluation |
 
-**Load shifting.** Savings count only for jobs that declared their scheduling slack (SLK) before they were scheduled. The baseline is the originally requested start time. Marginal grid signals SHOULD drive scheduling decisions, and average signals SHOULD be used for inventory reporting, consistent with GHG Protocol Scope 2. The baseline and the actual run MUST use the same signal type. Load-shift savings MUST be computed with factors at the same temporal resolution for the baseline and the actual run (§4.1). Fields: TOU, TRT, GFW, RCF, D-LSS, D-LSC, D-CRU, plus the demand-charge fields DMD, PKD and D-DCC (Stardust T1.5 §21.7).
+**Load shifting.** Savings count only for jobs that declared their scheduling slack (SLK) before they were scheduled. The baseline is the originally requested start time. Marginal grid signals SHOULD drive scheduling decisions, and average signals SHOULD be used for inventory reporting, consistent with GHG Protocol Scope 2. The baseline and the actual run MUST use the same signal type. Load-shift savings MUST be computed with factors at the same temporal resolution for the baseline and the actual run (§4.1). Fields: TOU, TRT, GFW, RCF, D-LSS, D-LSC, D-CRU, plus the demand-charge fields DMD, PKD and D-DCC (Stardust T1.6 §21.7).
 
 ### 6.1 Grid flexibility: curtailment capacity, response speed and compliance (proposed for v0.2)
 
@@ -260,7 +260,7 @@ Three questions are kept separate, because a site can do well on one and badly o
 2. **Response.** For each dispatch, how fast the reduction started, how fast it reached the target, and how long it was held.
 3. **Compliance and integrity.** Whether the reduction was delivered against a baseline someone else can recompute, and whether it reduced load on the grid. Moving the load to another site on the same grid, or switching to on-site generators, is not a reduction on the grid.
 
-**Declared capacity and dispatch.** These extend DRS (T1.5 §21.9.3), which records only that an event is active and how much reduction was requested.
+**Declared capacity and dispatch.** The codes in this section are defined in T1.6 §21.10. They extend DRS (T1.6 §21.9.3), which records only that an event is active and how much reduction was requested.
 
 | Code | Attribute (interim) | Type | Req. | Notes |
 | --- | --- | --- | --- | --- |
@@ -270,7 +270,7 @@ Three questions are kept separate, because a site can do well on one and badly o
 | DET | stardust.flex.timeline | object | MUST per event | UTC timestamps for: signal received, acknowledged, first control action, target reached, release signal, and return to baseline. Each timestamp records its clock source (CLK, §3.2). |
 | FBL | stardust.flex.baseline\_method | object | MUST per event | The baseline the reduction is measured against, with every parameter needed to recompute it: method (§6.1.1), data window, excluded days, adjustment rule, and the hash of the input data |
 | BLV | stardust.flex.baseline\_kw | float | MUST per interval during an event | Baseline load for the interval, in kW, at the same metering point and interval length as the actual load |
-| FMT | stardust.flex.meter | object | MUST per event | The meter that measured delivered reduction: where it sits (utility point of interconnection, site main, hall, rack or node), its accuracy class, its interval length, and whether it is a revenue-grade meter or a utility meter. Registered as a sensor descriptor (T1.5 §21.9.5). |
+| FMT | stardust.flex.meter | object | MUST per event | The meter that measured delivered reduction: where it sits (utility point of interconnection, site main, hall, rack or node), its accuracy class, its interval length, and whether it is a revenue-grade meter or a utility meter. Registered as a sensor descriptor (T1.6 §21.9.5). |
 | LKG | stardust.flex.displacement | object | MUST per event | Where the curtailed load went: energy migrated to other sites, with each site's grid zone (GZN) or balancing authority; energy deferred to after the event; and energy served from on-site generation or battery (SSM, BSS, BGR, §5.2) |
 | FRB | stardust.flex.rebound\_kwh | float | MUST per event | Energy above baseline in the recovery window after release, until load returns within 5% of baseline or 24 hours pass, whichever comes first |
 | FWI | stardust.flex.workload\_impact | object | SHOULD per event | What the reduction cost the workload: requests refused or dropped, jobs paused or deferred, service-level objectives missed, and the change in D-EPT during the event. Counts and rates only. No content (§2). |
@@ -367,6 +367,6 @@ These sections are proposed for v0.2 and are open for comment with the rest of t
 - §6.1 Grid flexibility: declared flexibility envelope, dispatch and timeline records, recomputable baselines, net grid reduction (excluding migrated load and on-site substitution), response latency, performance ratio and compliance records, test events, tamper-evident records, and an open test protocol. Certification thresholds stay out of scope.
 - §7 Five new mapping rows, and Q6–Q12.
 
-New fields use interim stardust.\* names (§7). Their three-character codes do not collide with any code in T1.5.
+New fields use interim stardust.\* names (§7). The §6.1 codes are defined in T1.6 §21.10. The other new codes do not collide with any code in T1.6.
 
-**Source.** The full field registry, more than 180 coded fields including Provider telemetry, is in the Stardust Telemetry Specification T1.5 (from master v1.6), in the AIforE shared Drive docs folder.
+**Source.** The full field registry, more than 210 coded fields including Provider telemetry, is in the Stardust Telemetry Specification T1.6 (from master v1.7), in the AIforE shared Drive docs folder.

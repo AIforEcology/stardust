@@ -2,8 +2,8 @@
 
 Most tests build small .docx files whose formatting follows the master's conventions (direct
 paragraph and run formatting, dark table headers, an empty paragraph after each table), so each
-behaviour is checked in isolation. The last few run against the committed v1.6 master and
-T1.5 sub-document.
+behaviour is checked in isolation. The last few run against the committed v1.7 master and
+T1.6 sub-document.
 """
 import json
 import re
@@ -523,8 +523,8 @@ def test_new_foreign_section_uses_formatting_from_the_rest_of_the_master(master,
 
 # --- the committed master and sub-document ----------------------------------------------------
 
-MASTER = REPO / "docs" / "stardust-spec-v1.6.docx"
-SUB = REPO / "docs" / "stardust-telemetry-spec-T1.5.docx"
+MASTER = REPO / "docs" / "stardust-spec-v1.7.docx"
+SUB = REPO / "docs" / "stardust-telemetry-spec-T1.6.docx"
 
 
 def test_committed_sub_document_round_trips_without_changes(tmp_path, capsys):
