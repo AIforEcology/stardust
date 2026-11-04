@@ -77,6 +77,8 @@ cd ~/stardust && git pull && cd deploy && docker compose up -d --build
 
 The database lives in the `core-data` volume and survives rebuilds.
 
+**If the update changed `deploy/Caddyfile`**, also run `docker compose restart caddy` (Core is unreachable for a second or two). `up -d` doesn't restart Caddy for a config change, and because `git pull` replaces the file, the bind-mounted copy inside the running container stays the old one until Caddy restarts.
+
 ## Security
 
 - Every client needs a key. Browser extension installs get their own from `POST /v1/installs`: user-level, able to send its own usage and read its own totals, nothing else. Registrations are limited per IP (`STARDUST_REGISTRATIONS_PER_IP_PER_HOUR`).
@@ -138,11 +140,14 @@ cd deploy
 echo "LEDGER_DB_PASSWORD=$(openssl rand -hex 24)" >> .env
 echo "LEDGER_ADMIN_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up -d --build
+docker compose restart caddy                     # load the new /ledger routes (see 4. Update)
 curl -s https://core.aifore.org/healthz          # Core still ok
 curl -s https://core.aifore.org/ledger/healthz   # {"ok": true, "service": "ledger", ...}
 curl -s -o /dev/null -w "%{http_code}\n" https://core.aifore.org/ledger/v1/admin/keys   # must be 404
 curl -s -o /dev/null -w "%{http_code}\n" https://core.aifore.org/v1/admin/keys          # still 404
 ```
+
+Run the commands one at a time, and each `echo` line only once: running it again adds a duplicate line to `.env`, and a new `LEDGER_DB_PASSWORD` would no longer match the one the database was created with. Without the Caddy restart, `/ledger/...` returns Core's 404 (`{"detail":"Not Found"}`) because the old Caddy config sends it to Core.
 
 The password is read when the database volume is first created. Changing `LEDGER_DB_PASSWORD` later also needs `docker compose exec ledger-db psql -U ledger -c "ALTER USER ledger PASSWORD '<new>'"`, then `docker compose up -d ledger ledger-backup`. The first build of `ledger-db` takes a few minutes on the A1.
 
@@ -183,7 +188,7 @@ docker compose exec ledger cat /tmp/import-report.md
 
 ### Update
 
-Same as Core: `cd ~/stardust && git pull && cd deploy && docker compose up -d --build`. New migrations in `ledger/migrations/` apply when the ledger starts. Data lives in the `ledger-data` volume and survives rebuilds.
+Same as Core: `cd ~/stardust && git pull && cd deploy && docker compose up -d --build`. Restart Caddy too if `deploy/Caddyfile` changed. New migrations in `ledger/migrations/` apply when the ledger starts. Data lives in the `ledger-data` volume and survives rebuilds.
 
 ### Backups and restore
 
