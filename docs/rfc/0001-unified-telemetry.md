@@ -29,6 +29,7 @@ Today's AI benchmarks measure peak hardware speed. They do not measure the energ
 - Efficiency metrics: energy per token, and useful output per kWh, per kg CO2e and per dollar
 - Telemetry from routers and load-shifting schedulers, so their savings can be verified
 - Accelerator, node and facility signals used to measure energy instead of estimating it
+- Grid flexibility telemetry: declared curtailment capacity, response speed, delivered reduction and compliance, measured so that grid operators, regulators and the public can check them (§6.1, proposed for v0.2)
 - Inference that runs on edge devices and workstations, and multi-step agent tasks (proposed for v0.2)
 
 **Out of scope for v0.1**
@@ -249,6 +250,67 @@ Any router or scheduler that claims energy savings MUST emit enough telemetry fo
 
 **Load shifting.** Savings count only for jobs that declared their scheduling slack (SLK) before they were scheduled. The baseline is the originally requested start time. Marginal grid signals SHOULD drive scheduling decisions, and average signals SHOULD be used for inventory reporting, consistent with GHG Protocol Scope 2. The baseline and the actual run MUST use the same signal type. Load-shift savings MUST be computed with factors at the same temporal resolution for the baseline and the actual run (§4.1). Fields: TOU, TRT, GFW, RCF, D-LSS, D-LSC, D-CRU, plus the demand-charge fields DMD, PKD and D-DCC (Stardust T1.5 §21.7).
 
+### 6.1 Grid flexibility: curtailment capacity, response speed and compliance (proposed for v0.2)
+
+Utilities and grid operators are starting to connect large AI loads on the condition that they reduce consumption when asked. No open standard yet says how that flexibility is measured. Today, each claim of curtailment capacity, response speed or compliance uses its operator's own method, usually from a single pilot. Regulators, utilities and the public cannot check the figures, or compare one site with another. This section defines the telemetry needed to check them. It does the same for flexibility what §6 does for routing savings: anyone who claims it MUST publish enough data for someone else to check the claim.
+
+Three questions are kept separate, because a site can do well on one and badly on another:
+
+1. **Capacity.** How much load the site says it can reduce, in which modes, with how much notice, for how long, and how often.
+2. **Response.** For each dispatch, how fast the reduction started, how fast it reached the target, and how long it was held.
+3. **Compliance and integrity.** Whether the reduction was delivered against a baseline someone else can recompute, and whether it reduced load on the grid. Moving the load to another site on the same grid, or switching to on-site generators, is not a reduction on the grid.
+
+**Declared capacity and dispatch.** These extend DRS (T1.5 §21.9.3), which records only that an event is active and how much reduction was requested.
+
+| Code | Attribute (interim) | Type | Req. | Notes |
+| --- | --- | --- | --- | --- |
+| FEV | stardust.flex.envelope | object | MUST for any site that claims or sells flexibility | The declared flexibility envelope, versioned and timestamped: reducible kW for each mode (FMD), minimum notice, maximum duration per event, maximum events per day and per season, minimum recovery time between events, and the hours and months it applies. Declared before any event it is measured against, and never revised afterward. |
+| FMD | stardust.flex.mode | enum[] | MUST per event | How the reduction was achieved: power\_cap (accelerator or node power limits), throttle (lower batch size or clock speed), pause (checkpoint and stop), defer (queue to later), migrate (move work to another site), shed (drop or refuse requests), supply\_substitution (on-site generation or battery, §5.2). More than one MAY apply. |
+| FDS | stardust.flex.dispatch | object | MUST per event | Who called the event and why: issuing grid operator or utility, program identifier, event identifier (the OpenADR 3.0 event id where one exists), event type (emergency, reliability, economic, capacity, or test), the requested reduction or power cap in kW, and the notice given |
+| DET | stardust.flex.timeline | object | MUST per event | UTC timestamps for: signal received, acknowledged, first control action, target reached, release signal, and return to baseline. Each timestamp records its clock source (CLK, §3.2). |
+| FBL | stardust.flex.baseline\_method | object | MUST per event | The baseline the reduction is measured against, with every parameter needed to recompute it: method (§6.1.1), data window, excluded days, adjustment rule, and the hash of the input data |
+| BLV | stardust.flex.baseline\_kw | float | MUST per interval during an event | Baseline load for the interval, in kW, at the same metering point and interval length as the actual load |
+| FMT | stardust.flex.meter | object | MUST per event | The meter that measured delivered reduction: where it sits (utility point of interconnection, site main, hall, rack or node), its accuracy class, its interval length, and whether it is a revenue-grade meter or a utility meter. Registered as a sensor descriptor (T1.5 §21.9.5). |
+| LKG | stardust.flex.displacement | object | MUST per event | Where the curtailed load went: energy migrated to other sites, with each site's grid zone (GZN) or balancing authority; energy deferred to after the event; and energy served from on-site generation or battery (SSM, BSS, BGR, §5.2) |
+| FRB | stardust.flex.rebound\_kwh | float | MUST per event | Energy above baseline in the recovery window after release, until load returns within 5% of baseline or 24 hours pass, whichever comes first |
+| FWI | stardust.flex.workload\_impact | object | SHOULD per event | What the reduction cost the workload: requests refused or dropped, jobs paused or deferred, service-level objectives missed, and the change in D-EPT during the event. Counts and rates only. No content (§2). |
+
+**Derived checks.**
+
+| Code | Check | Rule |
+| --- | --- | --- |
+| D-FRL | Response latency | Signal received (DET) to the first metered interval where load is at least 10% of the requested reduction below baseline. Reported in seconds, with the meter interval length, because a 15-minute meter cannot show a response faster than 15 minutes. |
+| D-FRT | Time to target | Signal received to the first interval where load is at or below the requested level, and stays there for the next interval |
+| D-FDR | Delivered reduction | BLV minus metered load, for each interval of the event, in kW. Reported as a series, with its mean and minimum. |
+| D-FPR | Performance ratio | D-FDR ÷ requested reduction for each interval. The event's ratio is the time-weighted mean, and its minimum interval is reported next to it. |
+| D-FSD | Sustained duration | Time from D-FRT until load first rises above the requested level before release |
+| D-FNR | Net grid reduction | D-FDR minus load migrated to sites in the same balancing authority, minus energy from on-site generation and battery discharge. The headline figure. Gross reduction (D-FDR) MUST NOT be reported without it. |
+| D-FEC | Event emissions effect | Net grid reduction × marginal intensity during the event, minus the emissions of on-site generation (fuel-based factor, §5.2), minus the emissions of rebound and deferred energy at the intensity of the hours they ran |
+| D-FAV | Availability | Share of the hours covered by FEV in which the declared reduction was actually available, measured from test events (§6.1.2) and live events, each counted separately |
+| D-FCR | Compliance record | Per season and per year: events dispatched, events acknowledged, events where D-FPR reached 1.0 for the full requested duration, total shortfall in kWh, and events opted out of, with the reason |
+
+#### 6.1.1 Baselines
+
+The baseline is where most flexibility figures can be inflated. A site that runs above its normal load the day before an event, or chooses the most favorable baseline after the event, can show reductions that never reached the grid. So:
+
+1. **Reuse the M&V standards.** Baseline methods follow the NAESB WEQ business practice standards for measurement and verification of demand response: meter before / meter after, maximum base load, and Baseline Type-I (interval-metered history), with the program's own adjustment rules where a grid operator sets them. A site MAY add a control-group method (for example a comparable cluster that was not dispatched), stated as such.
+2. **Declared in advance.** The method and its parameters are fixed in FEV before the event. A site MUST NOT choose a baseline after the event.
+3. **Recomputable.** The input data for the baseline is kept, and its hash recorded in FBL, so a verifier can recompute BLV exactly.
+4. **No baseline gaming.** If load in the baseline window was more than 10% above the site's 30-day median for the same hours, the event is flagged, and D-FDR MUST be reported against both baselines.
+5. **Boundary meter for compliance.** D-FDR, D-FPR and D-FNR MUST come from a meter at the site main or utility point of interconnection. Accelerator and node telemetry (AEC, NPW) MAY show how the reduction happened, but cannot show that it was delivered, because cooling and other facility load can move the opposite way. Without a boundary meter, those checks carry confidence estimated.
+
+#### 6.1.2 Test events and public benchmarks
+
+A capacity claim is only as good as the events behind it. A single pilot, chosen and run by the operator, shows what one site did once. It does not show what that site, or other sites, can do. So:
+
+1. **Claims need a sample.** A public claim of flexible capacity, response speed or compliance MUST state the number of live and test events behind it, the period they cover, the baseline method, and D-FCR for that period. A claim based on fewer than 10 events MUST be labeled a pilot result.
+2. **Test events.** A site claiming flexibility SHOULD accept test dispatches it is not warned about, issued by the grid operator or an accredited third party through the same signal path as live events (FDS event type test). Tests SHOULD cover the shortest notice and the longest duration declared in FEV.
+3. **Open test protocol.** AIforE will publish an open test protocol and harness under Apache 2.0: a standard set of dispatch profiles (short notice, long duration, back-to-back events, partial reduction), the steps for computing every derived check above from raw meter data, and reference datasets. Anyone can run it, and results from any operator can be compared.
+4. **Third-party verification.** Event records (FEV, FDS, DET, FBL, BLV, meter data) are append-only. Each record carries a hash of the previous one, so a verifier can detect a record that was removed or altered. Records are kept for at least the program's settlement and audit period, and no less than three years.
+5. **Public disclosure.** D-FCR, D-FAV and the distribution of D-FRL, D-FRT and D-FPR across events SHOULD be published per site, at least yearly. Per-interval meter data MAY be limited to the grid operator, the regulator and accredited verifiers.
+
+Pass and fail thresholds, for example a minimum response time or performance ratio for certification, are out of scope here, as in §2. They will be set through the AIforE Eco-Certified program after a public benchmarking period. Grid operators set their own thresholds for their own programs. This section only makes sure every party measures them the same way.
+
 ## 7. OpenTelemetry mapping and existing standards
 
 This RFC adds to existing standards rather than competing with them. The rule: reuse an existing convention first. Define a new attribute only where none exists, and propose it upstream under a vendor-neutral name. Until a proposal is accepted, new attributes live under the interim stardust.\* namespace.
@@ -266,6 +328,7 @@ This RFC adds to existing standards rather than competing with them. The rule: r
 | Device energy and battery (§3.1) | OTel hw.energy, hw.battery.charge; RAPL; NVML | hw.power\_source.state |
 | Energy-per-token method (§5.1) | NVML and DCGM energy counters, AMD SMI, RAPL; inference-engine token counters | gen\_ai.server.energy\_per\_token, split by phase |
 | Facility meters and on-site supply (§5.2) | DMTF Redfish, IPMI DCMI, SNMP, Modbus TCP, BACnet/IP | energy.site.supply\_mix, energy.storage.carbon\_intensity |
+| Grid flexibility and demand response (§6.1) | OpenADR 3.0 events and reports; IEEE 2030.5; NAESB WEQ measurement and verification of demand response; ANSI C12 revenue metering | energy.flex.envelope, .mode, .baseline\_method, .delivered\_kw, .response\_latency |
 
 **Transport.** Implementations emit standard OTLP. Stardust Core works as both an OTLP receiver and an OTLP exporter, so any existing OTel Collector or backend can store this data without a separate telemetry stack.
 
@@ -287,6 +350,10 @@ This RFC adds to existing standards rather than competing with them. The rule: r
 - [ ] Q6. Should a task handed off to a person (§4.2) count as a partial useful output, or none?
 - [ ] Q7. Is 10 Hz the right threshold for calling a per-phase value built from sampled power measured (§5.1), or should only counters qualify?
 - [ ] Q8. Should SSM (§5.2) apply below L3, for colocation tenants whose operator publishes the site's supply mix?
+- [ ] Q9. Is 10 events the right minimum before a flexibility claim stops being labeled a pilot result (§6.1.2), and should test events count toward it?
+- [ ] Q10. Should load migrated to a site in a different balancing authority count toward net grid reduction (D-FNR), given that it may still stress a shared transmission path?
+- [ ] Q11. Who should be able to accredit third parties to issue unannounced test events and verify flexibility records: grid operators only, or also independent auditors under a published accreditation scheme?
+- [ ] Q12. Should a tenant of a colocation or cloud provider be able to report its share of a site's flexibility (FEV, D-FDR), and how should it be allocated?
 
 ## Appendix A. Changes proposed for v0.2
 
@@ -297,7 +364,8 @@ These sections are proposed for v0.2 and are open for comment with the rest of t
 - §4.2 Agent and workflow attribution on the OTel agent spans, task outcome, wasted energy, and a proposed answer to Q1 for agentic tasks.
 - §5.1 How energy per token is measured: counters before power samples, the benchmark and production methods, and separate idle energy.
 - §5.2 Facility collection paths, air-side cooling, on-site supply mix, battery and backup-generation carbon, and two proposed Energy Source Codes (BES, DGS).
-- §7 Four new mapping rows, and Q6–Q8.
+- §6.1 Grid flexibility: declared flexibility envelope, dispatch and timeline records, recomputable baselines, net grid reduction (excluding migrated load and on-site substitution), response latency, performance ratio and compliance records, test events, tamper-evident records, and an open test protocol. Certification thresholds stay out of scope.
+- §7 Five new mapping rows, and Q6–Q12.
 
 New fields use interim stardust.\* names (§7). Their three-character codes do not collide with any code in T1.5.
 
