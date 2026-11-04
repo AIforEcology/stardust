@@ -70,14 +70,18 @@ def migrate(conn: psycopg.Connection, directory: Path) -> List[str]:
 
 
 @contextmanager
-def transaction(pool: ConnectionPool, *, admin_key_id: Optional[str] = None) -> Iterator[psycopg.Connection]:
+def transaction(pool: ConnectionPool, *, admin_key_id: Optional[str] = None,
+                key_id: Optional[str] = None) -> Iterator[psycopg.Connection]:
     """A connection inside one transaction. With ``admin_key_id`` the transaction is marked as an
-    admin one: triggers then allow changes to Reviewed/Published rows and write them to audit_log."""
+    admin one: triggers then allow changes to Reviewed/Published rows. With either, every update and
+    delete in it is written to audit_log under that key ID."""
     with pool.connection() as conn:
         with conn.transaction():
             if admin_key_id:
                 conn.execute("SELECT set_config('ledger.admin', 'on', true), set_config('ledger.key_id', %s, true)",
                              (admin_key_id,))
+            elif key_id:
+                conn.execute("SELECT set_config('ledger.key_id', %s, true)", (key_id,))
             yield conn
 
 

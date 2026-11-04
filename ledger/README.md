@@ -12,9 +12,9 @@ This package is the ledger's database schema and API. It runs beside Stardust Co
 | Path | |
 |---|---|
 | `src/ledger/api.py` | FastAPI app: public reads, keyed writes, server-only admin |
-| `src/ledger/store.py` | Every read and write, and the write rules (fill blanks only, idempotency, protected rows) |
+| `src/ledger/store.py` | Every read and write, and the write rules (fill blanks, agent re-assessment with a source, idempotency, protected rows) |
 | `src/ledger/db.py` | Connection pool, migrations, ID allocation |
-| `src/ledger/models.py` | Tables, column types and value checks shared by the API and the importer |
+| `src/ledger/models.py` | Tables, column types and value checks shared by the API and the importer; `AGENT_REFRESH`, the fields agents may re-assess |
 | `src/ledger/auth.py` | `lk_` write keys (SHA-256 hashes only) |
 | `src/ledger/importer.py` | Sheet tab → table column maps, validation and the upsert loader |
 | `migrations/` | Numbered `.sql` files, applied in order at startup, tracked in `schema_migrations` |

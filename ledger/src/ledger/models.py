@@ -139,6 +139,57 @@ TABLES: Dict[str, Table] = {t.name: t for t in (
         required=("run_date",), public=False),
 )}
 
+# --- What agents may re-assess ---------------------------------------------------------------------
+# Ordinary keys fill blank fields on any row that isn't Reviewed or Published. On top of that, the
+# scheduled agents re-check rows every run, so their scope key may also OVERWRITE these fields on such
+# rows. Everything not listed (the row's identity, the exact quoted claim, a permit's limit, the
+# facility a row belongs to) stays fill-only; changing it is an admin edit or a new row.
+# Overwrites are audited (audit_log, with the key ID and the change's source), and a verdict change
+# also writes a claim_log row.
+_SOURCE = ("source_url", "source_title", "source_type", "source_date", "method", "confidence", "date_found")
+AGENT_REFRESH: Dict[str, frozenset] = {
+    # Weekly claims checker: the claim (claim_text, claimant, claim date and source) is fixed; the check is not.
+    "claims": frozenset({
+        "verdict", "reasoning", "record_checked", "evidence_supporting", "evidence_against",
+        "evidence_observation_ids", "operator_response", "confidence", "next_step", "last_checked",
+        "review_status"}),
+    # Weekly water ledger: the whole water profile is re-assessed, lowest completeness first.
+    "water_ledger": frozenset({
+        "cooling_type", "cooling_notes", "supply_source_type", "supplier_name", "pwsid", "allocation",
+        "allocation_unit", "allocation_basis", "projected_use", "projected_unit", "actual_use", "actual_unit",
+        "actual_period", "actual_basis", "withdrawal_vs_consumption", "discharge", "reclaimed_water",
+        "drought_terms", "groundwater_wells", "basin_water_stress", "key_sources", "evidence_observation_ids",
+        "next_step", "last_checked", "review_status", *_SOURCE}),
+    # Weekly who-pays: an item (who gave what to whom, which year) is fixed; its value and terms are re-checked.
+    "who_pays": frozenset({
+        "description", "value_usd", "value_basis", "term", "conditions", "evidence_observation_ids",
+        "next_step", "last_checked", "review_status", *_SOURCE}),
+    # Weekly load reality: loads, status, the six scores and their evidence are re-scored.
+    "load_reality": frozenset({
+        "stated_load_mw", "load_basis", "load_source", "operating_load_mw", "operating_basis", "status",
+        "land_control", "local_approvals", "power_secured", "equipment_financing", "construction",
+        "sponsor_tenant", "evidence_for_scores", "red_flags", "sources", "next_step", "last_checked",
+        "review_status", *_SOURCE}),
+    # Weekly permitted-vs-actual: the limit is fixed (a new limit is a new check); the actual side moves.
+    "permit_checks": frozenset({
+        "actual_value", "actual_as_of", "status", "enforcement_disputes", "evidence_observation_ids",
+        "next_step", "last_checked", "review_status", *_SOURCE}),
+    # Market context: a measure's figure is refreshed; a new as-of date may also be a new row.
+    "market_context": frozenset({"value", "unit", "as_of", "note", "review_status", *_SOURCE}),
+    # Facilities: the current-state fields the sheet keeps up to date. Identity (name, state, country,
+    # county, FIPS) and external IDs stay fill-only; other names go to facility_names. Each overwrite
+    # should also be recorded as an observation (the evidence); this keeps the facility row current.
+    "facilities": frozenset({
+        "status", "operator", "tenant", "latitude", "longitude", "location_precision", "coordinate_source",
+        "utility", "grid_region", "operational_mw", "planned_mw", "review_status"}),
+}
+# Fields that record the check itself, not a fact: overwriting only these needs no source.
+BOOKKEEPING = frozenset({"last_checked", "next_step", "review_status"})
+# The review statuses an agent may set on a filled row. Verified/Rejected are a person's decision;
+# Reviewed/Published need admin.
+AGENT_REVIEW_STATUSES = frozenset({"Needs review", "Conflict"})
+
+
 ID_LIST_RE = re.compile(r"\b([A-Z]{2,4})-(\d{4,})\b")
 RANGE_RE = re.compile(r"\b([A-Z]{2,4})-(\d{4,})\s+to\s+(?:\1-)?(\d{4,})\b")
 

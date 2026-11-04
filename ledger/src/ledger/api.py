@@ -115,8 +115,8 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
                   docs_url=None, redoc_url=None)
     reads, writes = RateLimiter(settings.reads_per_ip_per_minute), RateLimiter(settings.writes_per_ip_per_minute)
 
-    def tx(admin_key_id: Optional[str] = None):
-        return db.transaction(state["pool"], admin_key_id=admin_key_id)
+    def tx(admin_key_id: Optional[str] = None, key_id: Optional[str] = None):
+        return db.transaction(state["pool"], admin_key_id=admin_key_id, key_id=key_id)
 
     # --- errors ----------------------------------------------------------------------------------
 
@@ -307,59 +307,60 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
 
     # --- writes ----------------------------------------------------------------------------------
 
-    def create(table: str, body: Dict[str, Any]) -> Response:
-        with tx() as conn:
-            row, replayed = store.create(conn, table, body)
+    # Every write runs under the caller's key ID, so the database audits each update with it.
+    def create(table: str, body: Dict[str, Any], who: auth.Principal) -> Response:
+        with tx(key_id=who.key_id) as conn:
+            row, replayed = store.create(conn, table, body, actor=who.key_id)
         return written(row, replayed)
 
-    def patch(table: str, pk: str, body: Dict[str, Any]) -> Response:
-        with tx() as conn:
-            row, changed = store.patch(conn, table, pk, body)
+    def patch(table: str, pk: Any, body: Dict[str, Any], who: auth.Principal) -> Response:
+        with tx(key_id=who.key_id) as conn:
+            row, changed = store.patch(conn, table, pk, body, actor=who.key_id)
         return JSONResponse(_json(row) | {"changed": changed})
 
     @app.post("/v1/facilities", status_code=201)
-    def add_facility(body: Dict[str, Any] = Body(...), _: auth.Principal = Depends(needs(FACILITIES_WRITE))) -> Response:
-        return create("facilities", body)
+    def add_facility(body: Dict[str, Any] = Body(...), who: auth.Principal = Depends(needs(FACILITIES_WRITE))) -> Response:
+        return create("facilities", body, who)
 
     @app.patch("/v1/facilities/{facility_id}")
     def fill_facility(facility_id: str, body: Dict[str, Any] = Body(...),
-                      _: auth.Principal = Depends(needs(FACILITIES_WRITE))) -> Response:
+                      who: auth.Principal = Depends(needs(FACILITIES_WRITE))) -> Response:
         with tx() as conn:
             real = store.resolve_facility_id(conn, facility_id)
         if real is None:
             raise store.NotFound(f"facility {facility_id} not found")
-        return patch("facilities", real, body)
+        return patch("facilities", real, body, who)
 
     @app.post("/v1/facilities/{facility_id}/names", status_code=201)
     def add_name(facility_id: str, body: Dict[str, Any] = Body(...),
-                 _: auth.Principal = Depends(needs(FACILITIES_WRITE))) -> Response:
-        return create("facility_names", {**body, "facility_id": facility_id})
+                 who: auth.Principal = Depends(needs(FACILITIES_WRITE))) -> Response:
+        return create("facility_names", {**body, "facility_id": facility_id}, who)
 
     @app.post("/v1/facilities/{facility_id}/links", status_code=201)
     def add_link(facility_id: str, body: Dict[str, Any] = Body(...),
-                 _: auth.Principal = Depends(needs(FACILITIES_WRITE))) -> Response:
-        return create("facility_links", {**body, "from_facility_id": facility_id})
+                 who: auth.Principal = Depends(needs(FACILITIES_WRITE))) -> Response:
+        return create("facility_links", {**body, "from_facility_id": facility_id}, who)
 
     @app.post("/v1/observations", status_code=201)
     def add_observation(body: Dict[str, Any] = Body(...),
-                        _: auth.Principal = Depends(needs(OBSERVATIONS_WRITE))) -> Response:
-        return create("observations", body)
+                        who: auth.Principal = Depends(needs(OBSERVATIONS_WRITE))) -> Response:
+        return create("observations", body, who)
 
     # No PUT, PATCH or DELETE routes exist for observations: they are append-only (405).
 
     @app.post("/v1/claims", status_code=201)
-    def add_claim(body: Dict[str, Any] = Body(...), _: auth.Principal = Depends(needs(TRACKER_WRITE))) -> Response:
-        return create("claims", body)
+    def add_claim(body: Dict[str, Any] = Body(...), who: auth.Principal = Depends(needs(TRACKER_WRITE))) -> Response:
+        return create("claims", body, who)
 
     @app.patch("/v1/claims/{claim_id}")
     def fill_claim(claim_id: str, body: Dict[str, Any] = Body(...),
-                   _: auth.Principal = Depends(needs(TRACKER_WRITE))) -> Response:
-        return patch("claims", claim_id.upper(), body)
+                   who: auth.Principal = Depends(needs(TRACKER_WRITE))) -> Response:
+        return patch("claims", claim_id.upper(), body, who)
 
     @app.post("/v1/claims/{claim_id}/log", status_code=201)
     def add_claim_log(claim_id: str, body: Dict[str, Any] = Body(...),
-                      _: auth.Principal = Depends(needs(TRACKER_WRITE))) -> Response:
-        with tx() as conn:
+                      who: auth.Principal = Depends(needs(TRACKER_WRITE))) -> Response:
+        with tx(key_id=who.key_id) as conn:
             row, replayed = store.create_claim_log(conn, claim_id.upper(), body)
         return written(row, replayed)
 
@@ -371,12 +372,13 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
                         ("/v1/market-context", "market_context")):
         app.add_api_route(path, _poster(table, create, needs(TRACKER_WRITE)), methods=["POST"], status_code=201,
                           name=f"add_{table}")
-    for path, table in (("/v1/who-pays/{row_id}", "who_pays"), ("/v1/permit-checks/{row_id}", "permit_checks")):
+    for path, table in (("/v1/who-pays/{row_id}", "who_pays"), ("/v1/permit-checks/{row_id}", "permit_checks"),
+                        ("/v1/market-context/{row_id}", "market_context")):
         app.add_api_route(path, _patcher(table, patch, needs(TRACKER_WRITE)), methods=["PATCH"], name=f"fill_{table}")
 
     @app.post("/v1/run-log", status_code=201)
-    def add_run(body: Dict[str, Any] = Body(...), _: auth.Principal = Depends(needs(RUNLOG_WRITE))) -> Response:
-        return create("run_log", body)
+    def add_run(body: Dict[str, Any] = Body(...), who: auth.Principal = Depends(needs(RUNLOG_WRITE))) -> Response:
+        return create("run_log", body, who)
 
     # --- admin (server only) -----------------------------------------------------------------------
 
@@ -419,7 +421,7 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
         if t.pk == "facility_id":
             pk = coerce("facility_id", "facility_id", row_id)
         with tx(who.key_id) as conn:
-            row, changed = store.patch(conn, table, pk, body, admin=True)
+            row, changed = store.patch(conn, table, pk, body, admin=True, actor=who.key_id)
         return JSONResponse(_json(row) | {"changed": changed})
 
     @app.post("/v1/admin/import")
@@ -442,14 +444,18 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
 
 
 def _poster(table: str, create: Callable, dep: Callable) -> Callable:
-    def endpoint(body: Dict[str, Any] = Body(...), _: auth.Principal = Depends(dep)) -> Response:
-        return create(table, body)
+    def endpoint(body: Dict[str, Any] = Body(...), who: auth.Principal = Depends(dep)) -> Response:
+        return create(table, body, who)
     return endpoint
 
 
 def _patcher(table: str, patch: Callable, dep: Callable) -> Callable:
-    def endpoint(row_id: str, body: Dict[str, Any] = Body(...), _: auth.Principal = Depends(dep)) -> Response:
-        return patch(table, row_id.upper(), body)
+    def endpoint(row_id: str, body: Dict[str, Any] = Body(...), who: auth.Principal = Depends(dep)) -> Response:
+        if TABLES[table].pk == "id":
+            if not row_id.isdigit():
+                raise store.NotFound(f"{table} {row_id} not found")
+            return patch(table, int(row_id), body, who)
+        return patch(table, row_id.upper(), body, who)
     return endpoint
 
 

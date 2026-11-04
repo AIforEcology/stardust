@@ -3,9 +3,10 @@
 - IDs are assigned by the server, inside the write's transaction (db.allocate_*).
 - A retry with the same idempotency_key (or, for observations, the same facility, field, value and
   source URL) returns the row the first attempt made instead of adding another.
-- Ordinary writes only fill blank fields. Overwriting a filled field, or touching a Reviewed or
-  Published row, raises Conflict (HTTP 409); only the admin endpoints may, and the database's
-  triggers write every admin change to audit_log.
+- Write keys fill blank fields, and may overwrite only the fields in models.AGENT_REFRESH, with a
+  source for the change. Anything else, or touching a Reviewed or Published row, raises Conflict
+  (HTTP 409); only the admin endpoints may. The database's triggers write every update to audit_log
+  with the caller's key ID.
 - Observations are never updated or deleted here; a correction is a new row with ``supersedes``.
 """
 
@@ -20,7 +21,8 @@ from psycopg import sql
 from psycopg.types.json import Jsonb
 
 from . import db
-from .models import PROTECTED_STATUSES, TABLES, Table, ValueProblem, clean
+from .models import (AGENT_REFRESH, AGENT_REVIEW_STATUSES, BOOKKEEPING, PROTECTED_STATUSES, TABLES, Table,
+                     ValueProblem, clean)
 
 FACILITY_JSON = sql.SQL("""(to_jsonb(f) - 'geom' - 'idempotency_key')
     || jsonb_build_object('latitude', ST_Y(f.geom::geometry), 'longitude', ST_X(f.geom::geometry))""")
@@ -126,9 +128,26 @@ def _check_status(data: Dict[str, Any], admin: bool) -> None:
                        ["review_status"])
 
 
+def _change_source(body: Dict[str, Any]) -> Optional[str]:
+    """Pop and check ``change_source_url``: the source for an update, kept in audit_log."""
+    v = body.pop("change_source_url", None)
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    if not isinstance(v, str) or not v.strip().lower().startswith(("http://", "https://")) or len(v) > 2000:
+        raise ValueProblem("change_source_url", "must be an http(s) URL")
+    return v.strip()
+
+
 def _fill(conn: psycopg.Connection, table: Table, pk_value: Any, data: Dict[str, Any], *,
-          admin: bool) -> Tuple[dict, bool]:
-    """Fill blank fields of an existing row; refuse to overwrite filled ones unless admin."""
+          admin: bool, change_source: Optional[str] = None, actor: Optional[str] = None) -> Tuple[dict, bool]:
+    """Update an existing row.
+
+    - admin: may change anything (audited).
+    - everyone else: rows that are Reviewed or Published are refused; blank fields may be filled; filled
+      fields may be overwritten only if they are in AGENT_REFRESH for the table, and only with a source
+      for the change (change_source_url, or the row's own source_url / coordinate_source sent with it,
+      or evidence observation IDs for a claim). Bookkeeping fields need no source.
+    """
     row = _raw(conn, table, pk_value, for_update=True)
     if row is None:
         raise NotFound(f"{table.name} {pk_value} not found")
@@ -136,7 +155,8 @@ def _fill(conn: psycopg.Connection, table: Table, pk_value: Any, data: Dict[str,
         raise Conflict("row_protected", f"{table.name} {pk_value} is {row['review_status']}; only an admin may change it "
                        "(use /v1/admin on the server)")
     _check_status(data, admin)
-    changes, conflicts = {}, []
+    refresh = AGENT_REFRESH.get(table.name, frozenset())
+    changes, conflicts, overwritten = {}, [], []
     for k, v in data.items():
         if k == table.pk:
             continue
@@ -145,24 +165,59 @@ def _fill(conn: psycopg.Connection, table: Table, pk_value: Any, data: Dict[str,
             continue
         if admin or _empty(old):
             changes[k] = v
+        elif k in refresh:
+            if _empty(v):
+                conflicts.append(k)  # unknown is not "remove": a blank never erases a value
+                continue
+            if k == "review_status" and v not in AGENT_REVIEW_STATUSES:
+                raise Conflict("protected_status", f"agents may set review_status only to "
+                               f"{' or '.join(sorted(AGENT_REVIEW_STATUSES))}; {v} is a reviewer's decision",
+                               ["review_status"])
+            changes[k] = v
+            overwritten.append(k)
         else:
             conflicts.append(k)
     if conflicts:
-        raise Conflict("field_filled", f"{table.name} {pk_value} already has a value for {', '.join(conflicts)}; "
-                       "ordinary keys only fill blank fields. Add an observation, or ask an admin to change it",
-                       conflicts)
+        allowed = ", ".join(sorted(refresh)) or "none"
+        raise Conflict("field_not_refreshable",
+                       f"{table.name} {pk_value} already has a value for {', '.join(conflicts)}, and agents may not "
+                       f"overwrite it (fields agents may re-assess here: {allowed}). Add an observation, or ask an "
+                       "admin to change it", conflicts)
+    facts = [k for k in overwritten if k not in BOOKKEEPING]
+    if facts and not admin:
+        source = change_source
+        if not source and "source_url" in refresh and changes.get("source_url"):
+            source = changes["source_url"]
+        if not source and table.name == "facilities" and (changes.get("coordinate_source") or "").startswith("http"):
+            source = changes["coordinate_source"]
+        if not source and table.name == "claims" and changes.get("evidence_observation_ids"):
+            ids = changes["evidence_observation_ids"]
+            found = conn.execute("SELECT count(*) AS n FROM observations WHERE obs_id = ANY(%s)", (ids,)).fetchone()["n"]
+            if found != len(ids):
+                raise ValueProblem("evidence_observation_ids", "every evidence observation must exist")
+            source = "observations: " + "; ".join(ids)
+        if not source:
+            raise ValueProblem("change_source_url", f"overwriting {', '.join(facts)} needs a source for the change: "
+                               "send change_source_url (or the row's new source_url)")
+        change_source = source
     if table.name == "facilities" and ("latitude" in changes or "longitude" in changes):
         changes.setdefault("latitude", row.get("latitude"))
         changes.setdefault("longitude", row.get("longitude"))
     if changes:
+        conn.execute("SELECT set_config('ledger.change_source', %s, true)", (change_source or "",))
         _update(conn, table, pk_value, changes)
+        if table.name == "claims" and "verdict" in changes and not _empty(row.get("verdict")):
+            conn.execute("""INSERT INTO claim_log (log_date, claim_id, change, old_verdict, new_verdict, evidence_added)
+                            VALUES (current_date, %s, %s, %s, %s, %s)""",
+                         (pk_value, f"Verdict changed by key {actor or 'unknown'}", row["verdict"], changes["verdict"],
+                          change_source or "; ".join(changes.get("evidence_observation_ids") or [])))
     return public_row(conn, table, pk_value), bool(changes)
 
 
 # --- writes -------------------------------------------------------------------------------------
 
-def create(conn: psycopg.Connection, table_name: str, body: Dict[str, Any], *, admin: bool = False
-           ) -> Tuple[dict, bool]:
+def create(conn: psycopg.Connection, table_name: str, body: Dict[str, Any], *, admin: bool = False,
+           actor: Optional[str] = None) -> Tuple[dict, bool]:
     """Add a row. Returns (row, replayed): replayed is True when an earlier identical write is returned."""
     table = TABLES[table_name]
     body = dict(body)
@@ -170,6 +225,7 @@ def create(conn: psycopg.Connection, table_name: str, body: Dict[str, Any], *, a
     if idem is not None and (not isinstance(idem, str) or not idem.strip() or len(idem) > 200):
         raise ValueProblem("idempotency_key", "must be a non-empty string of at most 200 characters")
     id_prefix = body.pop("id_prefix", None) if table.name == "facilities" else None
+    change_source = _change_source(body)
     data = clean(table, body)
     _check_status(data, admin)
 
@@ -187,7 +243,7 @@ def create(conn: psycopg.Connection, table_name: str, body: Dict[str, Any], *, a
         _lock(conn, table.name, "pk", str(pk_value))
         if _raw(conn, table, pk_value) is not None:
             data.pop("idempotency_key", None)
-            row, changed = _fill(conn, table, pk_value, data, admin=admin)
+            row, changed = _fill(conn, table, pk_value, data, admin=admin, change_source=change_source, actor=actor)
             return row, not changed
         _insert(conn, table, data)
         return public_row(conn, table, pk_value), False
@@ -236,10 +292,11 @@ def _create_observation(conn: psycopg.Connection, table: Table, data: Dict[str, 
 
 
 def patch(conn: psycopg.Connection, table_name: str, pk_value: Any, body: Dict[str, Any], *,
-          admin: bool = False) -> Tuple[dict, bool]:
-    """Change an existing row. Ordinary keys fill blanks only; admin may overwrite (audited)."""
+          admin: bool = False, actor: Optional[str] = None) -> Tuple[dict, bool]:
+    """Change an existing row (see _fill for who may change what). Every change is audited."""
     table = TABLES[table_name]
     body = {k: v for k, v in body.items() if k != "idempotency_key"}
+    change_source = _change_source(body)
     if table.name == "observations":
         extra = set(body) - {"review_status", "notes"}
         if not admin or extra:
@@ -248,7 +305,7 @@ def patch(conn: psycopg.Connection, table_name: str, pk_value: Any, body: Dict[s
     data = clean(table, body, partial=True)
     if table.name == "facilities" and (("latitude" in data) != ("longitude" in data)):
         raise ValueProblem("latitude", "send latitude and longitude together")
-    return _fill(conn, table, pk_value, data, admin=admin)
+    return _fill(conn, table, pk_value, data, admin=admin, change_source=change_source, actor=actor)
 
 
 def create_claim_log(conn: psycopg.Connection, claim_id: str, body: Dict[str, Any]) -> Tuple[dict, bool]:

@@ -113,14 +113,17 @@ def test_ordinary_writes_only_fill_blank_fields(client, keys):
     assert r.status_code == 200 and r.json()["changed"]
     r = client.patch("/v1/facilities/DC-US-TX-0001", json={"utility": "Example Utility"}, headers=fw)
     assert r.status_code == 200 and not r.json()["changed"]  # same value: a no-op, safe to retry
+    r = client.patch("/v1/facilities/DC-US-TX-0001", json={"name": "Someone Else"}, headers=fw)
+    assert r.status_code == 409 and r.json()["reason"] == "field_not_refreshable" and r.json()["fields"] == ["name"]
+    # operator is one agents re-assess, but only with a source for the change
     r = client.patch("/v1/facilities/DC-US-TX-0001", json={"operator": "Someone Else"}, headers=fw)
-    assert r.status_code == 409 and r.json()["reason"] == "field_filled" and r.json()["fields"] == ["operator"]
+    assert r.status_code == 422 and r.json()["field"] == "change_source_url"
     # The same rule holds for tracker rows keyed by facility.
     tw = keys["tracker:write"]
     assert client.post("/v1/water", json={"facility_id": "DC-US-TX-0001", "cooling_type": "Air / dry"},
                        headers=tw).status_code == 201
     r = client.post("/v1/water", json={"facility_id": "DC-US-TX-0001", "cooling_type": "Evaporative"}, headers=tw)
-    assert r.status_code == 409
+    assert r.status_code == 422  # re-assessable, but not without a source
     r = client.post("/v1/water", json={"facility_id": "DC-US-TX-0001", "supplier_name": "Example Water"}, headers=tw)
     assert r.status_code == 201 and r.json()["completeness"] == 2
 
