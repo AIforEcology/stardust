@@ -51,6 +51,14 @@ The tech operations fee ([middleware README](../middleware/README.md#tech-operat
 - [ ] **Receipts for fee payers (with counsel and AIforE's accountant).** The tech operations fee pays for a service, so it isn't a charitable contribution. Fee payers get a **payment receipt or invoice**, which doesn't state the fee is tax deductible (a business may still deduct it as an expense). **Donations** (§18) get the IRS written acknowledgment: required for gifts of $250 or more, and it states whether anything was received in return. Confirm before building receipts into Core.
 - [ ] **Set the operating budget.** Set `STARDUST_OPERATING_COST_MONTHLY_USD` so the weekly review has a coverage figure.
 
+### Data Center Intelligence (DCI): gates before any footprint goes live
+
+The Phase 1 prototype is built ([`intel/`](../intel/README.md)) and Core can load a footprint (`STARDUST_FOOTPRINT_FILE`, [middleware README](../middleware/README.md#provider-footprints-dci)). It stays off: `deploy/` must not set `STARDUST_FOOTPRINT_FILE`, and no footprint, registry extract or report is published, until both gates below are cleared (DCI spec v0.1, Roadmap).
+
+- [ ] **Board sign-off of the allocation method.** The board approves how each provider's compute is split across facilities ([`intel/data/allocations.json`](../intel/data/allocations.json): estimated weights, each with a rationale and sources, and undisclosed compute kept on the national grid), who signs off, and how often the weights are revisited (proposed: quarterly, and on any new site announcement).
+- [ ] **Counsel review of right of reply.** Counsel reviews the right-of-reply process before claims about named companies' sites are published: operators get 14 days to correct or add sources before a facility record is first published or materially changed, and their response is recorded as a source.
+- [ ] **Then turn it on.** Once both are done: pin ledger `facility_id`s in the allocations file (the footprint notes which searches to pin), fetch the missing state grids with `stardust-intel eia-state` (NY, MS, PA, TX at least), build the footprint on the server, and set `STARDUST_FOOTPRINT_FILE` in `deploy/`. That change needs its own PR.
+
 ### Build (spec v1.2 plan, [impact-credits.md](architecture/impact-credits.md))
 
 - [ ] Step 1: contract tests
