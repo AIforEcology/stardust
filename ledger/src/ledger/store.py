@@ -450,6 +450,18 @@ def list_keys(conn: psycopg.Connection) -> List[dict]:
     return conn.execute("SELECT key_id, scopes, label, created_at, revoked_at FROM api_keys ORDER BY created_at").fetchall()
 
 
+def change_key_scopes(conn: psycopg.Connection, key_id: str, add: List[str], remove: List[str]) -> Optional[dict]:
+    """Add and remove scopes on a key; a key must keep at least one. Revoked keys stay revoked."""
+    row = conn.execute("SELECT scopes FROM api_keys WHERE key_id = %s FOR UPDATE", (key_id,)).fetchone()
+    if row is None:
+        return None
+    scopes = sorted((set(row["scopes"]) | set(add)) - set(remove))
+    if not scopes:
+        raise ValueProblem("remove", "a key must keep at least one scope; revoke it instead")
+    return conn.execute("""UPDATE api_keys SET scopes = %s WHERE key_id = %s
+                           RETURNING key_id, scopes, label, created_at, revoked_at""", (scopes, key_id)).fetchone()
+
+
 def revoke_key(conn: psycopg.Connection, key_id: str) -> Optional[dict]:
     return conn.execute("""UPDATE api_keys SET revoked_at = coalesce(revoked_at, now()) WHERE key_id = %s
                            RETURNING key_id, scopes, label, created_at, revoked_at""", (key_id,)).fetchone()

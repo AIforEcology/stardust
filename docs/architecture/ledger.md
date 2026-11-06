@@ -61,7 +61,7 @@ Columns keep the sheet's meanings, because the agents' prompts describe those ex
 | `who_pays` | Who pays | `item_id` | `value_usd numeric`, NULL when not quantified. |
 | `load_reality` | Load reality | `facility_id` | Six factor scores (0–2); `deliverability_score` = round(sum / 12 × 100), `tier` and `score_weighted_mw` generated, all NULL if any factor is unscored. |
 | `market_context` | Load reality (Market context block) | `id` | `value` is text (some values are pairs, e.g. `331 / 195`). |
-| `corrections` | Corrections | `correction_id` | No personal contact details. Written only by admin. |
+| `corrections` | Corrections | `correction_id` | No personal contact details. Not public; read and written with a `corrections:write` key (the triage agent) or by admin. |
 | `source_registry` | Sources & credits | `source` | Licence and required credit line. |
 | `run_log` | Run log | `id` | One row per agent run, plus `agent`. |
 | `api_keys` | — | `key_id` | `key_hash` (SHA-256) only, `scopes text[]`, `label`, `created_at`, `revoked_at`. Same pattern as Core's keys. |
@@ -95,6 +95,7 @@ Lists return `{items, total, limit, offset, next_offset, attribution}`. Every re
 | `facilities:write` | `POST /v1/facilities` (send `id_prefix` `DC` or `PWR`, `state`, `country`; the server assigns the ID), `PATCH /v1/facilities/{id}` (fill blanks; re-assess the fields agents may update), `POST /v1/facilities/{id}/names`, `POST /v1/facilities/{id}/links` |
 | `tracker:write` | `POST /v1/claims`, `PATCH /v1/claims/{id}`, `POST /v1/claims/{id}/log`; `POST /v1/water` and `POST /v1/load-reality` (one row per facility: create it, or update it); `POST`/`PATCH /v1/who-pays`, `/v1/permit-checks`, `/v1/market-context` |
 | `runlog:write` | `POST /v1/run-log` |
+| `corrections:write` | `GET /v1/corrections` (`decision` filter), `GET /v1/corrections/{id}`, `POST /v1/corrections` (one row per submission: create it, or fill its blanks), `PATCH /v1/corrections/{id}`. Corrections aren't public, so reads need this key too. Send `evidence_urls` as a JSON array. |
 | `admin` | `/v1/admin/*` only (below) |
 
 Send an `idempotency_key` with every write (for example `<agent>-<run date>-<n>`). Responses: 201 created; 200 with `"idempotent_replay": true` for a retry; 401 missing, invalid or revoked key (`reason: key_revoked`); 403 wrong scope; 409 `field_not_refreshable`, `row_protected`, `protected_status` or `append_only`, with the reason in `detail`; 422 invalid value, with the `field` (`change_source_url` when an overwrite has no source).
@@ -118,6 +119,7 @@ Blocked by Caddy (404 from the internet) and, as a second guard, refused by the 
 |---|---|
 | `POST /v1/admin/keys` | `{"scopes": [...], "label": "..."}`; the key is shown once |
 | `GET /v1/admin/keys`, `POST /v1/admin/keys/{key_id}/revoke` | |
+| `POST /v1/admin/keys/{key_id}/scopes` | `{"add": [...], "remove": [...]}`: change an existing key's scopes without issuing a new secret. A key keeps at least one scope. Audited. |
 | `PATCH /v1/admin/rows/{table}/{id}` | Overwrite any field, including on Reviewed/Published rows (observations: `review_status` and `notes` only). Audited. |
 | `POST /v1/admin/import` | `{"table", "mode": "upsert" or "fill", "rows"}`; used by the import script |
 
@@ -131,7 +133,16 @@ Deploying, updating, backups, restoring and rotating keys are in [`deploy/README
 
 ## What agents can do
 
-Agents should be able to keep doing everything they do in the sheet today. Each agent's key has one scope. Every run it can:
+Agents should be able to keep doing everything they do in the sheet today. Each agent has its own key, with only the scopes its routine needs:
+
+| Agent | Scopes | Why |
+|---|---|---|
+| Daily update | `observations:write`, `facilities:write`, `runlog:write` | Adds facts and facilities, keeps facility rows current, syncs the Master List from Compute Atlas. |
+| Claims checker, Permitted vs actual | `tracker:write`, `observations:write`, `runlog:write`, `facilities:write` | Their prompts add a facility when a new claim or permit limit is for a site not in the ledger yet. |
+| Water ledger, Who pays, Load reality | `tracker:write`, `observations:write`, `runlog:write` | Work only on facilities that already exist. |
+| Corrections triage | `observations:write`, `facilities:write`, `tracker:write`, `runlog:write`, `corrections:write` | Files submissions and applies accepted changes as new observations or allowed updates. |
+
+Every run an agent can:
 
 - **Add facts.** It adds observations (append-only). A correction is a new observation with `supersedes`.
 - **Add rows.** It adds facilities (the server assigns the ID), names, links, claims, claim-log entries, who-pays items, permit checks, market context and run-log rows.
@@ -147,6 +158,7 @@ Agents should be able to keep doing everything they do in the sheet today. Each 
 | `permit_checks` | actual_value, actual_as_of, status, enforcement_disputes, evidence_observation_ids, next_step, last_checked, review_status, source fields (the actual's source) | The limit: metric, limit_value, unit, limit_type, limit source; facility. A new limit is a new check. |
 | `market_context` | value, unit, as_of, note, review_status, source fields | measure |
 | `facilities` | status, operator, tenant, latitude/longitude, location_precision, coordinate_source, utility, grid_region, operational_mw, planned_mw, review_status | Identity: name, state, country, county, FIPS; external IDs; first_seen; notes. Other names go to `facility_names`. |
+| `corrections` | proposed_assessment, review_status | The submission (record, issue, proposed change, evidence, submitter role) and the decision fields (decision, decision_date, reviewer_note), plus ledger_change_made and public_log_id: the agent copies a person's decision in once; changing it later is an admin edit. |
 
 "Source fields" are source_url, source_title, source_type, source_date, method, confidence and date_found.
 
@@ -164,5 +176,6 @@ Overwriting only `last_checked`, `next_step` or `review_status` needs no source.
 - **Edit or delete an observation.** Observations are append-only; agents add a superseding one instead.
 - **Overwrite fixed fields** (the table above). A different claim, item, limit or identity is a new row, or a reviewer's correction.
 - **Erase a value with a blank.** Unknown is not zero, and not "remove" either.
-- **Write `corrections` or `source_registry`.** Only admin can, because the corrections desk's decisions are made by people. The triage agent can still apply accepted changes to non-reviewed rows with its tracker or facility key.
+- **Decide a correction.** The triage agent's `corrections:write` key files submissions, writes its proposed assessment, and copies in the decision a person made on the corrections page, once. It can't change a recorded decision. It applies accepted changes to non-reviewed rows with its observation, facility and tracker scopes; a change to a Reviewed or Published row, or to a fixed field, stays an admin edit.
+- **Write `source_registry`.** Only admin can. No agent writes the "Sources & credits" tab today, and a licence or required credit line is a legal statement a person should check before it changes.
 - **Reach `/v1/admin/*`.** It is blocked from the internet.

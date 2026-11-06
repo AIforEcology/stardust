@@ -27,8 +27,11 @@ OBSERVATIONS_WRITE = "observations:write"
 FACILITIES_WRITE = "facilities:write"
 TRACKER_WRITE = "tracker:write"
 RUNLOG_WRITE = "runlog:write"
+# The corrections triage agent: files public submissions, writes its proposed assessment, and copies in the
+# decisions people make on the corrections page. It never decides; see AGENT_REFRESH["corrections"].
+CORRECTIONS_WRITE = "corrections:write"
 ADMIN = "admin"
-SCOPES = (OBSERVATIONS_WRITE, FACILITIES_WRITE, TRACKER_WRITE, RUNLOG_WRITE, ADMIN)
+SCOPES = (OBSERVATIONS_WRITE, FACILITIES_WRITE, TRACKER_WRITE, RUNLOG_WRITE, CORRECTIONS_WRITE, ADMIN)
 
 FACILITY_ID_RE = re.compile(r"^(DC|PWR)-[A-Z]{2}-[A-Z0-9]{1,3}-[0-9]{4,}$")
 STATE_RE = re.compile(r"^[A-Z]{2}-[A-Z0-9]{1,3}$")
@@ -128,7 +131,7 @@ TABLES: Dict[str, Table] = {t.name: t for t in (
         "correction_id": "text", "received": "date", "submitter_role": "text", "record_id": "text",
         "facility_id": "text", "issue": "text", "proposed": "text", "evidence_urls": "text[]",
         "proposed_assessment": "text", "decision": "text", "decision_date": "date", "reviewer_note": "text",
-        "ledger_change_made": "text", "public_log_id": "text", "review_status": "text"}, ADMIN,
+        "ledger_change_made": "text", "public_log_id": "text", "review_status": "text"}, CORRECTIONS_WRITE,
         required=("correction_id",), client_pk=True, public=False),
     Table("source_registry", "source", {
         "source": "text", "what_we_use": "text", "licence": "text", "credit_line": "text", "pulled": "text",
@@ -182,6 +185,10 @@ AGENT_REFRESH: Dict[str, frozenset] = {
     "facilities": frozenset({
         "status", "operator", "tenant", "latitude", "longitude", "location_precision", "coordinate_source",
         "utility", "grid_region", "operational_mw", "planned_mw", "review_status"}),
+    # Weekly corrections triage: only its own assessment is re-assessed. The submission (what was
+    # reported, by what kind of submitter, with what evidence) and the decision fields are fill-only: the
+    # agent copies a person's decision in once, and changing a recorded decision is an admin edit.
+    "corrections": frozenset({"proposed_assessment", "review_status"}),
 }
 # Fields that record the check itself, not a fact: overwriting only these needs no source.
 BOOKKEEPING = frozenset({"last_checked", "next_step", "review_status"})
