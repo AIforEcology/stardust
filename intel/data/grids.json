@@ -1,0 +1,100 @@
+{
+  "format": "stardust-dci-grids",
+  "grids": {
+    "US-IN": {
+      "label": "IN 2025",
+      "region_type": "state",
+      "year": 2025,
+      "mix": {
+        "FPP": 47.9,
+        "NGP": 35.5,
+        "WPP": 9.5,
+        "SPP": 6.2,
+        "UNK": 0.4,
+        "HYD": 0.3,
+        "REP": 0.2,
+        "OPP": 0.1
+      },
+      "generation_by_fuel": {
+        "BIO": 172.904,
+        "COW": 49223.259,
+        "HYC": 304.998,
+        "NG": 37895.428,
+        "OOG": 1955.896,
+        "OTH": 390.378,
+        "PET": 130.046,
+        "SUN": 6637.361,
+        "WND": 10186.258
+      },
+      "generation_unit": "thousand megawatthours",
+      "computed_g_per_kwh": 645.6,
+      "generation_total": 106896.527,
+      "generation_covered_pct": 100.0,
+      "intensity_g_per_kwh": 641.4,
+      "intensity_basis": "reported",
+      "reported_co2_lb_per_mwh": 1414.0,
+      "confidence": "reported",
+      "sources": [
+        {
+          "title": "U.S. EIA, Electric Power Operations (Form EIA-923), IN 2025, all sectors",
+          "url": "https://api.eia.gov/v2/electricity/electric-power-operational-data/data/?frequency=annual&data%5B0%5D=generation&facets%5Blocation%5D%5B%5D=IN&facets%5Bsectorid%5D%5B%5D=99&start=2025&end=2025&length=5000",
+          "retrieved": "2026-11-05"
+        },
+        {
+          "title": "U.S. EIA, State Electricity Profiles: emissions by state, IN 2025",
+          "url": "https://api.eia.gov/v2/electricity/state-electricity-profiles/emissions-by-state-by-fuel/data/?frequency=annual&data%5B0%5D=co2-rate-lbs-mwh&facets%5Bstateid%5D%5B%5D=IN&facets%5Bfuelid%5D%5B%5D=ALL&start=2025&end=2025&length=5000",
+          "retrieved": "2026-11-05"
+        }
+      ],
+      "as_of": "2025-12-31"
+    },
+    "US-TN": {
+      "label": "TN 2025",
+      "region_type": "state",
+      "year": 2025,
+      "mix": {
+        "NPP": 38.6,
+        "FPP": 23.7,
+        "NGP": 23.6,
+        "HYD": 11.6,
+        "SPP": 1.7,
+        "REP": 0.6,
+        "OPP": 0.2,
+        "UNK": 0.0
+      },
+      "generation_by_fuel": {
+        "BIO": 475.806,
+        "COW": 18019.354,
+        "HYC": 8839.988,
+        "NG": 17903.134,
+        "NUC": 29333.225,
+        "OOG": 10.288,
+        "OTH": 0.21,
+        "PET": 127.0,
+        "SUN": 1274.854,
+        "WND": 0.0
+      },
+      "generation_unit": "thousand megawatthours",
+      "computed_g_per_kwh": 352.9,
+      "generation_total": 75446.353,
+      "generation_covered_pct": 100.7,
+      "intensity_g_per_kwh": 371.0,
+      "intensity_basis": "reported",
+      "reported_co2_lb_per_mwh": 818.0,
+      "confidence": "reported",
+      "sources": [
+        {
+          "title": "U.S. EIA, Electric Power Operations (Form EIA-923), TN 2025, all sectors",
+          "url": "https://api.eia.gov/v2/electricity/electric-power-operational-data/data/?frequency=annual&data%5B0%5D=generation&facets%5Blocation%5D%5B%5D=TN&facets%5Bsectorid%5D%5B%5D=99&start=2025&end=2025&length=5000",
+          "retrieved": "2026-11-05"
+        },
+        {
+          "title": "U.S. EIA, State Electricity Profiles: emissions by state, TN 2025",
+          "url": "https://api.eia.gov/v2/electricity/state-electricity-profiles/emissions-by-state-by-fuel/data/?frequency=annual&data%5B0%5D=co2-rate-lbs-mwh&facets%5Bstateid%5D%5B%5D=TN&facets%5Bfuelid%5D%5B%5D=ALL&start=2025&end=2025&length=5000",
+          "retrieved": "2026-11-05"
+        }
+      ],
+      "as_of": "2025-12-31"
+    }
+  }
+}

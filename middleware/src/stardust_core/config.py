@@ -116,6 +116,8 @@ class Settings:
     public_org_id: UUID = DEFAULT_PUBLIC_ORG_ID
     # New installs allowed per client IP per hour, to slow down scripted sign-ups.
     registrations_per_ip_per_hour: int = 20
+    # DCI provider footprint (footprint.py, intel/); None = off, and Core behaves as without it.
+    footprint_path: Optional[Path] = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -151,6 +153,8 @@ class Settings:
             public_org_id=UUID(os.environ["STARDUST_PUBLIC_ORG_ID"]) if os.environ.get("STARDUST_PUBLIC_ORG_ID")
             else DEFAULT_PUBLIC_ORG_ID,
             registrations_per_ip_per_hour=int(os.environ.get("STARDUST_REGISTRATIONS_PER_IP_PER_HOUR", "20")),
+            footprint_path=Path(os.environ["STARDUST_FOOTPRINT_FILE"]) if os.environ.get("STARDUST_FOOTPRINT_FILE")
+            else None,
         )
 
 

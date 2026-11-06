@@ -130,6 +130,18 @@ Keys carry the spec's OAuth scopes: `reporting.read` (the default and the one th
 | `STARDUST_PUBLIC_ORG_ID` | A fixed UUID derived from aifore.org. The organization self-registered installs belong to |
 | `STARDUST_REGISTRATIONS_PER_IP_PER_HOUR` | `20`. Limits scripted sign-ups |
 | `STARDUST_OTLP_GRPC_LISTEN` | unset (off). Address for the OTLP/gRPC receiver, e.g. `0.0.0.0:4317`. The HTTP receiver at `/v1/traces` is always on |
+| `STARDUST_FOOTPRINT_FILE` | unset (off). A DCI provider footprint file ([below](#provider-footprints-dci)). Not for production until its gates in [`docs/TODO.md`](../docs/TODO.md) are cleared |
+
+## Provider footprints (DCI)
+
+Off by default. Without a footprint, Core scores an event with no region on its provider's default grid, which for Anthropic, OpenAI and Google is the flat US grid (367 g CO₂/kWh, methodology 0.2.0). Data Center Intelligence ([`intel/`](../intel/README.md)) builds a footprint per provider from the facilities in the Data Center Resource Ledger, and `STARDUST_FOOTPRINT_FILE` loads it:
+
+- **Added, never replaced.** Each provider gets its own grid, `fp:<provider>`, with a blended intensity and mix, and its default grid points at it. Core's own grids are unchanged.
+- **A region still wins.** An event that names a cloud region uses that region's grid. The footprint changes only events with no region, which is every browser-extension event today.
+- **Estimates are labelled.** An event scored on a footprint grid has `confidence_tier: estimated`. Every event, `/healthz` and the OTel spans carry the methodology version with a suffix (`0.2.0+dci-0.1.0`), and `/healthz` gains a `footprint` block. `/v1/methodology` shows the merged grids and the footprint's working and caveats.
+- **Refused if wrong.** Core won't start with a footprint that points a provider at a grid it doesn't define, renames or replaces one of its grids, uses an unknown energy source code, has a mix that doesn't add up to 100%, or was built against another methodology version.
+
+With the variable unset, Core answers exactly as before: no footprint code runs, and `tests/test_footprint_off.py` checks responses field by field (order, types and exact values) against ones captured before the overlay existed. Publication is gated on board sign-off of the allocation method and counsel review of right of reply ([`docs/TODO.md`](../docs/TODO.md)), so `deploy/` doesn't set it.
 
 ## Tech operations fee
 
