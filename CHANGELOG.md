@@ -11,6 +11,11 @@ Versions follow [Semantic Versioning](https://semver.org/). The format follows [
 ## Unreleased
 
 ### Added
+- **stardust-intel 0.1.0** (new, `intel/`): Data Center Intelligence (DCI) Phase 1 prototype, rebuilt to source its facilities from the Data Center Resource Ledger. Off by default and unpublished until the board signs off the allocation method and counsel reviews right of reply (`docs/TODO.md`).
+  - `stardust-intel footprint` builds per-provider footprints from the ledger's facilities, the power plants linked to them and their on-site power observations, read from `https://core.aifore.org/ledger/v1/...` or, on the server, the ledger database. Every allocation is labelled estimated, and the caveats name each gap.
+  - `stardust-intel eia-state` fetches a state's generation mix and reported CO₂ rate from the EIA Open Data API v2; tested against recorded responses.
+  - `stardust-intel validate` runs in CI.
+- **stardust-core:** optional DCI footprint overlay, `STARDUST_FOOTPRINT_FILE`. It adds an `fp:<provider>` grid for events with no region, tags those events `estimated`, and suffixes the methodology version (`0.2.0+dci-0.1.0`). Core refuses a footprint that points a provider at a grid it doesn't define. Unset, Core's responses are byte-for-byte unchanged.
 - **stardust-mcp 0.1.0** (new, `mcp/`, Python 3.10+): the Subscriber reporting MCP server (spec §23.3).
   - Four read-only tools: `get_usage_summary`, `get_impact_summary`, `explain_metric`, `quote_credits` (carbon only, quote only).
   - Authenticated with Core API keys as bearer tokens. Every answer is limited to the key's organization and user.

@@ -1,0 +1,91 @@
+{
+  "$comment": "AIforE's estimated split of each provider's compute across facilities (DCI spec v0.1, Phase 1 prototype). Every weight is estimated and needs board sign-off of the allocation method before any footprint built from it is published (docs/TODO.md). Facilities are found in the Data Center Resource Ledger by search until their ledger IDs are pinned here as facility_id.",
+  "format": "stardust-dci-allocations",
+  "as_of": "2026-10-21",
+  "fallback_grid": "core:US",
+  "providers": {
+    "anthropic": {
+      "tenant_names": ["Anthropic"],
+      "components": [
+        {
+          "id": "rainier-indiana",
+          "label": "AWS Project Rainier, New Carlisle, Indiana",
+          "weight": 0.30,
+          "facilities": [{ "match": { "q": "Rainier", "state": "US-IN" } }],
+          "rationale": "Anthropic's largest disclosed training campus (Amazon Project Rainier); weighted as the single biggest share of known compute.",
+          "sources": [
+            "https://www.anthropic.com/news/anthropic-invests-50-billion-in-american-ai-infrastructure",
+            "https://measuredai.substack.com/p/anthropic-data-centers",
+            "https://www.tcdev.de/blog/where-are-claudes-data-centers/"
+          ]
+        },
+        {
+          "id": "colossus-1",
+          "label": "Colossus 1, Memphis, Tennessee (300 MW, sole tenant since May 2026)",
+          "weight": 0.15,
+          "facilities": [{ "match": { "q": "Colossus 1", "state": "US-TN" } }],
+          "rationale": "Reported compute deal making Anthropic the sole tenant of Colossus 1 from May 2026; weighted by its 300 MW against Anthropic's other known capacity.",
+          "sources": [
+            "https://www.eenewseurope.com/en/anthropic-compute-deal-spacexai-colossus-1/",
+            "https://www.actionnews5.com/2026/05/06/anthropic-parent-company-claude-operate-data-center-memphis/",
+            "https://en.wikipedia.org/wiki/Colossus_(supercomputer)"
+          ]
+        },
+        {
+          "id": "rainier-other",
+          "label": "Project Rainier, Mississippi and Pennsylvania sites",
+          "weight": 0.10,
+          "facilities": [
+            { "match": { "q": "Rainier", "state": "US-MS" } },
+            { "match": { "q": "Rainier", "state": "US-PA" } }
+          ],
+          "rationale": "Further Project Rainier sites reported for Anthropic; smaller and less certain than New Carlisle.",
+          "sources": [
+            "https://measuredai.substack.com/p/anthropic-data-centers",
+            "https://www.tcdev.de/blog/where-are-claudes-data-centers/"
+          ]
+        },
+        {
+          "id": "lake-mariner",
+          "label": "TeraWulf Lake Mariner, Barker, New York (42 MW)",
+          "weight": 0.02,
+          "facilities": [{ "match": { "q": "Lake Mariner", "state": "US-NY" } }],
+          "rationale": "Small reported capacity (42 MW) relative to Anthropic's other sites.",
+          "sources": ["https://www.tcdev.de/blog/where-are-claudes-data-centers/"]
+        },
+        {
+          "id": "undisclosed",
+          "label": "Undisclosed cloud (Google TPU regions, other AWS, Azure)",
+          "weight": 0.43,
+          "undisclosed": true,
+          "rationale": "Anthropic also runs on Google Cloud TPUs and other AWS and Azure regions whose locations aren't disclosed; kept on the national grid so the gap stays visible.",
+          "sources": ["https://www.anthropic.com/news/anthropic-invests-50-billion-in-american-ai-infrastructure"]
+        }
+      ]
+    },
+    "openai": {
+      "tenant_names": ["OpenAI"],
+      "components": [
+        {
+          "id": "stargate-abilene",
+          "label": "Stargate Abilene, Texas (about 0.3 GW live)",
+          "weight": 0.20,
+          "facilities": [{ "match": { "q": "Stargate Abilene", "state": "US-TX" } }],
+          "rationale": "OpenAI's only placed site with live capacity reported (about 0.3 GW); the rest of its compute is rented in undisclosed regions.",
+          "sources": [
+            "https://epoch.ai/publications/openai-stargate-where-the-us-sites-stand",
+            "https://www.insidedeeptech.com/openai-stargate-abilene-sites-power-full-guide/"
+          ]
+        },
+        {
+          "id": "undisclosed",
+          "label": "Undisclosed cloud (Azure, Oracle, CoreWeave, Google regions)",
+          "weight": 0.80,
+          "undisclosed": true,
+          "rationale": "Most OpenAI inference runs in Azure, Oracle, CoreWeave and Google regions whose locations aren't disclosed; kept on the national grid so the gap stays visible.",
+          "sources": ["https://epoch.ai/publications/openai-stargate-where-the-us-sites-stand"]
+        }
+      ]
+    }
+  }
+}
