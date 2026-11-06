@@ -2,7 +2,9 @@
 
 ## Specification
 
-- [`stardust-spec-v1.6.docx`](stardust-spec-v1.6.docx): **current.** *AIForE Sustainable Ecosystems SDK with Telemetry for Big Data*, product specification v1.6 (draft).
+- [`stardust-spec-v1.7.docx`](stardust-spec-v1.7.docx): **current.** *AIForE Sustainable Ecosystems SDK with Telemetry for Big Data*, product specification v1.7 (draft).
+  - New in v1.7: §21.10, grid flexibility telemetry: how curtailment capacity, response speed and compliance are measured and audited. Fields `FEV`, `FMD`, `FDS`, `DET`, `FBL`, `BLV`, `FMT`, `LKG`, `FRB`, `FWI` and derived `D-FRL`, `D-FRT`, `D-FDR`, `D-FPR`, `D-FSD`, `D-FNR`, `D-FEC`, `D-FAV`, `D-FCR`, plus baseline rules (§21.10.3) and test events and verification (§21.10.4). Proposed for public comment in RFC 0001 §6.1.
+- [`stardust-spec-v1.6.docx`](stardust-spec-v1.6.docx): the previous version, kept for reference.
   - New in v1.6 (merged from Telemetry Specification T1.4 and the T1.5 time patch):
     - §7, interval, factor-resolution, price, demand-charge and matching fields
     - §21.7, the time dimension: fields `IVL`, `FTR`, `FVW`, `FBS`, `DMD`, `PKD`, `HMS`, `D-DCC` and `D-TMC`, and a new §21.7.4 on temporal resolution and matching rules
@@ -19,7 +21,8 @@
     - §23, the MCP interface: Subscriber reporting, Provider insights and Operator lifecycle servers, with their tools, OAuth scopes and response conventions
     - §12.2 and §22.8.2 now say that write tools exist only on the operator server
 - [`stardust-spec-v1.2.docx`](stardust-spec-v1.2.docx): the previous version, kept for reference.
-- [`stardust-telemetry-spec-T1.5.docx`](stardust-telemetry-spec-T1.5.docx): the Telemetry Specification, a subset of v1.6 holding only the telemetry sections (now including §21.8 and §21.9), for editing on its own. Edits merge back into the master with [`tools/stardust_telemetry_sync.py`](tools/stardust_telemetry_sync.py).
+- [`stardust-telemetry-spec-T1.6.docx`](stardust-telemetry-spec-T1.6.docx): the Telemetry Specification, a subset of v1.7 holding only the telemetry sections (now including §21.8, §21.9 and §21.10), for editing on its own. Edits merge back into the master with [`tools/stardust_telemetry_sync.py`](tools/stardust_telemetry_sync.py).
+- [`stardust-telemetry-spec-T1.5.docx`](stardust-telemetry-spec-T1.5.docx): the previous Telemetry Specification (a subset of v1.6), kept for reference.
 - [`stardust-telemetry-spec-T1.2.docx`](stardust-telemetry-spec-T1.2.docx): the earlier Telemetry Specification (a subset of v1.4), kept for reference.
 - [`stardust-summary.pdf`](stardust-summary.pdf): four-page project summary with the data-flow, marketplace and right-sizing diagrams (written for v0.9).
 

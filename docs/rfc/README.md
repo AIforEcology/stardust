@@ -6,7 +6,7 @@ Proposals for open standards that come out of the Stardust work. Each RFC is pub
 | --- | --- | --- | --- |
 | [0001](0001-unified-telemetry.md) | Unified Telemetry Specification for Real-Time AI Inference Energy Accounting (v0.1) | Public comment | 60 days |
 
-RFC 0001 is derived from the Stardust Telemetry Specification T1.5 ([`../stardust-telemetry-spec-T1.5.docx`](../stardust-telemetry-spec-T1.5.docx)), which is a subset of master spec v1.6 ([`../stardust-spec-v1.6.docx`](../stardust-spec-v1.6.docx)).
+RFC 0001 is derived from the Stardust Telemetry Specification T1.6 ([`../stardust-telemetry-spec-T1.6.docx`](../stardust-telemetry-spec-T1.6.docx)), which is a subset of master spec v1.7 ([`../stardust-spec-v1.7.docx`](../stardust-spec-v1.7.docx)).
 
 ## How to comment
 
