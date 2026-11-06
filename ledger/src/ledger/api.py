@@ -22,8 +22,8 @@ from psycopg_pool import ConnectionPool
 
 from . import __version__, auth, db, importer, store
 from .config import Settings
-from .models import (ADMIN, FACILITIES_WRITE, OBSERVATIONS_WRITE, RUNLOG_WRITE, SCOPES, TABLES, TRACKER_WRITE,
-                     ValueProblem, coerce)
+from .models import (ADMIN, CORRECTIONS_WRITE, FACILITIES_WRITE, OBSERVATIONS_WRITE, RUNLOG_WRITE, SCOPES, TABLES,
+                     TRACKER_WRITE, ValueProblem, coerce)
 
 log = logging.getLogger("ledger.api")
 
@@ -380,6 +380,35 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
     def add_run(body: Dict[str, Any] = Body(...), who: auth.Principal = Depends(needs(RUNLOG_WRITE))) -> Response:
         return create("run_log", body, who)
 
+    # --- corrections (not public: unreviewed submissions; read and written with a corrections:write key) --
+
+    @app.get("/v1/corrections")
+    def corrections(decision: Optional[str] = None, limit: int = Query(default=100, ge=1, le=1000),
+                    offset: int = Query(default=0, ge=0),
+                    _: auth.Principal = Depends(needs(CORRECTIONS_WRITE))) -> Response:
+        with tx() as conn:
+            items, total = store.list_rows(conn, "corrections", {"decision": decision}, limit=limit, offset=offset)
+        return JSONResponse(_json(_page(items, total, limit, offset)))
+
+    @app.get("/v1/corrections/{correction_id}")
+    def correction(correction_id: str, _: auth.Principal = Depends(needs(CORRECTIONS_WRITE))) -> Response:
+        with tx() as conn:
+            row = store.public_row(conn, TABLES["corrections"], correction_id)
+        if row is None:
+            raise store.NotFound(f"correction {correction_id} not found")
+        return JSONResponse(_json(row))
+
+    @app.post("/v1/corrections", status_code=201)
+    def add_correction(body: Dict[str, Any] = Body(...),
+                       who: auth.Principal = Depends(needs(CORRECTIONS_WRITE))) -> Response:
+        # One row per submission (the corrections page's sid): POST creates it, or fills its blank fields.
+        return create("corrections", body, who)
+
+    @app.patch("/v1/corrections/{correction_id}")
+    def fill_correction(correction_id: str, body: Dict[str, Any] = Body(...),
+                        who: auth.Principal = Depends(needs(CORRECTIONS_WRITE))) -> Response:
+        return patch("corrections", correction_id, body, who)  # IDs are the page's sids, kept as given
+
     # --- admin (server only) -----------------------------------------------------------------------
 
     @app.post("/v1/admin/keys", status_code=201)
@@ -408,6 +437,23 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
             rec = store.revoke_key(conn, key_id)
         if rec is None:
             raise store.NotFound(f"key {key_id} not found")
+        return JSONResponse(_json(rec))
+
+    @app.post("/v1/admin/keys/{key_id}/scopes")
+    def change_scopes(key_id: str, body: Dict[str, Any] = Body(...), who: auth.Principal = Depends(admin)) -> Response:
+        """Add or remove scopes on an existing key, so its holder needn't be given a new secret. Audited."""
+        add, remove = body.get("add") or [], body.get("remove") or []
+        for name, val in (("add", add), ("remove", remove)):
+            if not isinstance(val, list) or any(s not in SCOPES for s in val):
+                raise ValueProblem(name, f"a list drawn from {', '.join(SCOPES)}")
+        if not add and not remove:
+            raise ValueProblem("add", "send add and/or remove")
+        with tx(who.key_id) as conn:
+            rec = store.change_key_scopes(conn, key_id, add, remove)
+            if rec is None:
+                raise store.NotFound(f"key {key_id} not found")
+            store.audit(conn, who.key_id, "change_scopes", "api_keys", key_id,
+                        {"add": sorted(set(add)), "remove": sorted(set(remove)), "scopes": rec["scopes"]})
         return JSONResponse(_json(rec))
 
     @app.patch("/v1/admin/rows/{table}/{row_id}")

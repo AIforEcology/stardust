@@ -153,7 +153,7 @@ The password is read when the database volume is first created. Changing `LEDGER
 
 ### Write keys for the agents
 
-Create one key per agent from the server, with only the scopes it needs (`observations:write`, `facilities:write`, `tracker:write`, `runlog:write`; `admin` only for people). The key is shown once; only its SHA-256 hash is stored.
+Create one key per agent from the server, with only the scopes it needs (`observations:write`, `facilities:write`, `tracker:write`, `runlog:write`, `corrections:write`; `admin` only for people). [`docs/architecture/ledger.md`](../docs/architecture/ledger.md#what-agents-can-do) lists which agent needs which. The key is shown once; only its SHA-256 hash is stored.
 
 ```bash
 docker compose exec ledger sh -c 'curl -s -X POST localhost:8090/v1/admin/keys \
@@ -162,6 +162,13 @@ docker compose exec ledger sh -c 'curl -s -X POST localhost:8090/v1/admin/keys \
 ```
 
 Store each key as a secret in the agents' cloud environment (for example `LEDGER_KEY`), never in a prompt, the sheet or the repository. Agents send it as `X-Ledger-Key`.
+
+**Change an existing key's scopes** (the agent keeps its secret; audited):
+
+```bash
+docker compose exec ledger sh -c 'curl -s -X POST -H "X-Ledger-Admin-Token: $LEDGER_ADMIN_TOKEN" -H "Content-Type: application/json" \
+  localhost:8090/v1/admin/keys/<key_id>/scopes -d "{\"add\": [\"facilities:write\"]}"'
+```
 
 **Rotate a key:** create the new key, update the agent's secret, then revoke the old one:
 
