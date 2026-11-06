@@ -11,6 +11,7 @@ Versions follow [Semantic Versioning](https://semver.org/). The format follows [
 ## Unreleased
 
 ### Added
+- **Spec 1.7:** §21.10, grid flexibility telemetry. It defines how AI load curtailment capacity, response speed and compliance are measured and audited, with 19 field codes (`FEV`, `FMD`, `FDS`, `DET`, `FBL`, `BLV`, `FMT`, `LKG`, `FRB`, `FWI`, `D-FRL`, `D-FRT`, `D-FDR`, `D-FPR`, `D-FSD`, `D-FNR`, `D-FEC`, `D-FAV`, `D-FCR`), baseline rules and test-event and verification rules. New `docs/stardust-spec-v1.7.docx` and Telemetry Specification T1.6. `schema/` re-exported (218 field codes), and every package now declares spec 1.7. Proposed for public comment in RFC 0001 §6.1.
 - **stardust-intel 0.1.0** (new, `intel/`): Data Center Intelligence (DCI) Phase 1 prototype, rebuilt to source its facilities from the Data Center Resource Ledger. Off by default and unpublished until the board signs off the allocation method and counsel reviews right of reply (`docs/TODO.md`).
   - `stardust-intel footprint` builds per-provider footprints from the ledger's facilities, the power plants linked to them and their on-site power observations, read from `https://core.aifore.org/ledger/v1/...` or, on the server, the ledger database. Every allocation is labelled estimated, and the caveats name each gap.
   - `stardust-intel eia-state` fetches a state's generation mix and reported CO₂ rate from the EIA Open Data API v2; tested against recorded responses.

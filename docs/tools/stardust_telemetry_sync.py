@@ -61,6 +61,7 @@ UNITS = [
     ("21.7",  "Time-of-use dynamics and carbon-aware load shifting"),
     ("21.8",  "Energy-aware routing telemetry and method"),
     ("21.9",  "Accelerator, node and facility runtime telemetry"),
+    ("21.10", "Grid flexibility: curtailment capacity, response and compliance"),
     ("22.3",  "Multi-attribute Provider categories"),
     ("22.4",  "Multi-attribute Provider telemetry fields"),
     ("22.8",  "Hardware lifecycle record: reuse and recycling"),
