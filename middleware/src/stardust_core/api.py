@@ -28,7 +28,8 @@ from . import auth, indicator
 from .auth import AuthError, Principal
 from .broker import Broker, BrokerError
 from . import __version__
-from .config import Settings, load_methodology, load_spec_version
+from .config import Settings, load_json, load_methodology, load_spec_version
+from .footprint import apply_footprint, load_footprint
 from .methodology import Methodology
 from .models import EnrichedEvent, UsageEvent
 from .otel import (
@@ -97,6 +98,11 @@ def create_app(
     """``span_exporter`` / ``metric_reader`` replace the OTLP exporters (tests pass in-memory ones)."""
     settings = settings or Settings.from_env()
     cfg = load_methodology(settings.methodology_path)
+    if settings.footprint_path is not None:
+        # Raises FootprintError on a bad file: Core refuses to start rather than serve wrong numbers.
+        cfg = apply_footprint(cfg, load_footprint(settings.footprint_path),
+                              load_json(settings.esc_path)["codes"].keys())
+        log.info("Footprint %s loaded: methodology %s", settings.footprint_path, cfg["version"])
     engine = Methodology(cfg, load_initial(settings.pricing_path, settings.pricing_cache_path))
     spec_version = load_spec_version()
     store = Store(settings.database_path or ":memory:")
@@ -265,7 +271,7 @@ def create_app(
 
     @app.get("/healthz")
     def healthz() -> dict:
-        return {
+        body = {
             "ok": True,
             "spec_version": spec_version,
             "methodology_version": engine.version,
@@ -281,6 +287,14 @@ def create_app(
             "self_registration": settings.self_registration,
             "database": store.stats(),
         }
+        if "footprint" in cfg:
+            body["footprint"] = {
+                "file": str(settings.footprint_path),
+                "dci_version": cfg["footprint"].get("dci_version"),
+                "as_of": cfg["footprint"].get("as_of"),
+                "providers": {p: g for p, g in cfg["provider_default_grid"].items() if g.startswith("fp:")},
+            }
+        return body
 
     @app.get("/v1/auth/principal")
     def whoami(caller: Optional[Principal] = Depends(principal)) -> dict:

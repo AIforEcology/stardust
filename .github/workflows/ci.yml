@@ -21,8 +21,10 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e "middleware[dev]" -e "providers-service[dev]" -e "subscriber-client/sdk-python[dev]"
-      - run: pytest middleware providers-service subscriber-client/sdk-python
+      - run: pip install -e "middleware[dev]" -e "providers-service[dev]" -e "subscriber-client/sdk-python[dev]" -e "intel[dev]"
+      - run: pytest middleware providers-service subscriber-client/sdk-python intel
+      # Data Center Intelligence (intel/): the allocations and grids files must stay valid.
+      - run: stardust-intel validate
       # The spec sync tool (docs/tools) needs only lxml.
       - run: pip install "lxml>=4.9"
       - run: pytest docs/tools
@@ -102,9 +104,11 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - run: pip install -e "ledger[dev]"
+      - run: pip install -e "ledger[dev]" -e "intel[dev]"
       # With CI set, conftest fails instead of skipping when the database is missing.
       - run: pytest ledger -ra
+      # DCI reads the ledger through its API or its database; both must give the same footprint.
+      - run: pytest intel/tests/test_intel_ledger_db.py -ra
       - run: docker build -f deploy/ledger-db.Dockerfile -t ledger-db:ci deploy
       - run: docker run --rm --entrypoint sh ledger-db:ci -c 'ls /usr/share/postgresql/17/extension/postgis.control'
       - run: docker build -f deploy/ledger.Dockerfile -t ledger:ci .

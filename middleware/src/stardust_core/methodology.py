@@ -22,6 +22,8 @@ class Grid:
     key: str
     intensity_g_per_kwh: float
     mix: Optional[Dict[str, float]]
+    # True for a DCI footprint grid built from estimated allocations (footprint.py).
+    estimated: bool = False
 
 
 class Methodology:
@@ -50,7 +52,7 @@ class Methodology:
             defaults = self.cfg["provider_default_grid"]
             key = defaults.get(provider.lower(), defaults["default"])
         g = self.cfg["grids"][key]
-        return Grid(key, float(g["intensity_g_per_kwh"]), g.get("mix"))
+        return Grid(key, float(g["intensity_g_per_kwh"]), g.get("mix"), bool(g.get("estimated", False)))
 
     # --- the engine ----------------------------------------------------------
 
@@ -78,6 +80,9 @@ class Methodology:
         tier = self.model_tier(event.model)
         energy_wh, confidence = self.energy_wh(event, tier)
         grid = self.grid_for(event.provider, event.region)
+        if grid.estimated:
+            # A footprint grid rests on estimated allocations, so the result is Estimated (DCI spec).
+            confidence = ConfidenceTier.estimated
 
         co2e_g = energy_wh / 1000 * grid.intensity_g_per_kwh
         water = self.cfg["water"]
