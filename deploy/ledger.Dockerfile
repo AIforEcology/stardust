@@ -8,7 +8,9 @@ WORKDIR /app
 # The migrations and the import script live beside the package, so keep the ledger/ layout.
 COPY ledger/ ledger/
 # pip is removed once the ledger is installed, as in Core's image: it isn't needed at runtime.
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* \
+# apt-get upgrade picks up Debian security fixes the python base image hasn't been rebuilt with yet
+# (e.g. zlib1g, CVE-2026-76844 / CVE-2026-85091), so the image scan doesn't wait on upstream.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* \
  && pip install --upgrade pip && pip install -e ledger && pip uninstall -y pip \
  && useradd --system --uid 10002 ledger
 
