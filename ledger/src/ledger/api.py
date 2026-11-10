@@ -17,6 +17,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional
 
 import psycopg
 from fastapi import Body, Depends, FastAPI, Header, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from psycopg_pool import ConnectionPool
 
@@ -157,6 +158,12 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
             return JSONResponse({"detail": "too many requests from this address; try again in a minute",
                                  "reason": "rate_limited"}, status_code=429, headers={"Retry-After": "60"})
         return await call_next(request)
+
+    # Browsers on any site (aifore.org/ledger first) may read the public data. Added after the rate limiter so
+    # it wraps it: a 429 still carries the CORS header and the page can say "try again in a minute". Only GET
+    # and HEAD, no credentials and no extra request headers, so a browser can never send X-Ledger-Key here.
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "HEAD"], allow_credentials=False,
+                       max_age=86400)
 
     # --- auth ------------------------------------------------------------------------------------
 
