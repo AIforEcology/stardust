@@ -10,7 +10,9 @@ COPY schema/ schema/
 COPY middleware/ middleware/
 # pip is removed once Core is installed: it isn't needed at runtime, and it vendors its own copies of
 # msgpack, urllib3 and setuptools (pkg_resources) that lag their fixed releases and fail the image scan.
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* \
+# apt-get upgrade picks up Debian security fixes the python base image hasn't been rebuilt with yet
+# (e.g. zlib1g, CVE-2026-76844 / CVE-2026-85091), so the image scan doesn't wait on upstream.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* \
  && pip install --upgrade pip && pip install -e middleware && pip uninstall -y pip \
  && useradd --system --uid 10001 stardust && mkdir -p /data && chown stardust /data
 
