@@ -33,6 +33,12 @@ updates:
     open-pull-requests-limit: 3
     groups:
       minor-and-patch: { update-types: [minor, patch] }
+    ignore:
+      # A new PostgreSQL major can't start on the ledger's existing data volume (written by 17): it needs
+      # a planned pg_upgrade or dump/restore plus compose changes (ledger-db and ledger-backup), not a
+      # tag bump. Upgrade it by hand when planned; see #63.
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
