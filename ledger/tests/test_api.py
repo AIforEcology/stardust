@@ -227,3 +227,25 @@ def test_rate_limit(settings, pool):
     with TestClient(create_app(s, pool=pool)) as c:
         codes = [c.get("/v1/facilities").status_code for _ in range(4)]
     assert codes == [200, 200, 200, 429]
+
+
+def test_cors_allows_browser_reads_only(settings, pool):
+    from fastapi.testclient import TestClient
+
+    from ledger.api import create_app
+    from ledger.config import Settings
+    s = Settings(**{**settings.__dict__, "reads_per_ip_per_minute": 2})
+    origin = {"Origin": "https://aifore.org"}
+    with TestClient(create_app(s, pool=pool)) as c:
+        r = c.get("/v1/facilities", headers=origin)
+        assert r.status_code == 200 and r.headers["access-control-allow-origin"] == "*"
+        assert "access-control-allow-credentials" not in r.headers
+        pre = c.options("/v1/facilities", headers={**origin, "Access-Control-Request-Method": "GET"})
+        assert pre.status_code == 200 and "GET" in pre.headers["access-control-allow-methods"]
+        # A browser write needs a preflight for POST and X-Ledger-Key; both are refused.
+        pre = c.options("/v1/facilities", headers={**origin, "Access-Control-Request-Method": "POST",
+                                                  "Access-Control-Request-Headers": "x-ledger-key"})
+        assert pre.status_code == 400
+        c.get("/v1/facilities", headers=origin)
+        r = c.get("/v1/facilities", headers=origin)
+        assert r.status_code == 429 and r.headers["access-control-allow-origin"] == "*"
