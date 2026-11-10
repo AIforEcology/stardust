@@ -75,6 +75,8 @@ Base URL: `https://core.aifore.org/ledger`. The OpenAPI schema is at `/ledger/op
 
 ### Public reads (no key; 120 requests per minute per IP)
 
+Reads send `Access-Control-Allow-Origin: *` (GET and HEAD only, no credentials), so web pages such as aifore.org/ledger can fetch them from the browser. Browsers cannot send writes: a preflight for any other method or for `X-Ledger-Key` is refused.
+
 | Endpoint | Filters |
 |---|---|
 | `GET /healthz` | |
