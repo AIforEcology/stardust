@@ -40,6 +40,16 @@ def test_health(client):
     assert body["spec_version"] == json.loads(DEFAULT_SPEC_VERSION.read_text())["spec_version"]
 
 
+
+def test_health_reports_the_deployed_commit(client, monkeypatch):
+    # Unset (a local or manual build without GIT_COMMIT): "unknown". The other fields stay as they were.
+    monkeypatch.delenv("STARDUST_COMMIT", raising=False)
+    body = client.get("/healthz").json()
+    assert body["commit"] == "unknown"
+    assert body["ok"] is True and body["subscriber_auth"] and body["ingest_auth"]
+    monkeypatch.setenv("STARDUST_COMMIT", "0123456789ab")
+    assert client.get("/healthz").json()["commit"] == "0123456789ab"
+
 def test_ingest_and_summary(client):
     r = client.post("/v1/events", json=EVENT)
     assert r.status_code == 200, r.text
