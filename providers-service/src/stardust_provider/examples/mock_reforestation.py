@@ -1,7 +1,8 @@
-"""A mock reforestation provider for development and tests.
+"""The Stardust Sandbox Provider: a test-only reforestation provider for development, tests and
+the hosted sandbox (deploy/docker-compose.yml, service ``sandbox-provider``).
 
-It fulfills instantly with an obviously fake attestation. It is not a real project
-and must never be listed in a production broker.
+It fulfills instantly with an attestation that says it is not real. It is not a real project, and
+it may only ever be approved as a sandbox provider (``"sandbox": true``), so only sandbox keys reach it.
 
     uvicorn stardust_provider.examples.mock_reforestation:app --port 8081
 """
@@ -26,6 +27,7 @@ from ..interface import (
 from ..server import create_app
 
 GRAMS_PER_TONNE = 1_000_000
+SANDBOX_ATTESTATION = "SANDBOX — not a real removal"
 
 
 class MockReforestationProvider(RemediationProvider):
@@ -33,8 +35,8 @@ class MockReforestationProvider(RemediationProvider):
         self._provider_id = provider_id
         self._project = CatalogItem(
             project_id="mock-project-1",
-            name="Mock reforestation project (NOT REAL)",
-            region="nowhere",
+            name="Test reforestation (not real)",
+            region="nowhere (sandbox)",
             capacity_t_co2e=1_000,
             price_usd_per_t=price_usd_per_t,
         )
@@ -44,7 +46,7 @@ class MockReforestationProvider(RemediationProvider):
     def register_provider(self) -> ProviderInfo:
         return ProviderInfo(
             provider_id=self._provider_id,
-            name="Mock Reforestation (development only)",
+            name="Stardust Sandbox Provider (test only)",
             category=Category.reforestation,
             certification=Certification(standard="none"),
         )
@@ -63,7 +65,7 @@ class MockReforestationProvider(RemediationProvider):
             result = FulfillResult(
                 order_id=order.order_id,
                 fulfillment_status=FulfillmentStatus.fulfilled,
-                certificate_ref=f"MOCK-ATTESTATION-{order.order_id}",
+                certificate_ref=f"SANDBOX-not-a-real-removal-{order.order_id}",
             )
             self._orders[order.order_id] = result
             return result
@@ -72,7 +74,8 @@ class MockReforestationProvider(RemediationProvider):
         result = self._orders.get(order_id)
         if result is None or result.certificate_ref is None:
             return None
-        return Certificate(order_id=order_id, certificate_ref=result.certificate_ref, kind="attestation", verified=False)
+        return Certificate(order_id=order_id, certificate_ref=result.certificate_ref, kind="attestation", verified=False,
+                           note=SANDBOX_ATTESTATION)
 
     def report_status(self, order_id: str) -> Optional[FulfillResult]:
         return self._orders.get(order_id)

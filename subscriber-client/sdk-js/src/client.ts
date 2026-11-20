@@ -6,10 +6,25 @@ import type { Tracer } from "@opentelemetry/api";
 
 import { extract, type Provider, type Usage } from "./extract.ts";
 import { Call, type CallHost, DEFAULT_OPERATION, eventIdForSpan, type TraceIds } from "./otel.ts";
+import {
+  type DailySummary,
+  type Order,
+  type Quote,
+  StardustError,
+  type Summary,
+} from "./results.ts";
+
+export const DEFAULT_API_BASE = "https://core.aifore.org";
+export const AUTH_WARNING = "Stardust: API key missing or invalid; events are being dropped";
 
 export interface StardustOptions {
-  /** Stardust Core URL. `null` sends nothing directly (with `tracer`: spans only, via your collector). */
+  /**
+   * Stardust Core URL. Defaults to `STARDUST_API_BASE`, else https://core.aifore.org.
+   * `null` sends nothing directly (with `tracer`: spans only, via your collector).
+   */
   apiBase?: string | null;
+  /** API key, sent as `Authorization: Bearer <key>`. Defaults to `STARDUST_API_KEY`. */
+  apiKey?: string;
   /** An OpenTelemetry tracer: each metered call also becomes a GenAI client span. */
   tracer?: Tracer;
   userId?: string;
@@ -25,6 +40,17 @@ export interface StardustOptions {
 }
 
 type UsageEvent = Record<string, unknown>;
+type TimeArg = Date | string | undefined;
+
+function env(name: string): string | undefined {
+  // `process` is missing in browsers and some edge runtimes.
+  const p = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return p?.env?.[name] || undefined;
+}
+
+function iso(t: TimeArg): string | undefined {
+  return t instanceof Date ? t.toISOString() : t;
+}
 
 const MAX_BACKOFF_MS = 60_000;
 const FLUSH_RETRY_MS = 50;
@@ -40,9 +66,13 @@ function isoWithOffset(d: Date): string {
 
 export class Stardust implements CallHost {
   readonly url: string | null;
+  readonly apiBase: string | null;
   readonly tracer?: Tracer;
   dropped = 0;
-  private readonly opts: StardustOptions;
+  // A true private field: never in JSON.stringify, util.inspect or console.log output.
+  readonly #apiKey: string | undefined;
+  private authWarned = false;
+  private readonly opts: Omit<StardustOptions, "apiKey">;
   private readonly fetchImpl: typeof fetch;
   private readonly buffer: UsageEvent[] = [];
   private sending = false;
@@ -53,11 +83,29 @@ export class Stardust implements CallHost {
   private closed = false;
 
   constructor(opts: StardustOptions = {}) {
-    this.opts = { enabled: true, maxBuffer: 10_000, timeoutMs: 5_000, ...opts };
+    const { apiKey, ...rest } = opts;
+    this.opts = { enabled: true, maxBuffer: 10_000, timeoutMs: 5_000, ...rest };
     if (opts.apiBase === null && !opts.tracer) throw new Error("Stardust needs apiBase, tracer, or both");
-    this.url = opts.apiBase === null ? null : `${(opts.apiBase ?? "http://localhost:8080").replace(/\/+$/, "")}/v1/events`;
+    this.apiBase = opts.apiBase === null ? null : (opts.apiBase ?? env("STARDUST_API_BASE") ?? DEFAULT_API_BASE).replace(/\/+$/, "");
+    this.url = this.apiBase === null ? null : `${this.apiBase}/v1/events`;
+    this.#apiKey = apiKey || env("STARDUST_API_KEY");
     this.tracer = opts.tracer;
     this.fetchImpl = opts.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  get hasApiKey(): boolean {
+    return this.#apiKey !== undefined;
+  }
+
+  toJSON(): Record<string, unknown> {
+    return { apiBase: this.apiBase, apiKey: this.#apiKey ? "set" : "unset", region: this.opts.region };
+  }
+
+  private headers(json: boolean): Record<string, string> {
+    const h: Record<string, string> = { accept: "application/json" };
+    if (json) h["content-type"] = "application/json";
+    if (this.#apiKey) h.authorization = `Bearer ${this.#apiKey}`;
+    return h;
   }
 
   get pending(): number {
@@ -208,7 +256,7 @@ export class Stardust implements CallHost {
     try {
       res = await this.fetchImpl(this.url!, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: this.headers(true),
         body: JSON.stringify(event),
         signal: AbortSignal.timeout(this.opts.timeoutMs ?? 5_000),
       });
@@ -226,7 +274,83 @@ export class Stardust implements CallHost {
       return false;
     }
     if (res.status >= 500 || res.status === 429) return true;
+    if (res.status === 401 || res.status === 403) {
+      // A missing, wrong or revoked key: retrying won't help, and the app must not notice.
+      this.dropped++;
+      if (!this.authWarned) {
+        this.authWarned = true;
+        console.warn(AUTH_WARNING);
+      }
+      return false;
+    }
     console.warn(`[stardust] Core rejected an event (${res.status}): ${(await res.text()).slice(0, 500)}`);
     return false;
+  }
+
+  // --- reading results and remediation (user-initiated: these reject with StardustError) ------
+
+  private async request<T>(method: string, path: string, body?: unknown, query?: Record<string, string | undefined>): Promise<T> {
+    if (!this.apiBase) throw new StardustError(0, "this Stardust client has no apiBase, so it can't call Core");
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(query ?? {})) if (v != null) q.set(k, v);
+    const url = `${this.apiBase}${path}${q.size ? `?${q}` : ""}`;
+    let res: Response;
+    try {
+      res = await this.fetchImpl(url, {
+        method,
+        headers: this.headers(body !== undefined),
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(this.opts.timeoutMs ?? 5_000),
+      });
+    } catch (e) {
+      throw new StardustError(0, `could not reach Stardust Core at ${this.apiBase} (${(e as Error)?.name ?? "error"})`);
+    }
+    const text = await res.text();
+    let payload: unknown;
+    try {
+      payload = text ? JSON.parse(text) : undefined;
+    } catch {
+      payload = undefined;
+    }
+    if (!res.ok) {
+      const p = (payload ?? {}) as { detail?: unknown; reason?: string };
+      const detail = typeof p.detail === "string" ? p.detail : res.status === 401 ? "API key missing or invalid" : text.slice(0, 200) || `HTTP ${res.status}`;
+      throw new StardustError(res.status, detail, p.reason);
+    }
+    return payload as T;
+  }
+
+  /** Totals for the key's organization (or user): cost, energy, CO2e, water and the indicator code. */
+  summary(options: { since?: TimeArg; until?: TimeArg } = {}): Promise<Summary> {
+    return this.request<Summary>("GET", "/v1/summary", undefined, { since: iso(options.since), until: iso(options.until) });
+  }
+
+  /** The same totals per UTC day. */
+  async summaryDaily(options: { since?: TimeArg; until?: TimeArg } = {}): Promise<DailySummary[]> {
+    const body = await this.request<{ days: DailySummary[] }>("GET", "/v1/summary/daily", undefined, {
+      since: iso(options.since),
+      until: iso(options.until),
+    });
+    return body.days ?? [];
+  }
+
+  /** Quotes for removing `co2eG` grams of CO2e, cheapest first. A sandbox key gets sandbox quotes. */
+  async requestQuote(co2eG: number, tierPreference?: string[]): Promise<Quote[]> {
+    const req: Record<string, unknown> = { co2e_g: co2eG };
+    if (tierPreference?.length) req.tier_preference = tierPreference;
+    return (await this.request<{ quotes: Quote[] }>("POST", "/v1/remediation/quotes", req)).quotes ?? [];
+  }
+
+  /** Place an order for a quote. Each quote can be used once, within 15 minutes. */
+  submitOrder(quote: string | Quote, paymentRef?: string): Promise<Order> {
+    const req: Record<string, unknown> = { quote_id: typeof quote === "string" ? quote : quote.quote_id };
+    if (paymentRef !== undefined) req.payment_ref = paymentRef;
+    return this.request<Order>("POST", "/v1/remediation/orders", req);
+  }
+
+  /** An order's fulfillment status and certificate. */
+  orderStatus(order: string | Order): Promise<Order> {
+    const id = typeof order === "string" ? order : order.remediation_order_id;
+    return this.request<Order>("GET", `/v1/remediation/orders/${encodeURIComponent(id)}`);
   }
 }

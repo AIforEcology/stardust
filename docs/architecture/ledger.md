@@ -133,6 +133,8 @@ Blocked by Caddy (404 from the internet) and, as a second guard, refused by the 
 
 Deploying, updating, backups, restoring and rotating keys are in [`deploy/README.md`](../../deploy/README.md#data-center-resource-ledger).
 
+Merged changes deploy themselves: [`deploy/auto-deploy.sh`](../../deploy/auto-deploy.sh) runs on the server every 10 minutes and, once CI has passed on the new commit on main, rebuilds the ledger only if `ledger/` or its Dockerfiles changed, after a fresh `pg_dump` into `deploy/backups/predeploy/`. Migrations apply when the new ledger starts; if its health check fails, the previous commit is rebuilt, but a migration that already ran stays applied (restore the pre-deploy dump if it must be undone). `GET /healthz` reports the running commit as `"commit"`. See [Automatic deploys](../../deploy/README.md#automatic-deploys).
+
 ## What agents can do
 
 Agents should be able to keep doing everything they do in the sheet today. Each agent has its own key, with only the scopes its routine needs:

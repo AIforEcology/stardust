@@ -3,9 +3,11 @@ import { Stardust } from "../src/client.ts";
 /** Fake Stardust Core. `script` holds statuses (or "down") consumed in order; default 200. */
 export function fakeCore(script: Array<number | "down"> = []) {
   const events: Array<Record<string, unknown>> = [];
+  const headers: Array<Record<string, string>> = [];
   let calls = 0;
   const fetch = (async (_url: string, init: RequestInit) => {
     calls++;
+    headers.push({ ...(init.headers as Record<string, string>) });
     const step = script.length ? script.shift()! : 200;
     if (step === "down") throw new TypeError("fetch failed");
     const event = JSON.parse(String(init.body));
@@ -15,7 +17,7 @@ export function fakeCore(script: Array<number | "down"> = []) {
     }
     return new Response('{"detail":"nope"}', { status: step });
   }) as unknown as typeof globalThis.fetch;
-  return { events, fetch, get calls() { return calls; } };
+  return { events, headers, fetch, get calls() { return calls; } };
 }
 
 export function stardustWith(core: ReturnType<typeof fakeCore>, opts = {}) {
