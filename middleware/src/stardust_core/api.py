@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
+import os
 import threading
 import time
 from collections import defaultdict, deque
@@ -286,6 +287,8 @@ def create_app(
             "ingest_auth": settings.ingest_auth,
             "self_registration": settings.self_registration,
             "database": store.stats(),
+            # The deployed commit (short SHA), set at build time by deploy/auto-deploy.sh (deploy/README.md).
+            "commit": os.environ.get("STARDUST_COMMIT") or "unknown",
         }
         if "footprint" in cfg:
             body["footprint"] = {

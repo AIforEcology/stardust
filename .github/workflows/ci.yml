@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is now Ubuntu 26.04, which setup-python has no Python 3.9 build for.
+    # Stardust still supports 3.9, so test it on 24.04 until 3.9 support is dropped.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +30,19 @@ jobs:
       # The spec sync tool (docs/tools) needs only lxml.
       - run: pip install "lxml>=4.9"
       - run: pytest docs/tools
+
+  deploy-scripts:
+    # deploy/auto-deploy.sh and offsite-backup.sh run on the server: lint them, and test which services a
+    # change rebuilds and that auto-deploy's list of required checks matches this workflow's jobs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: shellcheck --version && shellcheck deploy/*.sh
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install pytest pyyaml
+      - run: pytest deploy/tests
 
   mcp:
     # The MCP Python SDK needs Python 3.10+; the rest of Stardust also supports 3.9.

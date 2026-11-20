@@ -1,14 +1,18 @@
 name: Core uptime
 
-# Daily check of the hosted Core (deploy/README.md). On failure: Slack #ops-alerts (if
-# SLACK_OPS_WEBHOOK is set) and one open `ops-alert` issue, commented on rather than duplicated.
-# On success: any open `ops-alert` issue is closed as recovered.
+# Daily check of the hosted Core (deploy/README.md). It also checks the server runs main: the commits
+# reported by /healthz and /ledger/healthz must not be more than a day behind a CI-passed commit that
+# changes that service (deploy/auto-deploy.sh deploys them; this catches it stopping).
+# On failure: Slack #ops-alerts (if SLACK_OPS_WEBHOOK is set) and one open `ops-alert` issue,
+# commented on rather than duplicated. On success: any open `ops-alert` issue is closed as recovered.
 on:
   schedule:
     - cron: "7 17 * * *" # 17:07 UTC, 10:07 PT (PDT)
   workflow_dispatch:
 
 permissions:
+  contents: read # checkout, to compare the deployed commits with main
+  checks: read # whether CI passed on a commit
   issues: write
 
 concurrency:
@@ -18,6 +22,7 @@ concurrency:
 env:
   CORE_URL: https://core.aifore.org
   MIN_PRICED_MODELS: "1000"
+  MAX_BEHIND_HOURS: "24"
 
 jobs:
   check:
@@ -57,11 +62,68 @@ jobs:
           echo "problems=$problems" >> "$GITHUB_OUTPUT"
           [ -z "$problems" ]
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          fetch-depth: 0
+
+      - name: Check the server runs main
+        id: behind
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          problems=""
+          now=$(date +%s)
+          # behind <name> <health URL> <services that put this endpoint's code on the server...>
+          behind() {
+            local name="$1" url="$2" reported base c services stale=() s
+            shift 2
+            reported=$(curl -sS --max-time 20 "$url" | jq -r '.commit // empty' 2>/dev/null)
+            if [ -z "$reported" ]; then
+              problems+="$name: $url did not report a commit. "; return
+            fi
+            if [ "$reported" = "unknown" ]; then
+              # Built by hand without GIT_COMMIT (deploy/README.md): can't tell; the next deploy sets it.
+              echo "::warning::$name reports commit \"unknown\"; skipping its behind-main check."; return
+            fi
+            if ! base=$(git rev-parse -q --verify "$reported^{commit}"); then
+              problems+="$name reports commit $reported, which is not in the repository. "; return
+            fi
+            if ! git merge-base --is-ancestor "$base" origin/main; then
+              problems+="$name runs $reported, which is not on main. "; return
+            fi
+            local total
+            total=$(git rev-list --first-parent --count "$base..origin/main")
+            # Each commit main moved through since the deployed one, oldest first.
+            for c in $(git rev-list --first-parent --reverse "$base..origin/main"); do
+              services=$(git diff --name-only "$c^1" "$c" | bash deploy/auto-deploy.sh changed-services)
+              for s in "$@"; do
+                if grep -qx "$s" <<<"$services"; then
+                  [ $((now - $(git show -s --format=%ct "$c"))) -gt $((MAX_BEHIND_HOURS * 3600)) ] || break
+                  [ "$(bash deploy/auto-deploy.sh ci-status "$c")" = success ] || break
+                  stale+=("$(git show -s --format='%h %cs %s' "$c")")
+                  break
+                fi
+              done
+            done
+            echo "$name runs $reported; main is $total commit(s) ahead; ${#stale[@]} CI-passed change(s) to it waiting over ${MAX_BEHIND_HOURS}h."
+            if [ ${#stale[@]} -gt 0 ]; then
+              problems+="$name runs $reported, $total commit(s) behind main; ${#stale[@]} CI-passed change(s) to it not deployed after ${MAX_BEHIND_HOURS}h: $(printf '%s; ' "${stale[@]}")Check \`journalctl -u stardust-auto-deploy\` on the server. "
+            fi
+          }
+          behind "Core" "$CORE_URL/healthz" all core
+          behind "Ledger" "$CORE_URL/ledger/healthz" all ledger ledger-db
+          echo "problems=$problems" >> "$GITHUB_OUTPUT"
+          [ -z "$problems" ]
+
       - name: Alert Slack
-        if: failure() && steps.check.outcome == 'failure'
+        if: failure() && (steps.check.outcome == 'failure' || steps.behind.outcome == 'failure')
         env:
           SLACK_OPS_WEBHOOK: ${{ secrets.SLACK_OPS_WEBHOOK }}
-          PROBLEMS: ${{ steps.check.outputs.problems }}
+          PROBLEMS: ${{ steps.check.outputs.problems }}${{ steps.behind.outputs.problems }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "$SLACK_OPS_WEBHOOK" ]; then
@@ -72,15 +134,15 @@ jobs:
             | curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "$SLACK_OPS_WEBHOOK"
 
       - name: Open or update the ops-alert issue
-        if: failure() && steps.check.outcome == 'failure'
+        if: failure() && (steps.check.outcome == 'failure' || steps.behind.outcome == 'failure')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PROBLEMS: ${{ steps.check.outputs.problems }}
+          PROBLEMS: ${{ steps.check.outputs.problems }}${{ steps.behind.outputs.problems }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh label create ops-alert --color B60205 --description "Automated alert from the Core uptime check" 2>/dev/null || true
-          msg="Uptime check failed at $(date -u +%Y-%m-%dT%H:%MZ) after 3 attempts: ${PROBLEMS:-the check did not finish}
+          msg="Uptime check failed at $(date -u +%Y-%m-%dT%H:%MZ): ${PROBLEMS:-the check did not finish}
 
           Run log: $RUN_URL"
           issue=$(gh issue list --label ops-alert --state open --limit 1 --json number --jq '.[0].number // empty')

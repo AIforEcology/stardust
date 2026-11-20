@@ -8,6 +8,7 @@
   "{\"event_id\":\"00000000-0000-4000-8000-000000000006\",\"source_layer\":\"infra_agent\",\"provider\":\"openai\",\"model\":\"gpt-4o-mini\",\"region\":\"swedencentral\",\"timestamp\":\"2026-10-21T12:00:00Z\",\"tokens_in\":10,\"tokens_out\":10,\"tokens_cached_in\":null,\"tokens_estimated\":false,\"compute_seconds\":null,\"bytes_transferred\":null,\"storage_delta_bytes\":null,\"energy_reuse_factor\":0.2,\"user_id\":null,\"org_id\":null,\"otel_trace_id\":null,\"otel_span_id\":null,\"job_sji\":\"XXXXXXXX-HYD-XXXX-XXXX-XXXXXXXXXXXX\",\"cost_usd\":null,\"energy_wh\":0.0014,\"grid_intensity_g_per_kwh\":40.0,\"co2e_g\":0.000056,\"water_ml\":0.006916,\"water_onsite_ml\":0.00252,\"water_offsite_ml\":0.004396,\"heat_rejected_wh\":0.0014,\"heat_recovered_wh\":0.00028000000000000003,\"particulate_mg\":null,\"ewaste_mg\":null,\"confidence_tier\":\"modeled\",\"indicator_code\":\"AX-XS\",\"energy_source_code\":\"HYD\",\"energy_mix_breakdown\":{\"HYD\":39.0,\"NPP\":29.0,\"WPP\":21.0,\"REP\":11.0},\"grid_style\":\"grid-blend\",\"grid_majority_share_pct\":39.0,\"grid_diversified\":false,\"model_tier\":\"small\",\"methodology_version\":\"0.2.0\"}"
  ],
  "healthz_keys": [
+  "commit",
   "database",
   "ingest_auth",
   "methodology_version",
