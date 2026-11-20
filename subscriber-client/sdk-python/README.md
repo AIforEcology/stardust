@@ -2,7 +2,7 @@
 
 Meter Anthropic, OpenAI and Gemini API usage, see what it cost and what it cost the planet (electricity, CO₂e, water, and an indicator code such as `B2-S`), and route the CO₂e to vetted carbon-removal providers, through [Stardust Core](https://github.com/AIforEcology/stardust/blob/main/middleware/README.md). Token counts come from each API's own usage data, so they are measured, not estimated (spec §12.1). A project of [AI for Ecology](https://aifore.org).
 
-- **No dependencies:** standard library only.
+- **Python 3.10+.** No dependencies: standard library only.
 - **Never in your way:** events send from a background thread. Recording never blocks or raises, and a metering bug never breaks your API call.
 - **Offline-tolerant:** events buffer in memory (10,000 by default, oldest dropped first) and retry with backoff while Core is unreachable.
 - **Usage only:** it sends token counts, model, region and time. Never prompts or responses.

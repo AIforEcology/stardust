@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for new commits on main to deploy to Stardust Core every 10 minutes
+
+[Timer]
+OnCalendar=*:0/10
+RandomizedDelaySec=2m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -9,7 +9,8 @@ The hosted Core has been live in production since 2026-10-30, on Oracle Cloud (O
 
 - **Health check:** `curl -s https://core.aifore.org/healthz` returns `"ok": true`, `priced_models` (over 3,000), `"ingest_auth"`, `"subscriber_auth"` and `"remediation_auth"` all `"required"`, and the number of live and sandbox providers.
 - **Admin endpoints** (`/v1/admin/*`) return 404 from the internet.
-- **Uptime:** the [`core-uptime`](../.github/workflows/core-uptime.yml) workflow checks both every day at 17:07 UTC. A failure opens (or comments on) a GitHub issue labeled `ops-alert` and posts to #ops-alerts on Slack; the next good run closes the issue.
+- **Running commit:** both health checks report it as `"commit"`. Merged changes deploy themselves within about 10 minutes of CI passing ([Automatic deploys](#automatic-deploys)).
+- **Uptime:** the [`core-uptime`](../.github/workflows/core-uptime.yml) workflow checks both every day at 17:07 UTC, and that the server isn't more than a day behind main. A failure opens (or comments on) a GitHub issue labeled `ops-alert` and posts to #ops-alerts on Slack; the next good run closes the issue.
 
 ## Hosts
 
@@ -71,13 +72,93 @@ Then clone, create `.env` and run `docker compose up -d --build` as in step 3.
 
 ## 4. Update
 
+Updates deploy themselves once merged to main and green in CI: see [Automatic deploys](#automatic-deploys). To deploy by hand (with the timer paused):
+
 ```bash
-cd ~/stardust && git pull && cd deploy && docker compose up -d --build
+cd ~/stardust && git fetch origin && git checkout --detach origin/main
+cd deploy && GIT_COMMIT=$(git rev-parse --short=12 HEAD) docker compose up -d --build
+git rev-parse HEAD > .deployed-commit
 ```
 
-The database lives in the `core-data` volume and survives rebuilds.
+`GIT_COMMIT` sets the `"commit"` that `/healthz` and `/ledger/healthz` report; without it they say `"unknown"`, and the daily check can't tell whether the server is behind. The database lives in the `core-data` volume and survives rebuilds.
 
-**If the update changed `deploy/Caddyfile`**, also run `docker compose restart caddy` (Core is unreachable for a second or two). `up -d` doesn't restart Caddy for a config change, and because `git pull` replaces the file, the bind-mounted copy inside the running container stays the old one until Caddy restarts.
+**If the update changed `deploy/Caddyfile`**, also run `docker compose restart caddy` (Core is unreachable for a second or two). `up -d` doesn't restart Caddy for a config change, and because `git pull` or `git checkout` replaces the file, the bind-mounted copy inside the running container stays the old one until Caddy restarts.
+
+## Automatic deploys
+
+[`auto-deploy.sh`](auto-deploy.sh) runs on the server every 10 minutes from a systemd timer, as `opc`. It is pull-based: it reads the public repository and GitHub's public API, so no SSH key, token or webhook is stored in GitHub and nothing from outside connects to the server. Each run:
+
+1. Fetches `origin/main`. If that's the commit in `deploy/.deployed-commit`, it stops quietly.
+2. Asks GitHub whether every job of the [CI workflow](../.github/workflows/ci.yml) passed on that commit (one unauthenticated request; GitHub allows 60 an hour). Still running: it tries again next run. Any job failed: it logs it and never deploys that commit; the next commit on main is tried.
+3. Works out from the changed files which services to update, and only those:
+
+   | Changed | What happens |
+   |---|---|
+   | `middleware/`, `schema/`, `deploy/Dockerfile` | Core: SQLite backup, then rebuild `core` |
+   | `ledger/`, `deploy/ledger.Dockerfile` | Ledger: `pg_dump`, then rebuild `ledger` (migrations apply at startup) |
+   | `deploy/ledger-db.Dockerfile` | `pg_dump`, then rebuild `ledger-db` and `ledger` |
+   | `deploy/Caddyfile` | `docker compose restart caddy` |
+   | `deploy/docker-compose.yml` | backups, then `docker compose up -d --build` for everything |
+   | anything else (docs, browser extension, MCP servers, providers-service, intel, `.github/`, these scripts) | nothing to rebuild; the commit is just recorded |
+
+   Core is never restarted when only the ledger changed, or the other way round. The backups go to `deploy/backups/predeploy/` (10 of each kept), outside the nightly rotation and the off-site upload.
+4. Checks out the commit (`git checkout --detach`, so the server's checkout is a detached HEAD at the deployed commit) and runs `docker compose up -d --build` for those services. If tracked files were edited on the server, it stops and alerts instead: it never resets them. `.env` and `backups/` are untracked and never touched.
+5. Within 2 minutes, `/healthz` and `/ledger/healthz` must say `"ok": true` and report the new commit, from inside the containers and through `https://core.aifore.org`, and `/v1/admin/keys` and `/ledger/v1/admin/keys` must still return 404.
+6. Success: writes the commit to `.deployed-commit` and logs one line, e.g. `deployed 54ae33f0c1a2 -> 9f1e2d3c4b5a, rebuilt: ledger, 74s`. Failure: checks out the previous commit, rebuilds the same services, checks health again, and posts to Slack. That commit isn't tried again; the next one on main is. A ledger migration that already ran stays applied after a rollback; the pre-deploy dump is in `backups/predeploy/` if it must be undone.
+
+**Alerts.** Failed deploys and rollbacks post to the Slack incoming webhook in `STARDUST_ALERT_WEBHOOK` in `deploy/.env` (the one for #ops-alerts; empty means journal only). Separately, the daily [`core-uptime`](../.github/workflows/core-uptime.yml) check compares the commits `/healthz` and `/ledger/healthz` report with main, and fails (Slack and an `ops-alert` issue, listing the commits) when a CI-passed change to Core or the ledger has waited more than 24 hours. Caddy-only changes aren't visible from outside, so they aren't part of that check.
+
+### Install (once)
+
+```bash
+cd ~/stardust/deploy
+GIT_COMMIT=$(git rev-parse --short=12 HEAD) docker compose up -d --build   # so the health checks report the commit
+git rev-parse HEAD > .deployed-commit                                        # what's running now
+sudo cp ~/stardust/deploy/systemd/stardust-auto-deploy.* /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now stardust-auto-deploy.timer
+systemctl list-timers stardust-auto-deploy.timer
+```
+
+Optionally add `STARDUST_ALERT_WEBHOOK=https://hooks.slack.com/...` to `.env` for Slack alerts. Never commit it.
+
+### Logs
+
+```bash
+journalctl -u stardust-auto-deploy -n 50           # recent runs
+journalctl -u stardust-auto-deploy -g deployed     # successful deploys only
+curl -s https://core.aifore.org/healthz | grep -o '"commit":"[^"]*"'
+curl -s https://core.aifore.org/ledger/healthz | grep -o '"commit":"[^"]*"'
+```
+
+### Pause, and deploy by hand
+
+```bash
+sudo systemctl stop stardust-auto-deploy.timer      # paused until started again or the server reboots
+sudo systemctl disable --now stardust-auto-deploy.timer   # paused across reboots too
+```
+
+While paused, deploy by hand with the script (same CI check, backups, health checks and rollback):
+
+```bash
+cd ~/stardust/deploy && ./auto-deploy.sh --commit origin/main
+```
+
+or with the plain commands in [4. Update](#4-update), then write the commit to `.deployed-commit` so the timer knows what's running. Resume with `sudo systemctl start stardust-auto-deploy.timer` (or `enable --now`).
+
+### Roll back to a specific commit
+
+Pause the timer first, or it will deploy main again within 10 minutes:
+
+```bash
+sudo systemctl stop stardust-auto-deploy.timer
+cd ~/stardust/deploy && ./auto-deploy.sh --commit <sha>
+```
+
+It rebuilds whatever differs between the running commit and `<sha>`, after the usual backups. Add `--no-ci-check` only for a commit you know is good whose CI checks are missing (for example one from before a job was added). Then fix forward on main (revert the bad change in a PR) and start the timer again. If a ledger migration must be undone too, restore the pre-deploy dump as in [Backups and restore](#backups-and-restore) using `backups/predeploy/ledger-<time>.dump`.
+
+### Retry a skipped commit
+
+A commit whose CI failed, or whose deploy was rolled back, is written to `deploy/.auto-deploy.skip` and not tried again. If its CI is re-run and passes, or the failure was outside the code (e.g. Docker Hub was down), `rm ~/stardust/deploy/.auto-deploy.skip` and the next run retries it.
 
 ## Security
 
@@ -162,7 +243,7 @@ The ledger ([design, schema and API](../docs/architecture/ledger.md)) runs on th
 
 ```bash
 ssh opc@core.aifore.org
-cd ~/stardust && git pull
+cd ~/stardust && git fetch origin && git checkout --detach origin/main
 cd deploy
 echo "LEDGER_DB_PASSWORD=$(openssl rand -hex 24)" >> .env
 echo "LEDGER_ADMIN_TOKEN=$(openssl rand -hex 32)" >> .env
@@ -222,7 +303,7 @@ docker compose exec ledger cat /tmp/import-report.md
 
 ### Update
 
-Same as Core: `cd ~/stardust && git pull && cd deploy && docker compose up -d --build`. Restart Caddy too if `deploy/Caddyfile` changed. New migrations in `ledger/migrations/` apply when the ledger starts. Data lives in the `ledger-data` volume and survives rebuilds.
+Automatic, as for Core ([Automatic deploys](#automatic-deploys)): a change under `ledger/` rebuilds only the ledger, after a fresh `pg_dump`. New migrations in `ledger/migrations/` apply when the ledger starts. Data lives in the `ledger-data` volume and survives rebuilds.
 
 ### Backups and restore
 

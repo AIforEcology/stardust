@@ -2,7 +2,7 @@
 
 Stardust meters your app's AI usage and tells you what it cost and what it cost the planet: electricity, CO₂e and water, summed up as a short indicator code such as `B2-S`. It can also route the CO₂e to vetted carbon-removal providers. You add the SDK, point it at the hosted service at `https://core.aifore.org` with an API key, and keep your own LLM calls exactly as they are.
 
-- **Python:** [`aifore-stardust`](https://pypi.org/project/aifore-stardust/) ([README](../subscriber-client/sdk-python/README.md))
+- **Python 3.10+:** [`aifore-stardust`](https://pypi.org/project/aifore-stardust/) ([README](../subscriber-client/sdk-python/README.md))
 - **JavaScript / TypeScript (Node 18+):** [`@aifore/stardust`](https://www.npmjs.com/package/@aifore/stardust) ([README](../subscriber-client/sdk-js/README.md))
 
 ## 1. Get a key

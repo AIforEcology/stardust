@@ -15,6 +15,7 @@ PY="${PYTHON:-python3}"
 CORE_PORT="${CORE_PORT:-18080}" PROVIDER_PORT="${PROVIDER_PORT:-18081}"
 work="$(mktemp -d)"
 pids=()
+# shellcheck disable=SC2329  # called by the EXIT trap
 cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; rm -rf "$work"; }
 trap cleanup EXIT
 

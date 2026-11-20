@@ -249,3 +249,11 @@ def test_cors_allows_browser_reads_only(settings, pool):
         c.get("/v1/facilities", headers=origin)
         r = c.get("/v1/facilities", headers=origin)
         assert r.status_code == 429 and r.headers["access-control-allow-origin"] == "*"
+
+
+def test_healthz_reports_the_deployed_commit(client, monkeypatch):
+    monkeypatch.delenv("LEDGER_COMMIT", raising=False)
+    body = client.get("/healthz").json()
+    assert body["ok"] is True and body["service"] == "ledger" and body["commit"] == "unknown"
+    monkeypatch.setenv("LEDGER_COMMIT", "0123456789ab")
+    assert client.get("/healthz").json()["commit"] == "0123456789ab"
