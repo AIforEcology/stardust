@@ -39,5 +39,5 @@ if (watch) {
   await (await context(options)).watch();
 } else {
   await build(options);
-  console.log(`Default Stardust Core: ${apiBase}`);
+  console.log(`Default Stargrain Core: ${apiBase}`);
 }

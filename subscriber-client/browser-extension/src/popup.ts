@@ -86,7 +86,7 @@ async function renderSummary(apiBase: string): Promise<void> {
     ].join("");
     $("install-id").textContent = `Install ID: ${userId}`;
   } catch (e) {
-    $("summary").textContent = e instanceof KeyRevokedError ? e.message : `Can't reach Stardust Core at ${apiBase}.`;
+    $("summary").textContent = e instanceof KeyRevokedError ? e.message : `Can't reach Stargrain Core at ${apiBase}.`;
   }
 }
 
@@ -95,9 +95,9 @@ async function renderTabStatus(tabId: number): Promise<void> {
   const el = $("tab-status");
   let status: PageStatus | undefined;
   try {
-    status = (await chrome.tabs.sendMessage(tabId, { type: "stardust:status" })) as PageStatus | undefined;
+    status = (await chrome.tabs.sendMessage(tabId, { type: "stargrain:status" })) as PageStatus | undefined;
   } catch {
-    // No content script answered: the page was open before Stardust was installed or reloaded.
+    // No content script answered: the page was open before Stargrain was installed or reloaded.
   }
   if (!status) {
     el.dataset.state = "warn";
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
       button.disabled = true;
       button.textContent = "Sending…";
       // Waits until Core has answered (background.ts responds after recording the event).
-      await chrome.runtime.sendMessage({ type: "stardust:test-event", tabId: tab.id });
+      await chrome.runtime.sendMessage({ type: "stargrain:test-event", tabId: tab.id });
       location.reload();
     });
   }

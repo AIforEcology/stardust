@@ -84,7 +84,7 @@ const frame = (s) => `<!doctype html><meta charset="utf-8"><style>
   .clip { border: 1px solid #23312a; border-radius: 10px; width: 320px; overflow: hidden; zoom: 1.3;
           box-shadow: 0 24px 70px rgba(0,0,0,.55); background: #0d1411; }
   iframe { border: 0; display: block; width: 320px; height: 560px; }
-</style><div class="text"><h1>${s.title}</h1><p>${s.sub}</p><div class="brand">STARDUST · AI FOR ECOLOGY</div></div>
+</style><div class="text"><h1>${s.title}</h1><p>${s.sub}</p><div class="brand">STARGRAIN · AI FOR ECOLOGY</div></div>
 <div class="clip"><iframe src="/popup.html"></iframe></div>`;
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".png": "image/png", ".json": "application/json" };
@@ -133,7 +133,7 @@ try {
            background: radial-gradient(circle at 80% 30%, #16302a 0%, #0a100d 70%); color: #e8f1ec; }
     img { width: 104px; height: 104px; } h1 { margin: 0 0 8px; font-size: 30px; color: #4AE87A; }
     p { margin: 0; font-size: 16px; line-height: 1.35; color: #b9cdc2; }
-  </style><img src="data:image/png;base64,${icon}"><div><h1>Stardust</h1><p>AI Cost &amp; Carbon Meter</p></div>`);
+  </style><img src="data:image/png;base64,${icon}"><div><h1>Stargrain</h1><p>AI Cost &amp; Carbon Meter</p></div>`);
   await tile.screenshot({ path: join(OUT, "promo-tile.png") });
   console.log(`${OUT}/promo-tile.png`);
 } finally {

@@ -58,7 +58,7 @@ export interface Summary {
 
 /** Content script → background. Only counts ever leave the page, never message text (§14.1). */
 export interface UsageMessage {
-  type: "stardust:usage";
+  type: "stargrain:usage";
   siteId: string;
   /** API model id read from the page, when the site shows it. */
   model?: string;
@@ -67,7 +67,7 @@ export interface UsageMessage {
 }
 
 export interface TestEventMessage {
-  type: "stardust:test-event";
+  type: "stargrain:test-event";
   tabId: number;
 }
 
@@ -75,7 +75,7 @@ export type Message = UsageMessage | TestEventMessage;
 
 /** Popup → content script: is this tab being measured? */
 export interface StatusRequest {
-  type: "stardust:status";
+  type: "stargrain:status";
 }
 
 /** Content script → popup. Counts only. */
@@ -85,7 +85,7 @@ export interface PageStatus {
   measuring: boolean;
   /** Replies on the page at the last check, history included. */
   repliesOnPage: number;
-  /** New replies sent to Stardust since the page loaded. */
+  /** New replies sent to Stargrain since the page loaded. */
   repliesSent: number;
 }
 

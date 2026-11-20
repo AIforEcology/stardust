@@ -1,8 +1,8 @@
-# Stardust browser extension: Privacy policy
+# Stargrain browser extension: Privacy policy
 
-*Draft for publication at https://aifore.org/stardust/privacy. Effective date: [date of publication].*
+*Draft for publication at https://aifore.org/stargrain/privacy. Effective date: [date of publication].*
 
-AI for Ecology ("AIforE"), a Washington State 501(c)(3) nonprofit, publishes the Stardust browser extension and runs the Stardust server at core.aifore.org.
+AI for Ecology ("AIforE"), a Washington State 501(c)(3) nonprofit, publishes the Stargrain browser extension and runs the Stargrain server at core.aifore.org.
 
 ## What the extension sends
 
@@ -29,7 +29,7 @@ Measured events are deleted after two years. Backups are kept for 14 days.
 - Turn measurement off for any site at any time in the extension.
 - Uninstalling stops all sending.
 - To delete everything stored for your install, email privacy@aifore.org with the anonymous ID shown in the extension; we delete it within 30 days.
-- You can point the extension at your own Stardust server instead (open source: github.com/AIforEcology/stardust); then nothing goes to AIforE.
+- You can point the extension at your own Stargrain server instead (open source: github.com/AIforEcology/stardust); then nothing goes to AIforE.
 
 ## Contact
 
