@@ -3,6 +3,8 @@
 from .client import Stardust
 from .extract import Usage, extract, from_anthropic, from_gemini, from_openai
 from .instrument import instrument
+from .results import Certificate, DailySummary, Order, Quote, StardustError, Summary
 
-__version__ = "0.1.0"
-__all__ = ["Stardust", "Usage", "extract", "from_anthropic", "from_gemini", "from_openai", "instrument"]
+__version__ = "0.2.0"
+__all__ = ["Certificate", "DailySummary", "Order", "Quote", "Stardust", "StardustError", "Summary", "Usage", "extract",
+           "from_anthropic", "from_gemini", "from_openai", "instrument"]
