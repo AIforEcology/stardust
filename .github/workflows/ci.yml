@@ -84,6 +84,24 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  e2e-sandbox:
+    # Both SDKs end to end against a local Core with keys required and the sandbox provider
+    # (scripts/e2e_local.sh): metering, summary, sandbox quote, order and certificate. The admin token
+    # and keys are generated in the job and masked; nothing is stored.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: pip install -e middleware -e providers-service -e subscriber-client/sdk-python
+      - run: npm ci && npm run build
+        working-directory: subscriber-client/sdk-js
+      - run: scripts/e2e_local.sh
+
   ledger:
     # Data Center Resource Ledger (ledger/). Tests run against PostgreSQL 17 + PostGIS 3. GitHub runners
     # are amd64, where the published postgis/postgis image works; production (arm64) builds its own
