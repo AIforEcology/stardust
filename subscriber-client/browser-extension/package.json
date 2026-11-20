@@ -23,7 +23,7 @@
     "@types/chrome": "^0.3.7",
     "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
-    "playwright": "^1.65.0",
+    "playwright": "^1.65.1",
     "typescript": "^7.0.2"
   }
 }
