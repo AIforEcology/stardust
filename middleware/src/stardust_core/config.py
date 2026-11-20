@@ -111,6 +111,8 @@ class Settings:
     subscriber_auth: str = "off"
     # Keys on ingestion (POST /v1/events, /v1/traces): off, optional or required (auth.py).
     ingest_auth: str = "off"
+    # Keys on remediation (quotes, orders, order status): off, optional or required (auth.py).
+    remediation_auth: str = "off"
     # POST /v1/installs: lets a browser extension install get its own user-level key (hosted Core).
     self_registration: bool = False
     public_org_id: UUID = DEFAULT_PUBLIC_ORG_ID
@@ -148,6 +150,8 @@ class Settings:
             ),
             subscriber_auth=parse_auth_mode(os.environ.get("STARDUST_SUBSCRIBER_AUTH", "off")),
             ingest_auth=parse_auth_mode(os.environ.get("STARDUST_INGEST_AUTH", "off"), "STARDUST_INGEST_AUTH"),
+            remediation_auth=parse_auth_mode(os.environ.get("STARDUST_REMEDIATION_AUTH", "off"),
+                                             "STARDUST_REMEDIATION_AUTH"),
             self_registration=os.environ.get("STARDUST_SELF_REGISTRATION", "off").strip().lower()
             in ("on", "true", "1", "yes"),
             public_org_id=UUID(os.environ["STARDUST_PUBLIC_ORG_ID"]) if os.environ.get("STARDUST_PUBLIC_ORG_ID")

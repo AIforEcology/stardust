@@ -28,7 +28,9 @@ AUTH_MODES = ("off", "optional", "required")
 REPORTING_READ = "reporting.read"
 # Sending usage events (POST /v1/events, /v1/traces), enforced by STARDUST_INGEST_AUTH.
 INGEST_WRITE = "ingest.write"
-SCOPES = frozenset({REPORTING_READ, INGEST_WRITE, "provider.read", "operator.lifecycle.read",
+# Requesting remediation quotes and placing orders, enforced by STARDUST_REMEDIATION_AUTH.
+REMEDIATION_WRITE = "remediation.write"
+SCOPES = frozenset({REPORTING_READ, INGEST_WRITE, REMEDIATION_WRITE, "provider.read", "operator.lifecycle.read",
                     "operator.lifecycle.write"})
 
 KEY_PREFIX = "sdk_"
@@ -53,12 +55,16 @@ def validate_scopes(scopes: Iterable[str]) -> FrozenSet[str]:
 
 @dataclass(frozen=True)
 class Principal:
-    """Who is calling: an organization, optionally one user in it, and what they may do."""
+    """Who is calling: an organization, optionally one user in it, and what they may do.
+
+    A ``sandbox`` key is for developers testing an integration: its events, quotes and orders are
+    kept apart from live data, and it only ever reaches sandbox providers (never real removals)."""
 
     key_id: str
     org_id: UUID
     user_id: Optional[UUID]
     scopes: FrozenSet[str]
+    sandbox: bool = False
 
 
 class AuthError(Exception):
@@ -121,6 +127,11 @@ def narrow(principal: Optional[Principal], scope: str, user_id: Optional[UUID],
             raise AuthError(403, "forbidden_scope", "this key can't read another user")
         user_id = principal.user_id
     return user_id, principal.org_id
+
+
+def require_any(principal: Principal, *scopes: str) -> None:
+    if not principal.scopes.intersection(scopes):
+        raise AuthError(403, "forbidden_scope", f"this key lacks the {' or '.join(scopes)} scope")
 
 
 def pin(principal: Optional[Principal], user_id: Optional[UUID],

@@ -1,0 +1,111 @@
+name: Release SDKs
+
+# Push a tag to publish an SDK:
+#   sdk-py-v0.2.0  -> PyPI  aifore-stardust     (subscriber-client/sdk-python)
+#   sdk-js-v0.2.0  -> npm   @aifore/stardust    (subscriber-client/sdk-js)
+# The tag must match the package's version. Each SDK is built and tested first; only then does a
+# separate job publish it, with trusted publishing (OpenID Connect). No publishing tokens are stored
+# anywhere: PyPI and npm trust this repository and this workflow file instead (see docs/developers.md).
+
+on:
+  push:
+    tags: ["sdk-py-v*", "sdk-js-v*"]
+
+# Least privilege; actions pinned to commit SHAs (spec §14.2). Only the publish jobs get id-token.
+permissions:
+  contents: read
+
+jobs:
+  python-build:
+    if: startsWith(github.ref_name, 'sdk-py-v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: subscriber-client/sdk-python
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Tag matches pyproject.toml version
+        run: |
+          want="sdk-py-v$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match pyproject.toml (expected $want)"; exit 1
+          fi
+      - run: pip install -e ".[dev]"
+      - run: pytest
+      - run: python -m build
+      - name: Check the built package
+        run: |
+          pip install --force-reinstall dist/*.whl
+          python -c "import stardust_sdk, importlib.metadata as m; assert stardust_sdk.__version__ == m.version('aifore-stardust'), 'version mismatch'"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-dist
+          path: subscriber-client/sdk-python/dist/
+          if-no-files-found: error
+
+  python-publish:
+    needs: python-build
+    runs-on: ubuntu-latest
+    # Matches the environment named in PyPI's trusted publisher for aifore-stardust.
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: python-dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+
+  js-build:
+    if: startsWith(github.ref_name, 'sdk-js-v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: subscriber-client/sdk-js
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Tag matches package.json version
+        run: |
+          want="sdk-js-v$(node -p 'require("./package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json (expected $want)"; exit 1
+          fi
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm pack
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: js-package
+          path: subscriber-client/sdk-js/aifore-stardust-*.tgz
+          if-no-files-found: error
+
+  js-publish:
+    needs: js-build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: js-package
+      # npm trusted publishing (OIDC) needs npm 11.5.1 or later; Node 24 ships with it.
+      - run: npm --version
+      - run: npm publish ./aifore-stardust-*.tgz --provenance --access public

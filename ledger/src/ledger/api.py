@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import os
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -91,6 +92,11 @@ def _floats(raw: str, n: int, name: str) -> List[float]:
     if len(parts) != n:
         raise ValueProblem(name, f"expected {n} comma-separated numbers")
     return parts
+
+
+def _commit() -> str:
+    """The deployed commit (short SHA), set at build time by deploy/auto-deploy.sh (deploy/README.md)."""
+    return os.environ.get("LEDGER_COMMIT") or "unknown"
 
 
 def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPool] = None) -> FastAPI:
@@ -215,9 +221,9 @@ def create_app(settings: Optional[Settings] = None, pool: Optional[ConnectionPoo
                 n = conn.execute("SELECT count(*) AS n FROM facilities").fetchone()["n"]
         except Exception:
             log.exception("health check failed")
-            return JSONResponse({"ok": False, "database": "unavailable"}, status_code=503)
+            return JSONResponse({"ok": False, "database": "unavailable", "commit": _commit()}, status_code=503)
         return JSONResponse({"ok": True, "service": "ledger", "version": __version__, "schema_version": version,
-                             "facilities": n})
+                             "facilities": n, "commit": _commit()})
 
     @app.get("/v1/facilities")
     def facilities(state: Optional[str] = None, type: Optional[str] = None, status: Optional[str] = None,

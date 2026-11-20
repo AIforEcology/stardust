@@ -20,6 +20,10 @@ EXPOSE 8090
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
   CMD curl -fsS http://127.0.0.1:8090/healthz > /dev/null || exit 1
 
+# The deployed commit, reported as "commit" by /healthz. Last, so a new commit reuses every layer above.
+ARG GIT_COMMIT=unknown
+ENV LEDGER_COMMIT=$GIT_COMMIT
+
 # Behind Caddy: trust its X-Forwarded-For so per-IP limits see real clients. The port is not published.
 CMD ["uvicorn", "ledger.main:app", "--host", "0.0.0.0", "--port", "8090", \
      "--proxy-headers", "--forwarded-allow-ips", "*"]

@@ -1,8 +1,29 @@
 {
-  "name": "@stardust/sdk",
-  "version": "0.1.0",
-  "description": "Stardust infra SDK: meter Anthropic, OpenAI and Gemini API usage (measured tokens) and report it to Stardust Core.",
+  "name": "@aifore/stardust",
+  "version": "0.2.0",
+  "description": "Stardust SDK by AIforE: meter Anthropic, OpenAI and Gemini API usage (measured tokens), see its cost, energy, CO2e and water, and request remediation, via Stardust Core.",
   "license": "Apache-2.0",
+  "author": "AI for Ecology (AIforE)",
+  "homepage": "https://aifore.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AIforEcology/stardust.git",
+    "directory": "subscriber-client/sdk-js"
+  },
+  "bugs": {
+    "url": "https://github.com/AIforEcology/stardust/issues"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "carbon",
+    "sustainability",
+    "metering",
+    "opentelemetry",
+    "anthropic",
+    "openai",
+    "gemini"
+  ],
   "stardust": {
     "specVersion": "1.7"
   },
@@ -18,6 +39,10 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=18"
   },

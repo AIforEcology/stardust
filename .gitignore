@@ -17,6 +17,9 @@ target/
 .pytest_cache/
 deploy/.env
 deploy/backups/
+# auto-deploy.sh state on the server
+deploy/.deployed-commit
+deploy/.auto-deploy.*
 subscriber-client/browser-extension/stardust-extension.zip
 
 # Data Center Resource Ledger: sheet exports and import reports never go in the repo (it is public,
