@@ -1,8 +1,8 @@
-# Stardust browser extension
+# Stargrain browser extension
 
 Technical design, with workflow diagrams: [`docs/architecture/browser-extension.md`](../../docs/architecture/browser-extension.md).
 
-Chrome/Edge extension (Manifest V3) that meters AI chat usage on ChatGPT, Claude and Gemini, sends it to Stardust Core, and shows the indicator code on the toolbar badge.
+Chrome/Edge extension (Manifest V3) that meters AI chat usage on ChatGPT, Claude and Gemini, sends it to Stargrain Core, and shows the indicator code on the toolbar badge.
 
 ## Build and load
 

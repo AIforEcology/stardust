@@ -61,7 +61,7 @@ export async function getCredentials(apiBase: string): Promise<Credentials> {
     const body = (await r.json()) as { key: string; user_id: string };
     creds = { key: body.key, userId: body.user_id };
   } else {
-    throw new Error(`Couldn't register with Stardust Core (${r.status})`);
+    throw new Error(`Couldn't register with Stargrain Core (${r.status})`);
   }
   await chrome.storage.local.set({ [k]: creds });
   return creds;
@@ -75,7 +75,7 @@ export async function clearCredentials(apiBase: string): Promise<void> {
 /** Core revoked this install's key: the operator blocked it, so it must not register again. */
 export class KeyRevokedError extends Error {
   constructor() {
-    super("This install's key was revoked by the Stardust Core operator, so nothing is being sent. Contact them to restore it.");
+    super("This install's key was revoked by the Stargrain Core operator, so nothing is being sent. Contact them to restore it.");
     this.name = "KeyRevokedError";
   }
 }

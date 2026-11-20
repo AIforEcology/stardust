@@ -73,7 +73,7 @@ async function report(adapter: SiteAdapter, reply: Element, replyChars: number, 
   await chrome.storage.local.set({ [TOTALS_KEY]: remember(totals, key, nextContextChars) });
 
   const msg: UsageMessage = {
-    type: "stardust:usage",
+    type: "stargrain:usage",
     siteId: adapter.id,
     model: selectedModel(adapter, reply),
     tokensIn: estimateTokens(inputChars),
@@ -113,7 +113,7 @@ const status: PageStatus = { siteId: site?.id ?? "", measuring: false, repliesOn
 async function start(): Promise<void> {
   if (!site) return;
   chrome.runtime.onMessage.addListener((msg: StatusRequest, _sender, sendResponse) => {
-    if (msg?.type === "stardust:status") sendResponse(status);
+    if (msg?.type === "stargrain:status") sendResponse(status);
   });
   const { enabledSites } = await chrome.storage.local.get("enabledSites");
   if (!(enabledSites as string[] | undefined)?.includes(site.id)) return;

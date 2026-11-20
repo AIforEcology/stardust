@@ -1,5 +1,5 @@
-// MV3 service worker: turns usage counts from content scripts into Stardust events,
-// sends them to Stardust Core, and shows the indicator code on the toolbar badge.
+// MV3 service worker: turns usage counts from content scripts into Stargrain events,
+// sends them to Stargrain Core, and shows the indicator code on the toolbar badge.
 
 import { isoWithOffset } from "./estimate.ts";
 import { badgeText, GRADE_COLORS } from "./format.ts";
@@ -19,7 +19,7 @@ async function send(event: UsageEvent): Promise<EnrichedEvent> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(event),
   });
-  if (!r.ok) throw new Error(`Stardust Core returned ${r.status}`);
+  if (!r.ok) throw new Error(`Stargrain Core returned ${r.status}`);
   return (await r.json()) as EnrichedEvent;
 }
 
@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
   void (async () => {
     const { enabledSites } = await getSettings();
     const userId = await currentUserId();
-    if (msg.type === "stardust:usage") {
+    if (msg.type === "stargrain:usage") {
       const tabId = sender.tab?.id;
       const site = siteById(msg.siteId);
       // Re-check opt-in here too, so a stale content script can't report after opt-out.
@@ -57,7 +57,7 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
         tokens_estimated: true,
         user_id: userId,
       });
-    } else if (msg.type === "stardust:test-event") {
+    } else if (msg.type === "stargrain:test-event") {
       await record(msg.tabId, {
         source_layer: "browser_ext",
         provider: TEST_SAMPLE.provider,
