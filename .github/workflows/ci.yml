@@ -11,23 +11,49 @@ permissions:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is now Ubuntu 26.04, which setup-python has no Python 3.9 build for.
+    # Core, providers-service and intel still support 3.9, so test them on 24.04 until that's dropped.
+    # The SDK (aifore-stardust) needs 3.10+, so it's tested on 3.10 (its floor) and 3.12, not 3.9.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.12"]
+        python-version: ["3.9", "3.10", "3.12"]
+    env:
+      PYV: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e "middleware[dev]" -e "providers-service[dev]" -e "subscriber-client/sdk-python[dev]" -e "intel[dev]"
-      - run: pytest middleware providers-service subscriber-client/sdk-python intel
+      - name: Install and test
+        run: |
+          pkgs=(-e "middleware[dev]" -e "providers-service[dev]" -e "intel[dev]")
+          tests=(middleware providers-service intel)
+          if [ "$PYV" != "3.9" ]; then
+            pkgs+=(-e "subscriber-client/sdk-python[dev]")
+            tests+=(subscriber-client/sdk-python)
+          fi
+          pip install "${pkgs[@]}"
+          pytest "${tests[@]}"
       # Data Center Intelligence (intel/): the allocations and grids files must stay valid.
       - run: stardust-intel validate
       # The spec sync tool (docs/tools) needs only lxml.
       - run: pip install "lxml>=4.9"
       - run: pytest docs/tools
+
+  deploy-scripts:
+    # deploy/auto-deploy.sh and offsite-backup.sh run on the server: lint them, and test which services a
+    # change rebuilds and that auto-deploy's list of required checks matches this workflow's jobs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: shellcheck --version && shellcheck deploy/*.sh
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install pytest pyyaml
+      - run: pytest deploy/tests
 
   mcp:
     # The MCP Python SDK needs Python 3.10+; the rest of Stardust also supports 3.9.
@@ -83,6 +109,24 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  e2e-sandbox:
+    # Both SDKs end to end against a local Core with keys required and the sandbox provider
+    # (scripts/e2e_local.sh): metering, summary, sandbox quote, order and certificate. The admin token
+    # and keys are generated in the job and masked; nothing is stored.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: pip install -e middleware -e providers-service -e subscriber-client/sdk-python
+      - run: npm ci && npm run build
+        working-directory: subscriber-client/sdk-js
+      - run: scripts/e2e_local.sh
 
   ledger:
     # Data Center Resource Ledger (ledger/). Tests run against PostgreSQL 17 + PostGIS 3. GitHub runners

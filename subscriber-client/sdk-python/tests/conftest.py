@@ -13,11 +13,13 @@ class FakeCore:
         self.script = list(script or [])
         self.events = []
         self.calls = 0
+        self.headers = []
         self.lock = threading.Lock()
 
-    def __call__(self, url, body, timeout):
+    def __call__(self, method, url, body, timeout, headers):
         with self.lock:
             self.calls += 1
+            self.headers.append(dict(headers))
             step = self.script.pop(0) if self.script else 200
         if isinstance(step, Exception):
             raise step
@@ -38,3 +40,9 @@ def stardust(core):
     sd = Stardust("http://core.test", region="us-east-1", transport=core)
     yield sd
     sd.close(1)
+
+
+@pytest.fixture
+def make_core():
+    """FakeCore itself, for tests that script their own responses."""
+    return FakeCore

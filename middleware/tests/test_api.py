@@ -40,6 +40,16 @@ def test_health(client):
     assert body["spec_version"] == json.loads(DEFAULT_SPEC_VERSION.read_text())["spec_version"]
 
 
+
+def test_health_reports_the_deployed_commit(client, monkeypatch):
+    # Unset (a local or manual build without GIT_COMMIT): "unknown". The other fields stay as they were.
+    monkeypatch.delenv("STARDUST_COMMIT", raising=False)
+    body = client.get("/healthz").json()
+    assert body["commit"] == "unknown"
+    assert body["ok"] is True and body["subscriber_auth"] and body["ingest_auth"]
+    monkeypatch.setenv("STARDUST_COMMIT", "0123456789ab")
+    assert client.get("/healthz").json()["commit"] == "0123456789ab"
+
 def test_ingest_and_summary(client):
     r = client.post("/v1/events", json=EVENT)
     assert r.status_code == 200, r.text
@@ -126,7 +136,7 @@ def test_broker_flow(broker_client):
 
     order = c.post("/v1/remediation/orders", json={"quote_id": quotes[0]["quote_id"], "subscriber_id": "test-app"}).json()
     assert order["fulfillment_status"] == "fulfilled"
-    assert order["certificate_ref"].startswith("MOCK-ATTESTATION-")
+    assert order["certificate_ref"].startswith("SANDBOX-not-a-real-removal-")
     assert order["provider_tier"] == "emerging"
 
     # A quote can only be used once.

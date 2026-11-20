@@ -24,6 +24,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
   CMD curl -fsS http://127.0.0.1:8080/healthz > /dev/null || exit 1
 
+# The deployed commit, reported as "commit" by /healthz. Last, so a new commit reuses every layer above.
+ARG GIT_COMMIT=unknown
+ENV STARDUST_COMMIT=$GIT_COMMIT
+
 # Behind Caddy: trust its X-Forwarded-For so per-IP limits see real clients. Core's port is not published.
 CMD ["uvicorn", "stardust_core.main:app", "--host", "0.0.0.0", "--port", "8080", \
      "--proxy-headers", "--forwarded-allow-ips", "*"]

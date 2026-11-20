@@ -9,7 +9,7 @@ When an event is also sent directly, its ``event_id`` is derived from the span's
 exactly as Core derives it for incoming spans, so an event that reaches Core by both
 paths is counted once.
 
-Requires the optional ``opentelemetry-api`` package: ``pip install "stardust-sdk[otel]"``.
+Requires the optional ``opentelemetry-api`` package: ``pip install "aifore-stardust[otel]"``.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ class OtelEmitter:
         try:
             from opentelemetry import trace
         except ImportError as e:  # pragma: no cover - exercised only without the extra
-            raise ImportError('Stardust(otel=...) needs OpenTelemetry: pip install "stardust-sdk[otel]"') from e
+            raise ImportError('Stardust(otel=...) needs OpenTelemetry: pip install "aifore-stardust[otel]"') from e
         from . import __version__
 
         provider = tracer_provider or trace.get_tracer_provider()

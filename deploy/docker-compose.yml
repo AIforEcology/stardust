@@ -1,12 +1,23 @@
-# Hosted Stardust Core: Core + Caddy (automatic HTTPS) + nightly SQLite backups,
+# Hosted Stardust Core: Core + Caddy (automatic HTTPS) + nightly SQLite backups + the sandbox test provider,
 # plus the Data Center Resource Ledger (ledger, ledger-db, ledger-backup), served under /ledger/.
 # On the server: cp .env.example .env, edit it, then `docker compose up -d --build`.
+# Updates are deployed by auto-deploy.sh (README.md, Automatic deploys).
 services:
   core:
-    build: { context: .., dockerfile: deploy/Dockerfile }
+    # GIT_COMMIT (short SHA) becomes /healthz's "commit"; auto-deploy.sh sets it. By hand:
+    # GIT_COMMIT=$(git rev-parse --short=12 HEAD) docker compose up -d --build
+    build: { context: .., dockerfile: deploy/Dockerfile, args: { GIT_COMMIT: "${GIT_COMMIT:-unknown}" } }
     restart: unless-stopped
     env_file: .env
     volumes: ["core-data:/data"]
+
+  sandbox-provider:
+    # Stardust Sandbox Provider (test only), for sandbox API keys. Internal only: no ports and no Caddy
+    # route; Core reaches it at http://sandbox-provider:8081. Register it once with
+    # register-sandbox-provider.sh. It removes no carbon and moves no money.
+    build: { context: .., dockerfile: deploy/sandbox-provider.Dockerfile }
+    restart: unless-stopped
+    mem_limit: 128m
 
   caddy:
     image: caddy:2.8.4
@@ -61,7 +72,8 @@ services:
       start_period: 30s
 
   ledger:
-    build: { context: .., dockerfile: deploy/ledger.Dockerfile }
+    # GIT_COMMIT becomes /ledger/healthz's "commit", as for Core.
+    build: { context: .., dockerfile: deploy/ledger.Dockerfile, args: { GIT_COMMIT: "${GIT_COMMIT:-unknown}" } }
     restart: unless-stopped
     mem_limit: 384m
     # Only the variables it needs (not env_file), so the ledger never sees Core's secrets.

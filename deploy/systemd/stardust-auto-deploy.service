@@ -1,0 +1,15 @@
+[Unit]
+Description=Deploy new CI-passed commits on main to Stardust Core (deploy/auto-deploy.sh)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=opc
+WorkingDirectory=/home/opc/stardust/deploy
+# Run through bash: SELinux won't let systemd execute a script that lives in a home directory.
+ExecStart=/bin/bash /home/opc/stardust/deploy/auto-deploy.sh
+StandardOutput=journal
+StandardError=journal
+# A first build of ledger-db takes a few minutes on the A1; never let a stuck build hold the lock forever.
+TimeoutStartSec=45min
