@@ -10,7 +10,7 @@ AIforE runs Core in production at **https://core.aifore.org** (live since 2026-1
 curl -s https://core.aifore.org/healthz
 ```
 
-It should show `"ok": true`, `priced_models` over 1,000, and `"ingest_auth"` and `"subscriber_auth"` both `"required"`. Admin endpoints aren't reachable from the internet. Hosting, updates and backups are in [`deploy/`](../deploy/README.md).
+It should show `"ok": true`, `priced_models` over 1,000, `"ingest_auth"`, `"subscriber_auth"` and `"remediation_auth"` all `"required"`, and `providers` with the number of live and sandbox providers. Admin endpoints aren't reachable from the internet. Hosting, updates and backups are in [`deploy/`](../deploy/README.md).
 
 ## Run it
 
@@ -53,18 +53,18 @@ To set other options, such as `STARDUST_OTLP_ENDPOINT`, put them in `~/Library/A
 | `GET` | `/v1/auth/principal` | The organization, user and scopes the caller's key grants. For services acting for a subscriber, such as the MCP servers. `404` when subscriber auth is off |
 | `GET` | `/v1/methodology` | The exact factor set in use, for auditability |
 | `GET` | `/v1/pricing/status` | Pricing source, last refresh, last error, and models added/removed/re-priced |
-| `POST` | `/v1/remediation/quotes` | `request_quote(co2e_g, tier_preference)` |
-| `POST` | `/v1/remediation/orders` | `submit_remediation_order(quote_id, payment_ref)` |
-| `GET` | `/v1/remediation/orders/{id}` | `get_fulfillment_status(order_id)` |
+| `POST` | `/v1/remediation/quotes` | `request_quote(co2e_g, tier_preference)`. A sandbox key gets sandbox quotes only |
+| `POST` | `/v1/remediation/orders` | `submit_remediation_order(quote_id, payment_ref)`. With a key, recorded under its organization and user |
+| `GET` | `/v1/remediation/orders/{id}` | `get_fulfillment_status(order_id)`. With a key, only the key's own orders |
 | `POST` | `/v1/donations` | `request_donation()`: returns AIforE's donation link; Core never handles money |
 | `GET` | `/v1/fees/terms` | The tech operations fee, publicly disclosed (`/v1/broker/terms` still works) |
-| `GET` | `/v1/providers` | Approved providers |
+| `GET` | `/v1/providers` | Approved live providers (sandbox providers aren't listed) |
 | `POST` | `/v1/admin/providers` | Register a provider by URL (stays pending) |
-| `POST` | `/v1/admin/providers/{id}/approve` | Vet a provider and assign its tier |
+| `POST` | `/v1/admin/providers/{id}/approve` | Vet a provider and assign its tier: `{tier, sandbox?}`. `sandbox: true` makes it a test provider for sandbox keys only |
 | `POST` | `/v1/admin/providers/{id}/delist` | Remove a provider from new quotes |
 | `POST` | `/v1/admin/pricing/refresh` | Refresh pricing now |
 | `DELETE` | `/v1/admin/users/{user_id}/events` | Erase one user's events (§14.1) |
-| `POST` | `/v1/admin/keys` | Issue a subscriber API key: `{org_id, user_id?, scopes?, label?}`. The key is in the response once |
+| `POST` | `/v1/admin/keys` | Issue a subscriber API key: `{org_id, user_id?, scopes?, label?, sandbox?}`. The key is in the response once |
 | `GET` | `/v1/admin/keys?org_id=` | List keys (never the key or its hash) |
 | `POST` | `/v1/admin/keys/{key_id}/revoke` | Revoke a key |
 | `GET` | `/v1/admin/fees?since=&until=` | Tech operations fees, provider payouts and operating-cost coverage (default: this month; `/v1/admin/broker/fees` still works) |
@@ -98,9 +98,31 @@ With a key:
 - Asking for another organization or user returns `403` with `"reason": "forbidden_scope"`, never someone else's data.
 - A missing, unknown or revoked key returns `401` with `"reason": "unauthorized"`.
 
-Keys carry the spec's OAuth scopes: `reporting.read` (the default and the one these endpoints need), `provider.read`, `operator.lifecycle.read` and `operator.lifecycle.write`.
+Keys carry the spec's OAuth scopes: `reporting.read` (the default and the one these endpoints need), `ingest.write` (sending usage), `remediation.write` (quotes and orders), `provider.read`, `operator.lifecycle.read` and `operator.lifecycle.write`.
 
-**Ingestion** is covered by `STARDUST_INGEST_AUTH` (above). **Not covered yet:** the remediation endpoints still accept calls without a key. `/healthz` shows the current mode.
+**Ingestion** is covered by `STARDUST_INGEST_AUTH` and **remediation** by `STARDUST_REMEDIATION_AUTH`, with the same three modes. `/healthz` shows each mode.
+
+### Remediation with keys
+
+With `STARDUST_REMEDIATION_AUTH` set to `optional` (a key, if sent) or `required`:
+
+- Quotes and orders need `remediation.write`. Order status accepts `reporting.read` or `remediation.write`.
+- An order is recorded under the key's organization, and its user for a user-level key. `subscriber_id` becomes optional and defaults to that user or organization.
+- A key only sees its own orders. Another organization's order, another user's (for a user-level key) or one from the other side of the sandbox returns `404`, as if it didn't exist. Only the organization that asked for a quote can order it.
+
+### Sandbox keys
+
+A **sandbox key** lets a developer test an integration end to end without touching real data or real money. Issue one with `"sandbox": true`. Sandbox and live never mix:
+
+| | Sandbox key | Live key (or no key) |
+|---|---|---|
+| Quotes | Only from providers approved with `"sandbox": true` | Only from live providers |
+| Quotes, orders, certificates | Carry `"sandbox": true`. Order status adds "Sandbox test order: no carbon was removed and no money moved." | `"sandbox": false` |
+| Usage events | Stored flagged; not exported over OTLP | Stored and exported as usual |
+| `/v1/summary`, `/daily`, `GET /v1/events` | The key's sandbox events only, with `"sandbox": true` | Live events only |
+| `/v1/admin/fees` | Never counted | Counted |
+
+The hosted sandbox provider is the mock provider, deployed as `sandbox-provider` ([`deploy/README.md`](../deploy/README.md#developer-sandbox)).
 
 ## Configuration
 
@@ -125,6 +147,7 @@ Keys carry the spec's OAuth scopes: `reporting.read` (the default and the one th
 | `STARDUST_DATABASE_PATH` | `~/Library/Application Support/stardust/core.db` on macOS (the user data directory elsewhere). Keep it on a local disk, not a network share or USB drive |
 | `STARDUST_RETENTION_DAYS` | unset (keep forever). Delete events older than this, at startup and every 6 hours |
 | `STARDUST_SUBSCRIBER_AUTH` | `off`. `optional` or `required` limits the read endpoints to the caller's key ([above](#subscriber-api-keys)) |
+| `STARDUST_REMEDIATION_AUTH` | `off`. `optional` or `required` puts keys on remediation (quotes, orders, order status), with the `remediation.write` scope; orders then belong to the key's organization ([above](#remediation-with-keys)) |
 | `STARDUST_INGEST_AUTH` | `off`. `optional` or `required` puts keys on ingestion (`POST /v1/events`, `/v1/traces`); events are recorded under the key's organization and user. Keys need the `ingest.write` scope. The gRPC receiver refuses spans when this is `required` |
 | `STARDUST_SELF_REGISTRATION` | `off`. `on` enables `POST /v1/installs`: a browser extension install gets its own user-level key (`reporting.read`, `ingest.write`) in the public organization |
 | `STARDUST_PUBLIC_ORG_ID` | A fixed UUID derived from aifore.org. The organization self-registered installs belong to |
@@ -206,4 +229,4 @@ To update the committed copy itself, run `scripts/update_pricing.py --ref <SHA>`
 
 - Live grid-intensity feed (§8.6) and Measured-tier sources (§8.1)
 - Right-sizing scores (§21) and provider-telemetry ingestion (§20)
-- Keys on ingestion and remediation endpoints (reads have them: [Subscriber API keys](#subscriber-api-keys))
+- Self-serve key sign-up for developers (keys are issued by AIforE for now)

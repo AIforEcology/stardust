@@ -125,7 +125,7 @@ def test_broker_state_survives_a_restart(pricing_file, tmp_path):
         assert [p["provider_id"] for p in c.get("/v1/providers").json()["providers"]] == ["mock-reforestation"]
         status = c.get(f"/v1/remediation/orders/{order['remediation_order_id']}").json()
         assert status["fulfillment_status"] == "fulfilled"
-        assert status["certificate_ref"].startswith("MOCK-ATTESTATION-")
+        assert status["certificate_ref"].startswith("SANDBOX-not-a-real-removal-")
         assert c.post("/v1/remediation/orders", json={"quote_id": quotes[0]["quote_id"], "subscriber_id": "app"}).status_code == 400
         assert c.post("/v1/remediation/orders", json={"quote_id": spare["quote_id"], "subscriber_id": "app"}).status_code == 200
 
@@ -227,6 +227,7 @@ def test_v3_database_migrates_to_v4_with_no_keys(tmp_path):
     conn.close()
 
     store = Store(db)
-    assert store.stats()["schema_version"] == 4
+    assert store.stats()["schema_version"] == SCHEMA_VERSION
     assert store.stats()["rows"]["api_keys"] == 0
-    assert store.aggregate().events == 1  # existing events untouched
+    assert store.aggregate().events == 1  # existing events untouched, and counted as live (not sandbox)
+    assert store.aggregate(sandbox=True).events == 0

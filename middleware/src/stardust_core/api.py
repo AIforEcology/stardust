@@ -66,7 +66,9 @@ class QuoteRequest(BaseModel):
 
 class OrderRequest(BaseModel):
     quote_id: UUID
-    subscriber_id: str = Field(min_length=1)
+    # Needed without a key. With one, the order is recorded under the key's organization and user,
+    # and this defaults to the key's user (or organization) id.
+    subscriber_id: Optional[str] = Field(default=None, min_length=1)
     payment_ref: Optional[str] = None
 
 
@@ -80,6 +82,8 @@ class AddProviderRequest(BaseModel):
 
 class ApproveRequest(BaseModel):
     tier: str
+    # A test provider that only sandbox keys can reach (never live subscribers).
+    sandbox: bool = False
 
 
 class CreateKeyRequest(BaseModel):
@@ -88,6 +92,8 @@ class CreateKeyRequest(BaseModel):
     user_id: Optional[UUID] = None
     scopes: List[str] = Field(default_factory=lambda: [auth.REPORTING_READ])
     label: Optional[str] = Field(default=None, max_length=200)
+    # A developer test key: its events, quotes and orders are kept apart from live data.
+    sandbox: bool = False
 
 
 def create_app(
@@ -124,15 +130,19 @@ def create_app(
         spec_version=spec_version,
     )
 
-    def record(event: UsageEvent) -> Tuple[EnrichedEvent, bool]:
-        """Enrich, store and export an event. Returns (enriched, is_new)."""
+    def record(event: UsageEvent, sandbox: bool = False) -> Tuple[EnrichedEvent, bool]:
+        """Enrich, store and export an event. Returns (enriched, is_new).
+
+        Sandbox events (sent with a sandbox key) are stored flagged and never exported, so they stay out
+        of live totals, dashboards and metrics."""
         with lock:
             existing = store.get_event(event.event_id)
             if existing is not None:
                 return existing, False
             enriched = engine.enrich(event)
-            store.insert_event(enriched)
-        telemetry.record(enriched)
+            store.insert_event(enriched, sandbox=sandbox)
+        if not sandbox:
+            telemetry.record(enriched)
         return enriched, True
 
     async def run_maintenance() -> None:
@@ -161,7 +171,7 @@ def create_app(
                 errors.append(f"{span.name or span.span_id}: {str(e).splitlines()[0]}")
                 continue
             if event is not None:
-                record(event)
+                record(event, sandbox=bool(caller and caller.sandbox))
         return rejected, "; ".join(errors[:5])
 
     def grpc_ingest(spans: List[OtlpSpan]) -> Tuple[int, str]:
@@ -245,7 +255,7 @@ def create_app(
             raise AuthError(401, "unauthorized", "this API key was revoked", {"key_revoked": True})
         return Principal(key_id=stored["key_id"], org_id=UUID(stored["org_id"]),
                          user_id=UUID(stored["user_id"]) if stored["user_id"] else None,
-                         scopes=frozenset(stored["scopes"]))
+                         scopes=frozenset(stored["scopes"]), sandbox=bool(stored.get("sandbox")))
 
     def principal(authorization: Optional[str] = Header(default=None)) -> Optional[Principal]:
         """Read endpoints, per STARDUST_SUBSCRIBER_AUTH."""
@@ -254,6 +264,13 @@ def create_app(
     def writer(authorization: Optional[str] = Header(default=None)) -> Optional[Principal]:
         """Ingestion endpoints, per STARDUST_INGEST_AUTH."""
         return resolve(authorization, settings.ingest_auth)
+
+    def remediator(authorization: Optional[str] = Header(default=None)) -> Optional[Principal]:
+        """Remediation endpoints, per STARDUST_REMEDIATION_AUTH."""
+        return resolve(authorization, settings.remediation_auth)
+
+    def sandboxed(caller: Optional[Principal]) -> bool:
+        return bool(caller and caller.sandbox)
 
     def pinned(event: UsageEvent, caller: Optional[Principal]) -> UsageEvent:
         user_id, org_id = auth.pin(caller, event.user_id, event.org_id)
@@ -285,7 +302,12 @@ def create_app(
             "otlp_grpc_receiver": settings.otlp_grpc_listen,
             "subscriber_auth": settings.subscriber_auth,
             "ingest_auth": settings.ingest_auth,
+            "remediation_auth": settings.remediation_auth,
             "self_registration": settings.self_registration,
+            "providers": {
+                "live": sum(1 for p in broker.providers.values() if p.listed and not p.sandbox),
+                "sandbox": sum(1 for p in broker.providers.values() if p.listed and p.sandbox),
+            },
             "database": store.stats(),
             # The deployed commit (short SHA), set at build time by deploy/auto-deploy.sh (deploy/README.md).
             "commit": os.environ.get("STARDUST_COMMIT") or "unknown",
@@ -308,8 +330,11 @@ def create_app(
             raise AuthError(404, "not_found", "subscriber auth is off (STARDUST_SUBSCRIBER_AUTH)")
         if caller is None:
             raise AuthError(401, "unauthorized", "an API key is required (Authorization: Bearer <key>)")
-        return {"key_id": caller.key_id, "org_id": str(caller.org_id),
+        body = {"key_id": caller.key_id, "org_id": str(caller.org_id),
                 "user_id": str(caller.user_id) if caller.user_id else None, "scopes": sorted(caller.scopes)}
+        if caller.sandbox:
+            body["sandbox"] = True
+        return body
 
     @app.get("/v1/pricing/status")
     def pricing_status() -> dict:
@@ -321,8 +346,12 @@ def create_app(
         return cfg
 
     @app.post("/v1/events", response_model=EnrichedEvent)
-    def ingest(event: UsageEvent, caller: Optional[Principal] = Depends(writer)) -> EnrichedEvent:
-        return record(pinned(event, caller))[0]
+    def ingest(event: UsageEvent, caller: Optional[Principal] = Depends(writer)):
+        enriched, _ = record(pinned(event, caller), sandbox=sandboxed(caller))
+        if sandboxed(caller):
+            # Said plainly, so a developer can see their test data is kept apart.
+            return JSONResponse({**enriched.model_dump(mode="json"), "sandbox": True})
+        return enriched
 
     @app.post("/v1/installs")
     def register_install(request: Request) -> dict:
@@ -372,7 +401,7 @@ def create_app(
     def recent(user_id: Optional[UUID] = None, limit: int = Query(50, ge=1, le=1000),
                caller: Optional[Principal] = Depends(principal)) -> List[EnrichedEvent]:
         user_id, org_id = reporting(caller, user_id, None)
-        return store.recent_events(user_id=user_id, org_id=org_id, limit=limit)
+        return store.recent_events(user_id=user_id, org_id=org_id, limit=limit, sandbox=sandboxed(caller))
 
     @app.get("/v1/summary")
     def summary(user_id: Optional[UUID] = None, org_id: Optional[UUID] = None,
@@ -380,8 +409,8 @@ def create_app(
                 caller: Optional[Principal] = Depends(principal)) -> dict:
         """Totals for a user, an org, or everything, optionally within [since, until)."""
         user_id, org_id = reporting(caller, user_id, org_id)
-        a = store.aggregate(user_id=user_id, org_id=org_id, since=since, until=until)
-        return {
+        a = store.aggregate(user_id=user_id, org_id=org_id, since=since, until=until, sandbox=sandboxed(caller))
+        body = {
             "events": a.events,
             "tokens_in": a.tokens_in,
             "tokens_out": a.tokens_out,
@@ -403,6 +432,9 @@ def create_app(
             ),
             "methodology_version": engine.version,
         }
+        if sandboxed(caller):
+            body["sandbox"] = True  # these totals are the key's sandbox test data only
+        return body
 
     @app.get("/v1/summary/daily")
     def summary_daily(user_id: Optional[UUID] = None, org_id: Optional[UUID] = None,
@@ -410,30 +442,54 @@ def create_app(
                       caller: Optional[Principal] = Depends(principal)) -> dict:
         """Per-day (UTC) totals for trend charts (§6.3)."""
         user_id, org_id = reporting(caller, user_id, org_id)
-        return {"days": store.daily(user_id=user_id, org_id=org_id, since=since, until=until)}
+        body: dict = {"days": store.daily(user_id=user_id, org_id=org_id, since=since, until=until,
+                                          sandbox=sandboxed(caller))}
+        if sandboxed(caller):
+            body["sandbox"] = True
+        return body
 
     # --- Subscriber API (§10.3) -----------------------------------------------
 
+    # With a key (STARDUST_REMEDIATION_AUTH), quotes and orders need remediation.write and belong to the
+    # key's organization; a sandbox key only ever reaches sandbox providers, a live key only live ones.
+
     @app.post("/v1/remediation/quotes")
-    async def request_quote(req: QuoteRequest) -> dict:
+    async def request_quote(req: QuoteRequest, caller: Optional[Principal] = Depends(remediator)) -> dict:
+        if caller is not None:
+            auth.require_any(caller, auth.REMEDIATION_WRITE)
         try:
-            quotes = await broker.request_quote(req.co2e_g, req.tier_preference)
+            quotes = await broker.request_quote(req.co2e_g, req.tier_preference, sandbox=sandboxed(caller),
+                                                org_id=str(caller.org_id) if caller else None)
         except BrokerError as e:
             raise HTTPException(400, str(e))
         return {"quotes": [q.__dict__ for q in quotes]}
 
     @app.post("/v1/remediation/orders")
-    async def submit_order(req: OrderRequest) -> dict:
+    async def submit_order(req: OrderRequest, caller: Optional[Principal] = Depends(remediator)) -> dict:
+        if caller is not None:
+            auth.require_any(caller, auth.REMEDIATION_WRITE)
+            subscriber_id = req.subscriber_id or str(caller.user_id or caller.org_id)
+        elif req.subscriber_id:
+            subscriber_id = req.subscriber_id
+        else:
+            raise HTTPException(422, "subscriber_id is required without an API key")
         try:
-            order = await broker.submit_remediation_order(req.quote_id, req.subscriber_id, req.payment_ref)
+            order = await broker.submit_remediation_order(
+                req.quote_id, subscriber_id, req.payment_ref, sandbox=sandboxed(caller),
+                org_id=str(caller.org_id) if caller else None,
+                user_id=str(caller.user_id) if caller and caller.user_id else None)
         except BrokerError as e:
             raise HTTPException(400, str(e))
-        return order.__dict__
+        return order.view()
 
     @app.get("/v1/remediation/orders/{order_id}")
-    async def order_status(order_id: UUID) -> dict:
+    async def order_status(order_id: UUID, caller: Optional[Principal] = Depends(remediator)) -> dict:
+        owner = None
+        if caller is not None:
+            auth.require_any(caller, auth.REPORTING_READ, auth.REMEDIATION_WRITE)
+            owner = (str(caller.org_id), str(caller.user_id) if caller.user_id else None, caller.sandbox)
         try:
-            return (await broker.get_fulfillment_status(order_id)).__dict__
+            return (await broker.get_fulfillment_status(order_id, owner=owner)).view()
         except BrokerError as e:
             raise HTTPException(404, str(e))
 
@@ -456,7 +512,8 @@ def create_app(
 
     @app.get("/v1/providers")
     def list_providers() -> dict:
-        return {"providers": [p.__dict__ for p in broker.providers.values() if p.listed]}
+        """Approved live providers. Sandbox test providers aren't listed publicly."""
+        return {"providers": [p.__dict__ for p in broker.providers.values() if p.listed and not p.sandbox]}
 
     @app.post("/v1/admin/providers", dependencies=[Depends(require_admin)])
     async def add_provider(req: AddProviderRequest) -> dict:
@@ -468,7 +525,7 @@ def create_app(
     @app.post("/v1/admin/providers/{provider_id}/approve", dependencies=[Depends(require_admin)])
     def approve(provider_id: str, req: ApproveRequest) -> dict:
         try:
-            return broker.approve(provider_id, req.tier).__dict__
+            return broker.approve(provider_id, req.tier, req.sandbox).__dict__
         except BrokerError as e:
             raise HTTPException(400, str(e))
 
@@ -527,8 +584,8 @@ def create_app(
             raise HTTPException(400, str(e))
         key_id, key, key_hash = auth.new_key()
         store.save_api_key(key_id, key_hash, req.org_id, req.user_id, sorted(scopes), req.label,
-                           datetime.now(timezone.utc))
-        log.info("Issued API key %s for org %s", key_id, req.org_id)
+                           datetime.now(timezone.utc), sandbox=req.sandbox)
+        log.info("Issued %sAPI key %s for org %s", "sandbox " if req.sandbox else "", key_id, req.org_id)
         record = store.load_api_key(key_id)
         record.pop("key_hash")
         return {"key": key, **record}

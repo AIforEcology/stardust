@@ -30,16 +30,18 @@ The purple **subscriber credit path** is a design concept, not yet in the spec: 
 |---|---|---|
 | [`schema/`](schema/) | Event schemas, Energy Source Codes and the versioned methodology factors | §5, §7, §8, §10.5, §11.5, §20, §21.7, §22.8 |
 | [`middleware/`](middleware/) | Stardust Core: ingestion, enrichment and the remediation broker (Python/FastAPI) | §8–§11, §21.7, §22.8, §23 |
-| [`subscriber-client/`](subscriber-client/) | Clients that capture usage: the Chrome/Edge extension for now (TypeScript) | §6, §12, §23.3 |
+| [`subscriber-client/`](subscriber-client/) | Clients that capture usage: the Chrome/Edge extension (TypeScript) and the Python and JavaScript SDKs | §6, §12, §23.3 |
 | [`providers-service/`](providers-service/) | The interface remediation providers implement, a mock provider, and carbon-capture telemetry models | §10.2, §20 |
 | [`mcp/`](mcp/) | MCP servers for asking Stardust questions from AI assistants: Subscriber reporting for now (Python 3.10+) | §9.5, §23 |
 | [`ledger/`](ledger/) | The Data Center Resource Ledger: an open, source-cited database of data centers and the power plants built for them, served at `core.aifore.org/ledger/` beside Core (Python/FastAPI, PostgreSQL + PostGIS). [Design](docs/architecture/ledger.md) | |
 | [`intel/`](intel/) | Data Center Intelligence (DCI), Phase 1 prototype: builds per-provider footprints for Core from the ledger's facilities and EIA grid data. Off by default; not published until its [gates](docs/TODO.md) clear (Python) | |
 | [`docs/`](docs/) | The product spec and summary | |
 
-## Status: v0.1 scaffold
+## Status: Phase 1, with SDKs for developers
 
-This is the Phase 1 foundation (§16). The methodology factors are a **draft**, and some are placeholders awaiting review (see [`schema/README.md`](schema/README.md)). Core stores its data in a single SQLite file (see [the database design](docs/architecture/database.md)), and the extension's figures are estimates.
+**SDKs, v0.2 (MVP):** developers can meter their own app's AI usage against hosted Core with an API key, read back cost, energy, CO₂e, water and the indicator code, and try remediation with a sandbox key: `pip install aifore-stardust` or `npm i @aifore/stardust`. Start with the [developer guide](docs/developers.md).
+
+The rest is the Phase 1 foundation (§16). The methodology factors are a **draft**, and some are placeholders awaiting review (see [`schema/README.md`](schema/README.md)). Core stores its data in a single SQLite file (see [the database design](docs/architecture/database.md)), and the extension's figures are estimates.
 
 **Hosted Core is live in production** at [https://core.aifore.org](https://core.aifore.org/healthz), on Oracle Cloud with Docker Compose and Caddy. The browser extension's store build uses it by default. Check it with `curl -s https://core.aifore.org/healthz` (`"ok": true`, with ingest and subscriber auth `"required"`); a daily workflow watches it. Hosting and operations: [`deploy/`](deploy/).
 

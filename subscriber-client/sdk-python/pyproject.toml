@@ -3,22 +3,45 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "stardust-sdk"
-version = "0.1.0"
-description = "Stardust infra SDK: meter Anthropic, OpenAI and Gemini API usage (measured tokens) and report it to Stardust Core."
+# Distribution name on PyPI. The import name stays `stardust_sdk`, so existing code doesn't change.
+name = "aifore-stardust"
+version = "0.2.0"
+description = "Stardust SDK by AIforE: meter Anthropic, OpenAI and Gemini API usage (measured tokens), see its cost, energy, CO2e and water, and request remediation, via Stardust Core."
 readme = "README.md"
 license = { text = "Apache-2.0" }
-requires-python = ">=3.9"
+authors = [{ name = "AI for Ecology (AIforE)" }]
+requires-python = ">=3.10"
 dependencies = []  # stdlib only: an SDK shouldn't pull dependencies into your app
+keywords = ["ai", "llm", "carbon", "sustainability", "metering", "opentelemetry", "anthropic", "openai", "gemini"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://aifore.org"
+Repository = "https://github.com/AIforEcology/stardust"
+Documentation = "https://github.com/AIforEcology/stardust/blob/main/docs/developers.md"
+Changelog = "https://github.com/AIforEcology/stardust/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 # Emit OpenTelemetry GenAI spans: Stardust(otel=True)
 otel = ["opentelemetry-api>=1.20"]
 # Only needed to run the tests against the real vendor response types.
-dev = ["pytest>=8", "anthropic>=0.40", "openai>=1.50", "google-genai>=1.0", "opentelemetry-sdk>=1.20"]
+dev = ["build>=1.2", "pytest>=8", "anthropic>=0.40", "openai>=1.50", "google-genai>=1.0", "opentelemetry-sdk>=1.20"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+stardust_sdk = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

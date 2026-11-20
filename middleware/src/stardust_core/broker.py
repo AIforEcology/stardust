@@ -12,7 +12,7 @@ import asyncio
 import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 import httpx
@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 
 TIERS = ("verified", "emerging", "engineered")
 QUOTE_TTL = timedelta(minutes=15)
+SANDBOX_NOTICE = "Sandbox test order: no carbon was removed and no money moved."
 
 
 class BrokerError(Exception):
@@ -39,6 +40,8 @@ class ProviderEntry:
     base_url: str
     tier: Optional[str] = None  # None until vetted
     status: str = "pending"  # pending | approved | delisted
+    # A test provider for sandbox keys only. Set at approval; sandbox and live never mix.
+    sandbox: bool = False
 
     @property
     def listed(self) -> bool:
@@ -59,6 +62,9 @@ class Quote:
     fee_pct: float = 0.0
     fee_usd: float = 0.0
     total_usd: Optional[float] = None
+    sandbox: bool = False
+    # The organization whose key asked for the quote; only that organization can order it.
+    org_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.total_usd is None:
@@ -82,6 +88,24 @@ class Order:
     fee_pct: Optional[float] = None
     fee_usd: Optional[float] = None
     total_usd: Optional[float] = None
+    sandbox: bool = False
+    # The key's organization and user, when the order was placed with a key.
+    org_id: Optional[str] = None
+    user_id: Optional[str] = None
+
+    @property
+    def notice(self) -> Optional[str]:
+        return SANDBOX_NOTICE if self.sandbox else None
+
+    def view(self) -> Dict[str, Any]:
+        """The order as the Subscriber API returns it."""
+        d = asdict(self)
+        d["certificate"] = ({"ref": self.certificate_ref, "sandbox": self.sandbox,
+                             **({"note": "SANDBOX — not a real removal"} if self.sandbox else {})}
+                            if self.certificate_ref else None)
+        if self.sandbox:
+            d["notice"] = SANDBOX_NOTICE
+        return d
 
 
 def _quote_from(d: Dict[str, Any]) -> Quote:
@@ -112,7 +136,7 @@ class Broker:
     def _save_order(self, order: Order) -> None:
         self._store.save_order(order.remediation_order_id, order.subscriber_id, order.fulfillment_status,
                                order.created_at, asdict(order), provider_price_usd=order.provider_price_usd,
-                               fee_usd=order.fee_usd, total_usd=order.total_usd)
+                               fee_usd=order.fee_usd, total_usd=order.total_usd, sandbox=order.sandbox)
 
     # --- provider onboarding (admin) -----------------------------------------
 
@@ -134,14 +158,16 @@ class Broker:
         self._save_provider(entry)
         return entry
 
-    def approve(self, provider_id: str, tier: str) -> ProviderEntry:
+    def approve(self, provider_id: str, tier: str, sandbox: bool = False) -> ProviderEntry:
         if tier not in TIERS:
             raise BrokerError(f"tier must be one of {TIERS}")
         entry = self._provider(provider_id)
         if tier == "verified" and entry.certification.get("standard") not in ("verra", "gold_standard"):
             # §10.6: Tier 1 requires an active Verra / Gold Standard registration.
             raise BrokerError("verified tier requires a Verra or Gold Standard certification")
-        entry.tier, entry.status = tier, "approved"
+        if sandbox and tier == "verified":
+            raise BrokerError("a sandbox provider can't be verified tier")
+        entry.tier, entry.status, entry.sandbox = tier, "approved", sandbox
         self._save_provider(entry)
         return entry
 
@@ -153,26 +179,35 @@ class Broker:
 
     # --- Subscriber API (§10.3) ----------------------------------------------
 
-    async def request_quote(self, co2e_g: float, tier_preference: Optional[List[str]] = None) -> List[Quote]:
+    async def request_quote(self, co2e_g: float, tier_preference: Optional[List[str]] = None, *,
+                            sandbox: bool = False, org_id: Optional[str] = None) -> List[Quote]:
+        """Quotes from live providers, or (``sandbox=True``) from sandbox providers only."""
         if co2e_g <= 0:
             raise BrokerError("co2e_g must be positive")
         candidates = [
-            p for p in self.providers.values() if p.listed and (not tier_preference or p.tier in tier_preference)
+            p for p in self.providers.values()
+            if p.listed and p.sandbox == sandbox and (not tier_preference or p.tier in tier_preference)
         ]
-        results = await asyncio.gather(*(self._quote_one(p, co2e_g) for p in candidates))
+        results = await asyncio.gather(*(self._quote_one(p, co2e_g, org_id) for p in candidates))
         quotes = [q for q in results if q is not None]
         quotes.sort(key=lambda q: q.total_usd or 0)
         return quotes
 
-    async def submit_remediation_order(self, quote_id: UUID, subscriber_id: str, payment_ref: Optional[str]) -> Order:
+    async def submit_remediation_order(self, quote_id: UUID, subscriber_id: str, payment_ref: Optional[str], *,
+                                       sandbox: bool = False, org_id: Optional[str] = None,
+                                       user_id: Optional[str] = None) -> Order:
         raw = self._store.take_quote(quote_id)  # atomic: a quote can be used once
         if raw is None:
             raise BrokerError("unknown or already-used quote")
         quote = _quote_from(raw)
+        if quote.sandbox != sandbox or (quote.org_id is not None and quote.org_id != org_id):
+            # Not this caller's quote: put it back for its owner, and answer as if it didn't exist.
+            self._store.save_quote(quote.quote_id, quote.expires_at, raw)
+            raise BrokerError("unknown or already-used quote")
         if quote.expires_at < datetime.now(timezone.utc):
             raise BrokerError("quote has expired; request a new one")
         provider = self._provider(quote.provider_id)
-        if not provider.listed:
+        if not provider.listed or provider.sandbox != sandbox:
             raise BrokerError("provider is no longer listed")
 
         order = Order(
@@ -187,6 +222,9 @@ class Broker:
             fee_pct=quote.fee_pct,
             fee_usd=quote.fee_usd,
             total_usd=quote.total_usd,
+            sandbox=sandbox,
+            org_id=org_id,
+            user_id=user_id,
         )
         try:
             result = await self._post(provider.base_url, "/fulfill", {
@@ -204,11 +242,19 @@ class Broker:
         self._save_order(order)
         return order
 
-    async def get_fulfillment_status(self, order_id: UUID) -> Order:
+    async def get_fulfillment_status(self, order_id: UUID, *, owner: Optional[Tuple[str, Optional[str], bool]] = None
+                                     ) -> Order:
+        """``owner`` is the caller's (org_id, user_id or None, sandbox) when it used a key: another
+        organization's (or user's) order, or one from the other side of the sandbox, is "unknown"."""
         raw = self._store.load_order(order_id)
         if raw is None:
             raise BrokerError("unknown order")
         order = _order_from(raw)
+        if owner is not None:
+            org_id, user_id, sandbox = owner
+            if (order.org_id != org_id or order.sandbox != sandbox
+                    or (user_id is not None and order.user_id != user_id)):
+                raise BrokerError("unknown order")
         if order.provider_id and order.fulfillment_status in ("ordered", "fulfilling"):
             provider = self._provider(order.provider_id)
             try:
@@ -222,7 +268,7 @@ class Broker:
 
     # --- internals ------------------------------------------------------------
 
-    async def _quote_one(self, p: ProviderEntry, co2e_g: float) -> Optional[Quote]:
+    async def _quote_one(self, p: ProviderEntry, co2e_g: float, org_id: Optional[str] = None) -> Optional[Quote]:
         try:
             r = await self._post(p.base_url, "/quote", {"co2e_g": co2e_g})
         except httpx.HTTPError as e:
@@ -240,6 +286,8 @@ class Broker:
             fulfillment_days=int(r["fulfillment_days"]),
             provider_tier=p.tier or "emerging",
             expires_at=datetime.now(timezone.utc) + QUOTE_TTL,
+            sandbox=p.sandbox,
+            org_id=org_id,
         )
         self._store.save_quote(q.quote_id, q.expires_at, asdict(q))
         return q

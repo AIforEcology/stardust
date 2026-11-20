@@ -39,11 +39,13 @@ PREDEPLOY_KEEP=10
 # list matches ci.yml, so a renamed or added job can't be skipped silently.
 REQUIRED_CHECKS=(
   "python (3.9)"
+  "python (3.10)"
   "python (3.12)"
   "mcp"
   "browser-extension"
   "extension-version"
   "sdk-js"
+  "e2e-sandbox"
   "ledger"
   "deploy-scripts"
 )
@@ -56,8 +58,9 @@ log() { echo "auto-deploy: $*"; }
 #   ledger     ledger/ or deploy/ledger.Dockerfile
 #   ledger-db  deploy/ledger-db.Dockerfile (the ledger is rebuilt with it)
 #   caddy      deploy/Caddyfile: Caddy is restarted to load it
-# Anything else (docs, browser extension, MCP servers, providers-service, intel, .github/, these deploy
-# scripts and units) needs nothing on the server: the commit is just recorded.
+#   sandbox-provider  providers-service/ or deploy/sandbox-provider.Dockerfile (the sandbox test provider)
+# Anything else (docs, browser extension, MCP servers, intel, .github/, these deploy scripts and units)
+# needs nothing on the server: the commit is just recorded.
 changed_services() {
   local path
   while IFS= read -r path; do
@@ -67,6 +70,7 @@ changed_services() {
       middleware/* | schema/* | deploy/Dockerfile) echo core ;;
       deploy/ledger-db.Dockerfile) echo ledger-db; echo ledger ;;
       ledger/* | deploy/ledger.Dockerfile) echo ledger ;;
+      providers-service/* | deploy/sandbox-provider.Dockerfile) echo sandbox-provider ;;
     esac
   done | sort -u
 }
@@ -164,7 +168,7 @@ rebuild() {
   if has all "$@"; then
     GIT_COMMIT="$short" compose up -d --build || return 1
   else
-    for s in core ledger-db ledger; do has "$s" "$@" && build+=("$s"); done
+    for s in core ledger-db ledger sandbox-provider; do has "$s" "$@" && build+=("$s"); done
     if ((${#build[@]})); then
       # --no-deps: never recreate a service that wasn't asked for (e.g. Core when only the ledger changed).
       GIT_COMMIT="$short" compose up -d --build --no-deps "${build[@]}" || return 1

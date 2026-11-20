@@ -7,7 +7,7 @@ Core is a single process with a SQLite file, so it needs a real persistent disk,
 
 The hosted Core has been live in production since 2026-10-30, on Oracle Cloud (Oracle Linux 9, Arm64, reserved IP `129.153.92.171`), with Docker Compose and Caddy as described below.
 
-- **Health check:** `curl -s https://core.aifore.org/healthz` returns `"ok": true`, `priced_models` (over 3,000), and `"ingest_auth": "required"` and `"subscriber_auth": "required"`.
+- **Health check:** `curl -s https://core.aifore.org/healthz` returns `"ok": true`, `priced_models` (over 3,000), `"ingest_auth"`, `"subscriber_auth"` and `"remediation_auth"` all `"required"`, and the number of live and sandbox providers.
 - **Admin endpoints** (`/v1/admin/*`) return 404 from the internet.
 - **Running commit:** both health checks report it as `"commit"`. Merged changes deploy themselves within about 10 minutes of CI passing ([Automatic deploys](#automatic-deploys)).
 - **Uptime:** the [`core-uptime`](../.github/workflows/core-uptime.yml) workflow checks both every day at 17:07 UTC, and that the server isn't more than a day behind main. A failure opens (or comments on) a GitHub issue labeled `ops-alert` and posts to #ops-alerts on Slack; the next good run closes the issue.
@@ -170,6 +170,33 @@ A commit whose CI failed, or whose deploy was rolled back, is written to `deploy
   ```
 - Revoke an abusive install: `.../v1/admin/keys/<key_id>/revoke` the same way.
 - Keep the OS patched: `sudo apt-get install -y unattended-upgrades` (Ubuntu) or `dnf-automatic` (Oracle Linux, above).
+
+## Developer sandbox
+
+Outside developers test the SDKs with **sandbox keys** against the **Stardust Sandbox Provider (test only)**, the `sandbox-provider` Compose service. It runs the mock reforestation provider from [`providers-service/`](../providers-service/), renamed so nobody can mistake it for a real project ("Test reforestation (not real)", certificates marked "SANDBOX — not a real removal"). It removes no carbon and moves no money.
+
+- **Internal only:** no published port and no Caddy route. Core reaches it at `http://sandbox-provider:8081`.
+- **Never mixes with live:** it is approved with `"sandbox": true`, so only sandbox keys get quotes from it, and sandbox keys never reach a live provider. Sandbox quotes, orders and certificates all carry `"sandbox": true`, and order status says "Sandbox test order: no carbon was removed and no money moved." Sandbox orders are left out of `/v1/admin/fees`, and usage sent with a sandbox key is left out of live and organization totals.
+- **Remediation needs keys:** `.env` sets `STARDUST_REMEDIATION_AUTH=required`, so quotes and orders need a key with `remediation.write` (order status also accepts `reporting.read`).
+
+**Once, after the first deploy that includes it**, register and approve it:
+
+```bash
+cd ~/stardust/deploy && ./register-sandbox-provider.sh
+curl -s https://core.aifore.org/healthz   # "remediation_auth": "required", "providers": {"live": 0, "sandbox": 1}
+```
+
+The script runs its admin calls inside the `core` container, so the admin token never leaves it. Re-running it is harmless.
+
+**Issue a sandbox key** for each test developer (shown once; send it to them privately):
+
+```bash
+docker compose exec core sh -c 'curl -s -X POST -H "X-Stardust-Admin-Token: $STARDUST_ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"org_id\": \"$(cat /proc/sys/kernel/random/uuid)\", \"label\": \"sandbox: <developer>\", \"sandbox\": true, \"scopes\": [\"ingest.write\", \"reporting.read\", \"remediation.write\"]}" \
+  localhost:8080/v1/admin/keys'
+```
+
+Each developer gets their own organization id, so they only see their own test data. Live keys are issued the same way without `"sandbox": true`, per subscriber, once they're ready. Check a deploy end to end with a sandbox key: `STARDUST_API_KEY=sdk_… python3 scripts/e2e_sandbox.py` (see [`docs/developers.md`](../docs/developers.md)).
 
 ## Backups
 

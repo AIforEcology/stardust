@@ -32,6 +32,8 @@ def services(*paths: str) -> list:
     (["deploy/ledger.Dockerfile"], ["ledger"]),
     (["deploy/ledger-db.Dockerfile"], ["ledger", "ledger-db"]),
     (["deploy/Caddyfile"], ["caddy"]),
+    (["providers-service/src/stardust_provider/examples/mock_reforestation.py"], ["sandbox-provider"]),
+    (["deploy/sandbox-provider.Dockerfile"], ["sandbox-provider"]),
     (["deploy/docker-compose.yml"], ["all"]),
     (["deploy/docker-compose.yml", "deploy/Caddyfile"], ["all", "caddy"]),
     (["middleware/README.md", "ledger/tests/test_api.py"], ["core", "ledger"]),
@@ -43,12 +45,12 @@ def test_changed_services(paths, expected):
 @pytest.mark.parametrize("path", [
     "README.md", "docs/architecture/ledger.md", "CHANGELOG.md",
     "subscriber-client/browser-extension/src/popup.ts", "subscriber-client/sdk-js/package.json",
-    "mcp/server.py", "providers-service/src/app.py", "intel/data/grids.json",
+    "mcp/server.py", "intel/data/grids.json", "deploy/register-sandbox-provider.sh",
     ".github/workflows/ci.yml", ".github/workflows/core-uptime.yml",
     "deploy/README.md", "deploy/.env.example", "deploy/auto-deploy.sh", "deploy/offsite-backup.sh",
     "deploy/systemd/stardust-auto-deploy.timer", "deploy/tests/test_auto_deploy.py",
     # Prefixes must match whole directories, not names that merely start the same way.
-    "middleware-notes.md", "ledgers.md", "deploy/Dockerfile.bak",
+    "middleware-notes.md", "ledgers.md", "deploy/Dockerfile.bak", "providers-service-notes.md",
 ])
 def test_changes_that_need_no_rebuild(path):
     assert services(path) == []
