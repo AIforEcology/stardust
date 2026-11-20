@@ -26,7 +26,7 @@ from .models import EnrichedEvent
 log = logging.getLogger(__name__)
 
 # Bump when adding a migration; migrations run in order on open.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _MIGRATIONS: List[str] = [
     # v1
@@ -106,6 +106,13 @@ _MIGRATIONS: List[str] = [
         revoked_at TEXT
     );
     CREATE INDEX api_keys_org ON api_keys (org_id);
+    """,
+    # v5: sandbox keys (developer testing). Sandbox events and orders are flagged so live totals and
+    # fee reports leave them out; existing rows are live.
+    """
+    ALTER TABLE api_keys ADD COLUMN sandbox INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE events ADD COLUMN sandbox INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN sandbox INTEGER NOT NULL DEFAULT 0;
     """,
 ]
 
@@ -213,15 +220,15 @@ class Store:
             row = self._conn.execute("SELECT data FROM events WHERE event_id = ?", (str(event_id),)).fetchone()
         return EnrichedEvent.model_validate_json(row["data"]) if row else None
 
-    def insert_event(self, e: EnrichedEvent) -> bool:
+    def insert_event(self, e: EnrichedEvent, *, sandbox: bool = False) -> bool:
         """Store an event. Returns False (and stores nothing) if its event_id already exists."""
         with self._lock:
             cur = self._conn.execute(
                 """INSERT INTO events (event_id, ts, user_id, org_id, source_layer, provider, model, region,
                        tokens_in, tokens_out, tokens_cached_in, cost_usd, energy_wh, co2e_g, water_ml,
                        water_onsite_ml, water_offsite_ml, heat_rejected_wh, heat_recovered_wh,
-                       confidence_tier, indicator_code, data)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       confidence_tier, indicator_code, data, sandbox)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT (event_id) DO NOTHING""",
                 (
                     str(e.event_id), _utc(e.timestamp),
@@ -231,14 +238,14 @@ class Store:
                     e.energy_wh, e.co2e_g, e.water_ml,
                     e.water_onsite_ml, e.water_offsite_ml, e.heat_rejected_wh, e.heat_recovered_wh,
                     e.confidence_tier.value, e.indicator_code,
-                    e.model_dump_json(),
+                    e.model_dump_json(), int(sandbox),
                 ),
             )
             return cur.rowcount == 1
 
     def recent_events(self, *, user_id: Optional[UUID] = None, org_id: Optional[UUID] = None,
-                      limit: int = 50) -> List[EnrichedEvent]:
-        where, args = self._filters(user_id, org_id, None, None)
+                      limit: int = 50, sandbox: bool = False) -> List[EnrichedEvent]:
+        where, args = self._filters(user_id, org_id, None, None, sandbox)
         sql = f"SELECT data FROM events {where} ORDER BY ts DESC, rowid DESC LIMIT ?"
         args.append(limit)
         with self._lock:
@@ -246,8 +253,10 @@ class Store:
         return [EnrichedEvent.model_validate_json(r["data"]) for r in rows]
 
     def aggregate(self, *, user_id: Optional[UUID] = None, org_id: Optional[UUID] = None,
-                  since: Optional[datetime] = None, until: Optional[datetime] = None) -> Aggregate:
-        where, args = self._filters(user_id, org_id, since, until)
+                  since: Optional[datetime] = None, until: Optional[datetime] = None,
+                  sandbox: bool = False) -> Aggregate:
+        """Totals over live events, or (``sandbox=True``) over sandbox events only. Never both."""
+        where, args = self._filters(user_id, org_id, since, until, sandbox)
         with self._lock:
             r = self._conn.execute(
                 f"""SELECT COUNT(*) AS events,
@@ -270,9 +279,10 @@ class Store:
         return Aggregate(**{k: r[k] for k in r.keys()})
 
     def daily(self, *, user_id: Optional[UUID] = None, org_id: Optional[UUID] = None,
-              since: Optional[datetime] = None, until: Optional[datetime] = None) -> List[Dict[str, Any]]:
+              since: Optional[datetime] = None, until: Optional[datetime] = None,
+              sandbox: bool = False) -> List[Dict[str, Any]]:
         """Per-day (UTC) totals for dashboards (§6.3)."""
-        where, args = self._filters(user_id, org_id, since, until)
+        where, args = self._filters(user_id, org_id, since, until, sandbox)
         with self._lock:
             rows = self._conn.execute(
                 f"""SELECT substr(ts, 1, 10) AS day, COUNT(*) AS events,
@@ -290,8 +300,9 @@ class Store:
 
     @staticmethod
     def _filters(user_id: Optional[UUID], org_id: Optional[UUID], since: Optional[datetime],
-                 until: Optional[datetime]) -> Tuple[str, List[Any]]:
-        clauses, args = [], []
+                 until: Optional[datetime], sandbox: bool = False) -> Tuple[str, List[Any]]:
+        # Live and sandbox data never mix in a query.
+        clauses, args = ["sandbox = ?"], [int(sandbox)]
         if user_id is not None:
             clauses.append("user_id = ?")
             args.append(str(user_id))
@@ -304,7 +315,7 @@ class Store:
         if until is not None:
             clauses.append("ts < ?")
             args.append(_utc(until))
-        return ("WHERE " + " AND ".join(clauses)) if clauses else "", args
+        return "WHERE " + " AND ".join(clauses), args
 
     def delete_user_events(self, user_id: UUID) -> int:
         """Erase a user's events (§14.1 deletion controls). Returns how many were deleted."""
@@ -355,26 +366,28 @@ class Store:
 
     def save_order(self, order_id: UUID, subscriber_id: str, status: str, created_at: datetime,
                    data: Dict[str, Any], *, provider_price_usd: Optional[float] = None,
-                   fee_usd: Optional[float] = None, total_usd: Optional[float] = None) -> None:
+                   fee_usd: Optional[float] = None, total_usd: Optional[float] = None,
+                   sandbox: bool = False) -> None:
         with self._lock:
             self._conn.execute(
                 """INSERT INTO orders (order_id, subscriber_id, status, created_at, data,
-                                      provider_price_usd, fee_usd, total_usd)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                      provider_price_usd, fee_usd, total_usd, sandbox)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT (order_id) DO UPDATE SET status = excluded.status, data = excluded.data""",
                 (str(order_id), subscriber_id, status, _utc(created_at), _json(data),
-                 provider_price_usd, fee_usd, total_usd),
+                 provider_price_usd, fee_usd, total_usd, int(sandbox)),
             )
 
     def fee_totals(self, since: datetime, until: datetime) -> Dict[str, Dict[str, Any]]:
-        """Order counts and money per fulfillment status, for orders created in [since, until)."""
+        """Order counts and money per fulfillment status, for live orders created in [since, until).
+        Sandbox orders moved no money, so they are never counted."""
         with self._lock:
             rows = self._conn.execute(
                 """SELECT status, COUNT(*) AS orders,
                           COALESCE(SUM(provider_price_usd), 0) AS provider_payouts_usd,
                           COALESCE(SUM(fee_usd), 0) AS fees_usd,
                           COALESCE(SUM(total_usd), 0) AS total_billed_usd
-                   FROM orders WHERE created_at >= ? AND created_at < ? GROUP BY status""",
+                   FROM orders WHERE created_at >= ? AND created_at < ? AND sandbox = 0 GROUP BY status""",
                 (_utc(since), _utc(until)),
             ).fetchall()
         return {r["status"]: {k: r[k] for k in r.keys() if k != "status"} for r in rows}
@@ -387,13 +400,13 @@ class Store:
     # --- API keys (auth.py) ---------------------------------------------------------------------
 
     def save_api_key(self, key_id: str, key_hash: str, org_id: UUID, user_id: Optional[UUID],
-                     scopes: List[str], label: Optional[str], created_at: datetime) -> None:
+                     scopes: List[str], label: Optional[str], created_at: datetime, *, sandbox: bool = False) -> None:
         with self._lock:
             self._conn.execute(
-                """INSERT INTO api_keys (key_id, key_hash, org_id, user_id, scopes, label, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO api_keys (key_id, key_hash, org_id, user_id, scopes, label, created_at, sandbox)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (key_id, key_hash, str(org_id), str(user_id) if user_id else None,
-                 _json(sorted(scopes)), label, _utc(created_at)),
+                 _json(sorted(scopes)), label, _utc(created_at), int(sandbox)),
             )
 
     def load_api_key(self, key_id: str) -> Optional[Dict[str, Any]]:
@@ -424,6 +437,7 @@ class Store:
     def _api_key(row: sqlite3.Row, with_hash: bool = False) -> Dict[str, Any]:
         d = dict(row)
         d["scopes"] = json.loads(d["scopes"])
+        d["sandbox"] = bool(d.get("sandbox"))
         if not with_hash:
             d.pop("key_hash")
         return d

@@ -85,6 +85,8 @@ class Certificate(BaseModel):
     certificate_ref: str
     kind: str = Field(description="registry_serial | attestation")
     verified: bool
+    # Free text shown with the certificate, e.g. the sandbox provider's "not a real removal".
+    note: Optional[str] = None
 
 
 class RemediationProvider(ABC):

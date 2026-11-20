@@ -126,7 +126,7 @@ def test_broker_flow(broker_client):
 
     order = c.post("/v1/remediation/orders", json={"quote_id": quotes[0]["quote_id"], "subscriber_id": "test-app"}).json()
     assert order["fulfillment_status"] == "fulfilled"
-    assert order["certificate_ref"].startswith("MOCK-ATTESTATION-")
+    assert order["certificate_ref"].startswith("SANDBOX-not-a-real-removal-")
     assert order["provider_tier"] == "emerging"
 
     # A quote can only be used once.
