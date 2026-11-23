@@ -39,7 +39,12 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
+        # Two copies of the same zip: a versioned one for people downloading it
+        # (stargrain-extension-0.1.5.zip), and a fixed name that
+        # releases/latest/download/stargrain-extension.zip links can rely on.
         run: |
-          gh release create "$GITHUB_REF_NAME" stargrain-extension.zip \
+          version="${GITHUB_REF_NAME#extension-v}"
+          cp stargrain-extension.zip "stargrain-extension-$version.zip"
+          gh release create "$GITHUB_REF_NAME" "stargrain-extension-$version.zip" stargrain-extension.zip \
             --title "Stargrain browser extension ${GITHUB_REF_NAME#extension-v}" \
             --notes-file store/RELEASE_NOTES.md
