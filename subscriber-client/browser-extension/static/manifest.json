@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Stargrain (AIforE Subscriber Plugin)",
   "short_name": "Stargrain",
-  "version": "0.1.4",
-  "description": "See the cost, energy, carbon and water behind your AI chats. An open-source AI for Ecology project.",
+  "version": "0.1.5",
+  "description": "See the cost, energy, carbon and water behind your AI chats. Part of the Omnigauge Suite, an open-source AI for Ecology project.",
   "permissions": [
     "storage",
     "tabs"

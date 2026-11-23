@@ -1,6 +1,6 @@
 {
   "name": "@stardust/browser-extension",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Stargrain browser extension (Chrome/Edge, Manifest V3): meters AI chat usage and shows the Stargrain indicator code.",
   "license": "Apache-2.0",
@@ -16,7 +16,7 @@
     "sync-version": "node scripts/sync-version.mjs",
     "check-version": "node scripts/sync-version.mjs --check",
     "version": "node scripts/sync-version.mjs && git add static/manifest.json",
-    "build:store": "node scripts/sync-version.mjs && STARDUST_API_BASE=${STARDUST_API_BASE:-https://core.aifore.org} node build.mjs && cd dist && rm -f ../stardust-extension.zip && zip -qr ../stardust-extension.zip . && cd .. && echo 'Store package: stardust-extension.zip'",
+    "build:store": "node scripts/sync-version.mjs && STARDUST_API_BASE=${STARDUST_API_BASE:-https://core.aifore.org} node build.mjs && cd dist && rm -f ../stargrain-extension.zip && zip -qr ../stargrain-extension.zip . && cd .. && echo 'Store package: stargrain-extension.zip'",
     "screenshots": "STARDUST_API_BASE=https://core.aifore.org node build.mjs && node scripts/screenshots.mjs"
   },
   "devDependencies": {

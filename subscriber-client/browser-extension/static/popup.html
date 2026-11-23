@@ -30,6 +30,18 @@
     .row.sub span:first-child { padding-left: 10px; }
     .row.forest { align-items: center; }
     .trees { display: flex; gap: 1px; color: var(--accent); }
+    /* Take action: grayed out and collapsed until the first partners are approved. */
+    details.take-action > summary { list-style: none; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    details.take-action > summary::-webkit-details-marker { display: none; }
+    details.take-action > summary h2 { margin: 0; color: #5f7268; }
+    details.take-action > summary::after { content: "+"; margin-left: auto; color: var(--muted); font-size: 16px; line-height: 1; }
+    details.take-action[open] > summary::after { content: "\2212"; }
+    .pill { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; }
+    .ta-body { margin-top: 8px; }
+    .ta-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; color: #5f7268; }
+    .ta-item svg { width: 14px; height: 14px; flex: none; }
+    .ta-item span:nth-child(2) { flex: 1; }
+    .ta-item span:last-child { font-size: 11px; }
     footer { padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }
     a { color: var(--accent); }
   </style>
@@ -57,6 +69,28 @@
   </section>
 
   <section>
+    <details class="take-action" id="take-action">
+      <summary><h2>Take action</h2><span class="pill">Coming soon</span></summary>
+      <div class="ta-body">
+        <div class="ta-item" title="Coming soon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 21c0-9 5-14 14-16-1 9-6 14-14 16zM5 21l7-7"/></svg>
+          <span>Remediate</span><span id="ta-co2e">your CO₂e</span>
+        </div>
+        <div class="ta-item" title="Coming soon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/></svg>
+          <span>Recycled</span><span id="ta-water">your water</span>
+        </div>
+        <div class="ta-item" title="Coming soon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>
+          <span>Renewable</span><span id="ta-energy">your electricity</span>
+        </div>
+        <p class="note">Coming soon: verified partners for carbon removal, water recycling and renewable energy, matched to what you measured. AIforE won't sell these services or take payment.</p>
+        <p class="note">Are you a provider? <a href="https://aifore.org/partners-projects.html" target="_blank" rel="noopener">Join the marketplace</a></p>
+      </div>
+    </details>
+  </section>
+
+  <section>
     <h2>Stargrain Core</h2>
     <form id="api-form"><input type="url" id="api" required /></form>
     <p class="note">Browser figures are estimates: chat sites don't show the model or token counts.</p>
@@ -64,6 +98,7 @@
 
   <footer>
     <a href="https://github.com/AIforEcology/stardust" target="_blank" rel="noopener">Open source</a>
+    <a href="https://aifore.org/omnigauge.html" target="_blank" rel="noopener">Omnigauge Suite</a>
     <a href="https://aifore.org" target="_blank" rel="noopener">Support AIforE</a>
   </footer>
   <script src="popup.js"></script>

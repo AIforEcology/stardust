@@ -40,6 +40,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" stardust-extension.zip \
-            --title "Stardust browser extension ${GITHUB_REF_NAME#extension-v}" \
+          gh release create "$GITHUB_REF_NAME" stargrain-extension.zip \
+            --title "Stargrain browser extension ${GITHUB_REF_NAME#extension-v}" \
             --notes "Store package for the Chrome Web Store and Microsoft Edge Add-ons. Default Core: https://core.aifore.org."
