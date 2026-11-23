@@ -1,6 +1,8 @@
 # Project Stardust
 
-**The AIforE Subscriber Plugin.** Stardust is open-source metering for AI and cloud usage. Wherever a token is generated or a query runs, it records what was used, what it cost, and what it cost the planet (electricity, CO₂e, water). It shows the result as a compact code such as `B2-M`, and it can route residual emissions to vetted carbon-removal providers.
+> **About the names:** Project Stardust is AIforE's internal code name for this work, which is why this repository and many of its packages are called `stardust`. Our open-source products are the [Omnigauge Suite](https://aifore.org/omnigauge.html), which includes the Stargrain AI app extensions.
+
+**The open-source code behind the Omnigauge Suite.** It meters AI and cloud usage. Wherever a token is generated or a query runs, it records what was used, what it cost, and what it cost the planet (electricity, CO₂e, water). It shows the result as a compact code such as `B2-M`, and it can route residual emissions to vetted carbon-removal providers. The [Stargrain browser extension](subscriber-client/browser-extension/), the AIforE Subscriber Plugin, is its first public app.
 
 A project of [AI for Ecology](https://aifore.org). See the [spec (v1.4) and summary](docs/).
 
