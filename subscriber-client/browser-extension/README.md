@@ -1,5 +1,7 @@
 # Stargrain browser extension
 
+> **About the names:** Project Stardust is AIforE's internal code name for this work, which is why this repository is called `stardust` and some names in the code still say Stardust. Our open-source products are the [Omnigauge Suite](https://aifore.org/omnigauge.html), which includes the Stargrain AI app extensions.
+
 Technical design, with workflow diagrams: [`docs/architecture/browser-extension.md`](../../docs/architecture/browser-extension.md).
 
 Chrome/Edge extension (Manifest V3) that meters AI chat usage on ChatGPT, Claude and Gemini, sends it to Stargrain Core, and shows the indicator code on the toolbar badge.
