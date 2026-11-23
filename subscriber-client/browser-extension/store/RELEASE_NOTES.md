@@ -2,4 +2,4 @@ Stargrain is the AIforE Subscriber Plugin. Stargrain is a member of the Omnigaug
 
 **About the names:** Project Stardust is AIforE's internal code name for this work, which is why this repository is called `stardust`. Our open-source products are the Omnigauge Suite, which includes the Stargrain AI app extensions.
 
-**Install:** `stargrain-extension.zip` below is the store package for the Chrome Web Store and Microsoft Edge Add-ons. To try it now, unzip it and load the folder at `chrome://extensions` with Developer mode on. Default Core: https://core.aifore.org.
+**Install:** the zip below (`stargrain-extension-<version>.zip`; `stargrain-extension.zip` is the same file) is the store package for the Chrome Web Store and Microsoft Edge Add-ons. To try it now, unzip it and load the folder at `chrome://extensions` with Developer mode on. Default Core: https://core.aifore.org.
