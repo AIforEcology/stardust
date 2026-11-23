@@ -1,0 +1,5 @@
+Stargrain is the AIforE Subscriber Plugin. Stargrain is a member of the Omnigauge Suite of open-source metering, delivering transparent data on AI (and cloud) usage and ecological impacts. Wherever a token is generated or a query runs, it records what was used, what it cost, and what it cost the planet (electricity, CO₂e, water). It shows the result as a compact code such as B2-M, and it will soon be able to route residual emissions to vetted carbon-removal providers.
+
+**About the names:** Project Stardust is AIforE's internal code name for this work, which is why this repository is called `stardust`. Our open-source products are the Omnigauge Suite, which includes the Stargrain AI app extensions.
+
+**Install:** `stargrain-extension.zip` below is the store package for the Chrome Web Store and Microsoft Edge Add-ons. To try it now, unzip it and load the folder at `chrome://extensions` with Developer mode on. Default Core: https://core.aifore.org.
