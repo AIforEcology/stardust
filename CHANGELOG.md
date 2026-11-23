@@ -10,6 +10,9 @@ Versions follow [Semantic Versioning](https://semver.org/). The format follows [
 
 ## Unreleased
 
+### Changed
+- **Browser extension 0.1.5:** Stargrain now says it is part of the **Omnigauge Suite**: in the extension description, the store listing, and a new "Omnigauge Suite" link in the popup footer (aifore.org/omnigauge.html). The popup has a new **Take action** section, grayed out, collapsed and marked "Coming soon": Remediate, Recycled and Renewable, each showing the CO₂e, water or electricity it would offset, with a "Join the marketplace" link for providers as the only live link. Opening it sends nothing. The store package is renamed `stargrain-extension.zip`.
+
 ### Added
 - **SDKs ready for outside developers (MVP).** Both SDKs are renamed to names AIforE controls (the old names belong to others) and work against hosted Core with an API key.
   - **aifore-stardust 0.2.0** (PyPI, was `stardust-sdk` 0.1.0). The import name is still `stardust_sdk`, so code doesn't change. **Needs Python 3.10+** (0.1.0 allowed 3.9, which is past end of life); Core, providers-service and intel still support 3.9. `Stardust(api_key=...)` sends `Authorization: Bearer <key>`, falling back to `STARDUST_API_KEY`. `api_base` now defaults to `STARDUST_API_BASE`, else `https://core.aifore.org` (`None` still means OTel only). A 401 or 403 logs one warning and drops events without retrying; network errors and 5xx retry as before. The key never appears in logs, `repr` or errors. New helpers, separate from metering, that raise `StardustError`: `summary()`, `summary_daily()`, `request_quote()`, `submit_order()`, `order_status()`, with typed results (`Summary`, `DailySummary`, `Quote`, `Order`, `Certificate`). Now ships `py.typed`.

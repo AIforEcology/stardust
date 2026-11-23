@@ -1,6 +1,6 @@
 # Store listing: Chrome Web Store and Microsoft Edge Add-ons
 
-Same package (`npm run build:store` → `stardust-extension.zip`) and same text for both stores.
+Same package (`npm run build:store` → `stargrain-extension.zip`) and same text for both stores.
 
 **Name:** Stargrain: AI Cost & Carbon Meter
 
@@ -30,7 +30,7 @@ Private by design:
 
 Honest about accuracy: chat sites don't show token counts, so browser figures are estimates and are labeled as such. Methodology and factors are public and versioned.
 
-Stargrain is free and open source (Apache-2.0), built by AI for Ecology (AIforE.org), a 501(c)(3) nonprofit working on standard, transparent measurement of AI's environmental footprint. Code: github.com/AIforEcology/stardust
+Stargrain is part of the Omnigauge Suite, AIforE's free tools for measuring AI's footprint (aifore.org/omnigauge.html). It is free and open source (Apache-2.0), built by AI for Ecology (AIforE.org), a 501(c)(3) nonprofit working on standard, transparent measurement of AI's environmental footprint. Code: github.com/AIforEcology/stardust
 
 **Links**
 - Website: https://aifore.org

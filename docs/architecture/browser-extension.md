@@ -427,13 +427,13 @@ flowchart LR
   subgraph CI["GitHub Actions"]
     PR["Pull request"] --> CIJ["ci.yml: typecheck, test, build<br/>security.yml: deps, secrets, code"]
     TAG["git tag extension-vX.Y.Z"] --> REL["release-extension.yml:<br/>tag = package.json version,<br/>npm ci, typecheck, test, build:store"]
-    REL --> ZIP["GitHub Release with<br/>stardust-extension.zip"]
+    REL --> ZIP["GitHub Release with<br/>stargrain-extension.zip"]
   end
   ZIP --> CWS["Chrome Web Store<br/>(manual upload)"]
   ZIP --> EDGE["Edge Add-ons<br/>(manual upload)"]
 ```
 
-- `npm run build:store` sets the default Core to `https://core.aifore.org` (or `STARDUST_API_BASE`), adds its host permission and writes `stardust-extension.zip`.
+- `npm run build:store` sets the default Core to `https://core.aifore.org` (or `STARDUST_API_BASE`), adds its host permission and writes `stargrain-extension.zip`.
 - The version lives only in `package.json`; `build.mjs` copies it into the manifest and the popup shows it.
 - **End-to-end check before a release:** load `dist/` in Playwright's Chromium with `--load-extension`, route the chat host to a stand-in page that replays a measured reply sequence, and confirm the service worker stores an enriched event from Core. Revoke the test install's key afterwards.
 - Store uploads are manual for now. The Chrome Web Store and Edge Add-ons publish APIs can be wired into the release workflow later with repository secrets.

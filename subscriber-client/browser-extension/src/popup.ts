@@ -85,6 +85,10 @@ async function renderSummary(apiBase: string): Promise<void> {
       }),
     ].join("");
     $("install-id").textContent = `Install ID: ${userId}`;
+    // Take action (coming soon): show what each panel would offset. Opening it sends nothing.
+    $("ta-co2e").textContent = `${fmt(s.co2e_g, "g")} CO₂e`;
+    $("ta-water").textContent = `${fmt(s.water_ml, "mL")} water`;
+    $("ta-energy").textContent = fmt(s.energy_wh, "Wh");
   } catch (e) {
     $("summary").textContent = e instanceof KeyRevokedError ? e.message : `Can't reach Stargrain Core at ${apiBase}.`;
   }

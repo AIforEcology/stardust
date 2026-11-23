@@ -56,7 +56,7 @@ Live checks on ChatGPT and Gemini (2026-09-24), via read-only page inspection pl
 
 ## Hosted Core and store builds
 
-`npm run build:store` builds with the hosted Core (`https://core.aifore.org`, or set `STARDUST_API_BASE`) as the default and writes `stardust-extension.zip`, the package for both the Chrome Web Store and Microsoft Edge Add-ons. The hosted Core's address is in the manifest's host permissions, so users aren't asked for it.
+`npm run build:store` builds with the hosted Core (`https://core.aifore.org`, or set `STARDUST_API_BASE`) as the default and writes `stargrain-extension.zip`, the package for both the Chrome Web Store and Microsoft Edge Add-ons. The hosted Core's address is in the manifest's host permissions, so users aren't asked for it.
 
 On first use the extension registers with the Core (`POST /v1/installs`) and gets its own key and user ID. The key goes with every event and summary request; if the Core no longer knows it, the extension registers again. Keys are kept per Core address, so switching to a self-hosted Core never sends it the hosted key. A Core without self-registration (a local one) answers 404, and the extension uses its local pseudonymous ID with no key, as before.
 
@@ -70,5 +70,5 @@ Store listing text, permission justifications and the privacy policy draft are i
 
 1. Bump the version with `npm version patch --no-git-tag-version` (or `minor`), which also copies it into `static/manifest.json` (`scripts/sync-version.mjs`; `build:store` runs it too, and CI checks the two match). Run `npm run screenshots` so the store images show the new version, and merge to main.
 2. Tag and push: `git tag extension-v0.1.1 && git push origin extension-v0.1.1`.
-3. The **Release extension** workflow checks the tag matches `package.json`, runs the tests, builds `stardust-extension.zip` and attaches it to a GitHub Release.
+3. The **Release extension** workflow checks the tag matches `package.json`, runs the tests, builds `stargrain-extension.zip` and attaches it to a GitHub Release.
 4. Upload that zip in the Chrome Web Store and Edge Add-ons dashboards. Once each store approves it, users update automatically.
