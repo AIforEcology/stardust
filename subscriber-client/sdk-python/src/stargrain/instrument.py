@@ -1,6 +1,6 @@
 """Auto-instrument Anthropic, OpenAI and Google Gen AI clients.
 
-``instrument(client, stardust)`` wraps the client's generation methods in place so
+``instrument(client, stargrain)`` wraps the client's generation methods in place so
 every call is metered, including streaming calls. Wrappers return the vendor's own
 response objects unchanged, and a metering failure never breaks the API call.
 
@@ -13,7 +13,7 @@ Covered:
 - google-genai ``Client``: ``models.generate_content`` / ``generate_content_stream``
   and the ``client.aio`` equivalents
 
-With ``Stardust(otel=...)`` each call also gets an OpenTelemetry GenAI client span that
+With ``Stargrain(otel=...)`` each call also gets an OpenTelemetry GenAI client span that
 starts with the call and ends when the response (or the stream's last chunk) arrives.
 Don't combine that with another GenAI instrumentation of the same client, or each call
 is traced (and metered) twice.
@@ -26,13 +26,13 @@ import inspect
 import logging
 from typing import Any, Callable, Dict, Optional
 
-from .client import Stardust
+from .client import Stargrain
 from .extract import Usage, _get, _int, from_anthropic, from_gemini, from_openai
 from .otel import Call
 
-log = logging.getLogger("stardust_sdk")
+log = logging.getLogger("stargrain")
 
-_INSTRUMENTED = "__stardust_instrumented__"
+_INSTRUMENTED = "__stargrain_instrumented__"
 
 
 # --- stream accumulators ------------------------------------------------------------
@@ -112,7 +112,7 @@ class _StreamProxy:
         try:
             self._acc.feed(event)
         except Exception:  # noqa: BLE001
-            log.exception("Stardust could not read a stream event")
+            log.exception("Stargrain could not read a stream event")
 
     def __iter__(self):
         try:
@@ -168,7 +168,7 @@ class _StreamProxy:
 # --- wrapping -------------------------------------------------------------------------
 
 
-def _wrap(owner: Any, attr: str, stardust: Stardust, provider: str, operation: str, acc_cls: type,
+def _wrap(owner: Any, attr: str, stargrain: Stargrain, provider: str, operation: str, acc_cls: type,
           extractor: Callable[[Any, Optional[str]], Optional[Usage]], region: Optional[str],
           always_stream: bool = False) -> bool:
     original = getattr(owner, attr, None)
@@ -182,7 +182,7 @@ def _wrap(owner: Any, attr: str, stardust: Stardust, provider: str, operation: s
                 return _StreamProxy(result, acc_cls(provider, model), call)
             call.finish(extractor(result, model))
         except Exception:  # noqa: BLE001 - metering must never break the caller
-            log.exception("Stardust metering failed")
+            log.exception("Stargrain metering failed")
             call.finish(None)
         return result
 
@@ -190,7 +190,7 @@ def _wrap(owner: Any, attr: str, stardust: Stardust, provider: str, operation: s
     # (behind decorators) that return an awaitable.
     @functools.wraps(original)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        call = stardust.start_call(provider, operation, kwargs.get("model"), region)
+        call = stargrain.start_call(provider, operation, kwargs.get("model"), region)
         try:
             result = original(*args, **kwargs)
         except BaseException as e:
@@ -220,34 +220,34 @@ def _path(obj: Any, *names: str) -> Any:
     return obj
 
 
-def instrument(client: Any, stardust: Stardust, *, region: Optional[str] = None) -> Any:
+def instrument(client: Any, stargrain: Stargrain, *, region: Optional[str] = None) -> Any:
     """Meter every generation call made through ``client``. Returns the same client.
 
     ``region`` is the processing region (e.g. ``us-east-1`` for Bedrock); it overrides the
-    Stardust client's default for this client only.
+    Stargrain client's default for this client only.
     """
     module = type(client).__module__ or ""
     wrapped = 0
 
     if module.startswith("anthropic"):
-        wrapped += _wrap(_path(client, "messages"), "create", stardust, "anthropic", "chat", _AnthropicAcc,
+        wrapped += _wrap(_path(client, "messages"), "create", stargrain, "anthropic", "chat", _AnthropicAcc,
                          from_anthropic, region)
     elif module.startswith("openai"):
-        wrapped += _wrap(_path(client, "chat", "completions"), "create", stardust, "openai", "chat", _OpenAIAcc,
+        wrapped += _wrap(_path(client, "chat", "completions"), "create", stargrain, "openai", "chat", _OpenAIAcc,
                          from_openai, region)
-        wrapped += _wrap(_path(client, "responses"), "create", stardust, "openai", "chat", _OpenAIAcc,
+        wrapped += _wrap(_path(client, "responses"), "create", stargrain, "openai", "chat", _OpenAIAcc,
                          from_openai, region)
     elif module.startswith("google"):
         for models in (_path(client, "models"), _path(client, "aio", "models")):
             if models is None:
                 continue
-            wrapped += _wrap(models, "generate_content", stardust, "google", "generate_content", _GeminiAcc,
+            wrapped += _wrap(models, "generate_content", stargrain, "google", "generate_content", _GeminiAcc,
                              from_gemini, region)
-            wrapped += _wrap(models, "generate_content_stream", stardust, "google", "generate_content", _GeminiAcc,
+            wrapped += _wrap(models, "generate_content_stream", stargrain, "google", "generate_content", _GeminiAcc,
                              from_gemini, region, always_stream=True)
     else:
-        raise TypeError(f"Stardust can't instrument {type(client).__name__} from {module!r}")
+        raise TypeError(f"Stargrain can't instrument {type(client).__name__} from {module!r}")
 
     if not wrapped:
-        log.info("Stardust: nothing new to instrument on %s", type(client).__name__)
+        log.info("Stargrain: nothing new to instrument on %s", type(client).__name__)
     return client

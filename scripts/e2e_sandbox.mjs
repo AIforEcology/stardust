@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// End-to-end check of the JavaScript SDK against a Stardust Core, with a sandbox key.
+// End-to-end check of the JavaScript SDK against a Core, with a sandbox key.
 //
-//   STARDUST_API_KEY=sdk_... node scripts/e2e_sandbox.mjs    # STARDUST_API_BASE defaults to hosted Core
+//   STARGRAIN_API_KEY=sdk_... node scripts/e2e_sandbox.mjs    # STARGRAIN_API_BASE defaults to hosted Core
 //
 // The same steps as scripts/e2e_sandbox.py: 3 metered events from recorded fake usage, the summary goes up,
 // then a sandbox quote, order and status poll, checking "sandbox": true on each. Refuses a live key.
 // Uses the SDK built in this repository (cd subscriber-client/sdk-js && npm ci && npm run build).
 
-import { Stardust, StardustError } from "../subscriber-client/sdk-js/dist/index.js";
+import { Stargrain, StargrainError } from "../subscriber-client/sdk-js/dist/index.js";
 
 const ANTHROPIC_MESSAGE = { type: "message", model: "claude-sonnet-4-5", role: "assistant",
   usage: { input_tokens: 1200, output_tokens: 350, cache_read_input_tokens: 0 } };
@@ -20,13 +20,13 @@ function check(ok, what) {
 }
 
 async function main() {
-  if (!process.env.STARDUST_API_KEY) {
-    console.log("Set STARDUST_API_KEY to a sandbox key (and STARDUST_API_BASE for a Core other than the hosted one).");
+  if (!process.env.STARGRAIN_API_KEY) {
+    console.log("Set STARGRAIN_API_KEY to a sandbox key (and STARGRAIN_API_BASE for a Core other than the hosted one).");
     return 2;
   }
   const accepted = [];
-  const sd = new Stardust({ region: "us-east-1", onResult: (r) => accepted.push(r) });
-  console.log(`Stardust Core: ${sd.apiBase} (JavaScript SDK)`);
+  const sd = new Stargrain({ region: "us-east-1", onResult: (r) => accepted.push(r) });
+  console.log(`Core: ${sd.apiBase} (JavaScript SDK)`);
 
   const before = await sd.summary();
   if (before.sandbox !== true) {
@@ -72,6 +72,6 @@ async function main() {
 }
 
 main().then((code) => process.exit(code), (e) => {
-  console.log(`  FAIL  ${e instanceof StardustError ? e.message : e}`);
+  console.log(`  FAIL  ${e instanceof StargrainError ? e.message : e}`);
   process.exit(1);
 });

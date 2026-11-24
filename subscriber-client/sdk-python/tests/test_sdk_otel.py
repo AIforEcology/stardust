@@ -9,7 +9,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import SpanKind, StatusCode
 
 from conftest import FakeCore
-from stardust_sdk import Stardust, instrument
+from stargrain import Stargrain, instrument
 from test_instrument import AHTTP, ANTHROPIC_MESSAGE, ANTHROPIC_STREAM, ARGS, anthropic_client
 
 # Same namespace Core uses (stardust_core.otel.EVENT_ID_NAMESPACE).
@@ -31,7 +31,7 @@ def ids(span):
 def test_genai_span_per_call_and_linked_direct_event(spans):
     provider, exporter = spans
     core = FakeCore()
-    sd = Stardust("http://core.test", region="us-east-1", transport=core, otel=provider,
+    sd = Stargrain("http://core.test", region="us-east-1", transport=core, otel=provider,
                   org_id="0b5f6f0e-8a52-4a8e-9f0b-7c1d2e3f4a5b")
     client = instrument(anthropic_client(), sd)
     client.messages.create(**ARGS)
@@ -60,7 +60,7 @@ def test_genai_span_per_call_and_linked_direct_event(spans):
 
 def test_span_covers_the_whole_stream(spans):
     provider, exporter = spans
-    sd = Stardust(None, otel=provider)  # OTel only: nothing sent directly
+    sd = Stargrain(None, otel=provider)  # OTel only: nothing sent directly
     client = instrument(anthropic_client(), sd)
     with client.messages.create(**ARGS, stream=True) as stream:
         it = iter(stream)
@@ -75,7 +75,7 @@ def test_span_covers_the_whole_stream(spans):
 def test_api_error_marks_span_and_records_nothing(spans):
     provider, exporter = spans
     core = FakeCore()
-    sd = Stardust("http://core.test", transport=core, otel=provider)
+    sd = Stargrain("http://core.test", transport=core, otel=provider)
 
     def failing(request):
         return AHTTP.Response(500, json={"type": "error", "error": {"type": "api_error", "message": "down"}})
@@ -95,7 +95,7 @@ def test_api_error_marks_span_and_records_nothing(spans):
 
 def test_async_calls_get_spans(spans):
     provider, exporter = spans
-    sd = Stardust(None, otel=provider)
+    sd = Stargrain(None, otel=provider)
     client = instrument(anthropic_client(async_=True), sd)
 
     async def go():
@@ -110,7 +110,7 @@ def test_async_calls_get_spans(spans):
 
 def test_manual_record_emits_span_with_semconv_provider(spans):
     provider, exporter = spans
-    sd = Stardust(None, otel=provider)
+    sd = Stargrain(None, otel=provider)
     sd.record("google", "gemini-2.5-flash", 100, 10)
     [span] = exporter.get_finished_spans()
     assert span.name == "generate_content gemini-2.5-flash"
@@ -119,7 +119,7 @@ def test_manual_record_emits_span_with_semconv_provider(spans):
 
 def test_spans_are_children_of_the_active_span(spans):
     provider, exporter = spans
-    sd = Stardust(None, otel=provider)
+    sd = Stargrain(None, otel=provider)
     client = instrument(anthropic_client(), sd)
     with provider.get_tracer("app").start_as_current_span("handle request") as parent:
         client.messages.create(**ARGS)
@@ -129,11 +129,11 @@ def test_spans_are_children_of_the_active_span(spans):
 
 def test_otel_needs_a_destination():
     with pytest.raises(ValueError):
-        Stardust(None)
+        Stargrain(None)
 
 
 def test_disabled_emits_no_spans(spans):
     provider, exporter = spans
-    sd = Stardust(None, otel=provider, enabled=False)
+    sd = Stargrain(None, otel=provider, enabled=False)
     instrument(anthropic_client(), sd).messages.create(**ARGS)
     assert exporter.get_finished_spans() == ()

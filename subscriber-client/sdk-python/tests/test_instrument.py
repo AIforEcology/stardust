@@ -7,7 +7,7 @@ import openai
 import openai._base_client
 import pytest
 
-from stardust_sdk import instrument
+from stargrain import instrument
 
 
 def _http_module(base_client):
@@ -67,27 +67,27 @@ def anthropic_client(async_=False):
 ARGS = dict(model="claude-sonnet-5", max_tokens=10, messages=[{"role": "user", "content": "hi"}])
 
 
-def test_anthropic_sync(stardust, core):
-    client = instrument(anthropic_client(), stardust)
+def test_anthropic_sync(stargrain, core):
+    client = instrument(anthropic_client(), stargrain)
     msg = client.messages.create(**ARGS)
     assert isinstance(msg, anthropic.types.Message)  # the vendor object comes back untouched
-    assert stardust.flush(2)
+    assert stargrain.flush(2)
     [e] = core.events
     assert (e["provider"], e["model"], e["tokens_in"], e["tokens_out"], e["tokens_cached_in"]) == ("anthropic", "claude-sonnet-5", 400, 20, 300)
 
 
-def test_anthropic_stream(stardust, core):
-    client = instrument(anthropic_client(), stardust)
+def test_anthropic_stream(stargrain, core):
+    client = instrument(anthropic_client(), stargrain)
     with client.messages.create(**ARGS, stream=True) as stream:
         kinds = [event.type for event in stream]
     assert kinds[0] == "message_start" and kinds[-1] == "message_stop"
-    assert stardust.flush(2)
+    assert stargrain.flush(2)
     [e] = core.events
     assert (e["tokens_in"], e["tokens_out"], e["tokens_cached_in"]) == (400, 42, 300)
 
 
-def test_anthropic_async_and_async_stream(stardust, core):
-    client = instrument(anthropic_client(async_=True), stardust)
+def test_anthropic_async_and_async_stream(stargrain, core):
+    client = instrument(anthropic_client(async_=True), stargrain)
 
     async def go():
         await client.messages.create(**ARGS)
@@ -96,19 +96,19 @@ def test_anthropic_async_and_async_stream(stardust, core):
             pass
 
     asyncio.run(go())
-    assert stardust.flush(2)
+    assert stargrain.flush(2)
     assert [e["tokens_out"] for e in core.events] == [20, 42]
 
 
-def test_instrument_is_idempotent(stardust, core):
+def test_instrument_is_idempotent(stargrain, core):
     client = anthropic_client()
-    instrument(instrument(client, stardust), stardust)
+    instrument(instrument(client, stargrain), stargrain)
     client.messages.create(**ARGS)
-    assert stardust.flush(2)
+    assert stargrain.flush(2)
     assert len(core.events) == 1
 
 
-def test_openai_chat_and_stream(stardust, core):
+def test_openai_chat_and_stream(stargrain, core):
     chat = {
         "id": "c1", "object": "chat.completion", "created": 1, "model": "gpt-4o-2024-08-06",
         "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
@@ -121,31 +121,31 @@ def test_openai_chat_and_stream(stardust, core):
         "[DONE]",
     ], named=False)
     transport = OHTTP.MockTransport(handler_for(OHTTP, chat, stream))
-    client = instrument(openai.OpenAI(api_key="test", http_client=OHTTP.Client(transport=transport)), stardust, region="eastus")
+    client = instrument(openai.OpenAI(api_key="test", http_client=OHTTP.Client(transport=transport)), stargrain, region="eastus")
 
     msgs = [{"role": "user", "content": "hi"}]
     client.chat.completions.create(model="gpt-4o", messages=msgs)
     for _ in client.chat.completions.create(model="gpt-4o", messages=msgs, stream=True, stream_options={"include_usage": True}):
         pass
 
-    assert stardust.flush(2)
+    assert stargrain.flush(2)
     first, second = core.events
     assert (first["tokens_in"], first["tokens_out"], first["tokens_cached_in"], first["region"]) == (1000, 50, 600, "eastus")
     assert (second["tokens_in"], second["tokens_out"]) == (10, 5)
 
 
-def test_openai_stream_without_usage_records_nothing(stardust, core):
+def test_openai_stream_without_usage_records_nothing(stargrain, core):
     chunk = {"id": "c1", "object": "chat.completion.chunk", "created": 1, "model": "gpt-4o",
              "choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": "stop"}]}
     transport = OHTTP.MockTransport(handler_for(OHTTP, None, sse([chunk, "[DONE]"], named=False)))
-    client = instrument(openai.OpenAI(api_key="test", http_client=OHTTP.Client(transport=transport)), stardust)
+    client = instrument(openai.OpenAI(api_key="test", http_client=OHTTP.Client(transport=transport)), stargrain)
     for _ in client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}], stream=True):
         pass
-    assert stardust.flush(2)
+    assert stargrain.flush(2)
     assert core.events == []
 
 
-def test_gemini_sync_async_and_streams(stardust, core):
+def test_gemini_sync_async_and_streams(stargrain, core):
     import google.genai.types as gt
 
     def response(prompt, out):
@@ -178,7 +178,7 @@ def test_gemini_sync_async_and_streams(stardust, core):
     FakeClient = type("Client", (), {"__module__": "google.genai.client"})
     client = FakeClient()
     client.models, client.aio = Models(), Aio()
-    instrument(client, stardust)
+    instrument(client, stargrain)
 
     client.models.generate_content(model="gemini-2.5-flash", contents="hi")
     list(client.models.generate_content_stream(model="gemini-2.5-flash", contents="hi"))
@@ -189,23 +189,23 @@ def test_gemini_sync_async_and_streams(stardust, core):
             pass
 
     asyncio.run(go())
-    assert stardust.flush(2)
+    assert stargrain.flush(2)
     assert [(e["tokens_in"], e["tokens_out"]) for e in core.events] == [(10, 3), (10, 4), (20, 6), (20, 9)]
 
 
-def test_metering_failure_never_breaks_the_call(stardust, core, monkeypatch):
+def test_metering_failure_never_breaks_the_call(stargrain, core, monkeypatch):
     import sys
 
-    inst = sys.modules["stardust_sdk.instrument"]
+    inst = sys.modules["stargrain.instrument"]
 
     def boom(*a, **k):
         raise RuntimeError("extractor bug")
 
     monkeypatch.setattr(inst, "from_anthropic", boom)
-    client = instrument(anthropic_client(), stardust)
+    client = instrument(anthropic_client(), stargrain)
     assert client.messages.create(**ARGS).id == "msg_1"
 
 
-def test_unknown_client_rejected(stardust):
+def test_unknown_client_rejected(stargrain):
     with pytest.raises(TypeError):
-        instrument(object(), stardust)
+        instrument(object(), stargrain)

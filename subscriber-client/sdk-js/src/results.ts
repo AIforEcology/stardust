@@ -2,12 +2,12 @@
 // Core may add fields later; they come through untyped.
 
 /** A user-initiated call to Core failed. `status` is the HTTP status (0: Core unreachable). */
-export class StardustError extends Error {
+export class StargrainError extends Error {
   readonly status: number;
   readonly reason?: string;
   constructor(status: number, message: string, reason?: string) {
-    super(`Stardust Core: ${message}${status ? ` (HTTP ${status})` : ""}`);
-    this.name = "StardustError";
+    super(`Core: ${message}${status ? ` (HTTP ${status})` : ""}`);
+    this.name = "StargrainError";
     this.status = status;
     this.reason = reason;
   }
