@@ -1,6 +1,6 @@
-import { Stardust } from "../src/client.ts";
+import { Stargrain } from "../src/client.ts";
 
-/** Fake Stardust Core. `script` holds statuses (or "down") consumed in order; default 200. */
+/** Fake Core. `script` holds statuses (or "down") consumed in order; default 200. */
 export function fakeCore(script: Array<number | "down"> = []) {
   const events: Array<Record<string, unknown>> = [];
   const headers: Array<Record<string, string>> = [];
@@ -20,8 +20,8 @@ export function fakeCore(script: Array<number | "down"> = []) {
   return { events, headers, fetch, get calls() { return calls; } };
 }
 
-export function stardustWith(core: ReturnType<typeof fakeCore>, opts = {}) {
-  return new Stardust({ apiBase: "http://core.test", region: "us-east-1", fetch: core.fetch, ...opts });
+export function stargrainWith(core: ReturnType<typeof fakeCore>, opts = {}) {
+  return new Stargrain({ apiBase: "http://core.test", region: "us-east-1", fetch: core.fetch, ...opts });
 }
 
 export function sse(events: unknown[], named = true): string {

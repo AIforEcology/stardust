@@ -2,33 +2,33 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { inspect } from "node:util";
 
-import { AUTH_WARNING, DEFAULT_API_BASE, Stardust, StardustError } from "../src/index.ts";
-import { fakeCore, stardustWith } from "./helpers.ts";
+import { AUTH_WARNING, DEFAULT_API_BASE, Stargrain, StargrainError } from "../src/index.ts";
+import { fakeCore, stargrainWith } from "./helpers.ts";
 
 const KEY = "sdk_0123456789abcdef_s3cr3t-value-that-must-never-leak";
 const U = { provider: "anthropic" as const, model: "claude-sonnet-5", tokensIn: 100, tokensOut: 20 };
 
+const ENV_NAMES = ["STARGRAIN_API_KEY", "STARGRAIN_API_BASE", "STARDUST_API_KEY", "STARDUST_API_BASE"];
 let saved: Record<string, string | undefined>;
 let warnings: string[];
 const realWarn = console.warn;
 beforeEach(() => {
-  saved = { key: process.env.STARDUST_API_KEY, base: process.env.STARDUST_API_BASE };
-  delete process.env.STARDUST_API_KEY;
-  delete process.env.STARDUST_API_BASE;
+  saved = Object.fromEntries(ENV_NAMES.map((n) => [n, process.env[n]]));
+  for (const n of ENV_NAMES) delete process.env[n];
   warnings = [];
   console.warn = (...args: unknown[]) => void warnings.push(args.map(String).join(" "));
 });
 afterEach(() => {
   console.warn = realWarn;
-  for (const [k, name] of [["key", "STARDUST_API_KEY"], ["base", "STARDUST_API_BASE"]] as const) {
-    if (saved[k] === undefined) delete process.env[name];
-    else process.env[name] = saved[k];
+  for (const n of ENV_NAMES) {
+    if (saved[n] === undefined) delete process.env[n];
+    else process.env[n] = saved[n];
   }
 });
 
 test("sends the key as a bearer header", async () => {
   const core = fakeCore();
-  const sd = stardustWith(core, { apiKey: KEY });
+  const sd = stargrainWith(core, { apiKey: KEY });
   sd.record(U);
   assert.equal(await sd.flush(2000), true);
   assert.equal(core.headers[0].authorization, `Bearer ${KEY}`);
@@ -36,29 +36,43 @@ test("sends the key as a bearer header", async () => {
 
 test("no key, no header", async () => {
   const core = fakeCore();
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   sd.record(U);
   await sd.flush(2000);
   assert.equal("authorization" in core.headers[0], false);
 });
 
 test("key and base fall back to the environment", async () => {
-  process.env.STARDUST_API_KEY = KEY;
+  process.env.STARGRAIN_API_KEY = KEY;
   const core = fakeCore();
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   sd.record(U);
   await sd.flush(2000);
   assert.equal(core.headers[0].authorization, `Bearer ${KEY}`);
 
-  assert.equal(new Stardust({ fetch: core.fetch }).url, `${DEFAULT_API_BASE}/v1/events`);
-  process.env.STARDUST_API_BASE = "http://override.test/";
-  assert.equal(new Stardust({ fetch: core.fetch }).url, "http://override.test/v1/events");
+  assert.equal(new Stargrain({ fetch: core.fetch }).url, `${DEFAULT_API_BASE}/v1/events`);
+  process.env.STARGRAIN_API_BASE = "http://override.test/";
+  assert.equal(new Stargrain({ fetch: core.fetch }).url, "http://override.test/v1/events");
+});
+
+test("the older STARDUST_* environment names still work", async () => {
+  process.env.STARDUST_API_KEY = KEY;
+  process.env.STARDUST_API_BASE = "http://legacy.test";
+  const core = fakeCore();
+  const sd = new Stargrain({ fetch: core.fetch });
+  assert.equal(sd.url, "http://legacy.test/v1/events");
+  sd.record(U);
+  await sd.flush(2000);
+  assert.equal(core.headers[0].authorization, `Bearer ${KEY}`);
+
+  process.env.STARGRAIN_API_BASE = "http://new.test";
+  assert.equal(new Stargrain({ fetch: core.fetch }).url, "http://new.test/v1/events");
 });
 
 for (const status of [401, 403]) {
   test(`a ${status} warns once and is not retried`, async () => {
     const core = fakeCore([status, status, status]);
-    const sd = stardustWith(core, { apiKey: KEY });
+    const sd = stargrainWith(core, { apiKey: KEY });
     sd.record(U);
     sd.record(U);
     sd.record(U);
@@ -72,7 +86,7 @@ for (const status of [401, 403]) {
 
 test("network errors and 5xx still retry", async () => {
   const core = fakeCore(["down", 503, 200]);
-  const sd = stardustWith(core, { apiKey: KEY });
+  const sd = stargrainWith(core, { apiKey: KEY });
   sd.record(U);
   assert.equal(await sd.flush(5000), true);
   assert.equal(core.calls, 3);
@@ -81,7 +95,7 @@ test("network errors and 5xx still retry", async () => {
 
 test("the key never shows up in logs, inspect, JSON or errors", async () => {
   const core = fakeCore([401, 422, "down", 200]);
-  const sd = stardustWith(core, { apiKey: KEY });
+  const sd = stargrainWith(core, { apiKey: KEY });
   sd.record(U);
   sd.record(U);
   sd.record(U);
@@ -91,9 +105,9 @@ test("the key never shows up in logs, inspect, JSON or errors", async () => {
   assert.ok(!JSON.stringify(sd).includes(KEY));
 
   const unauthorized = (async () => new Response('{"detail":"invalid API key","reason":"unauthorized"}', { status: 401 })) as unknown as typeof fetch;
-  const sd2 = new Stardust({ apiBase: "http://core.test", apiKey: KEY, fetch: unauthorized });
+  const sd2 = new Stargrain({ apiBase: "http://core.test", apiKey: KEY, fetch: unauthorized });
   await assert.rejects(sd2.summary(), (e: unknown) => {
-    assert.ok(e instanceof StardustError);
+    assert.ok(e instanceof StargrainError);
     assert.equal(e.status, 401);
     assert.equal(e.reason, "unauthorized");
     assert.ok(!String(e).includes(KEY) && !inspect(e).includes(KEY));
@@ -120,7 +134,7 @@ function fakeApi(routes: Record<string, [number, unknown]>) {
     const [status, payload] = routes[`${req.method} ${req.path}`] ?? [404, { detail: "no route" }];
     return new Response(JSON.stringify(payload), { status });
   }) as unknown as typeof globalThis.fetch;
-  return { requests, sd: new Stardust({ apiBase: "http://core.test", apiKey: KEY, fetch }) };
+  return { requests, sd: new Stargrain({ apiBase: "http://core.test", apiKey: KEY, fetch }) };
 }
 
 const QUOTE = {
@@ -169,11 +183,11 @@ test("requestQuote, submitOrder and orderStatus", async () => {
 
 test("helper errors reject", async () => {
   const { sd } = fakeApi({ "POST /v1/remediation/orders": [400, { detail: "unknown or already-used quote" }] });
-  await assert.rejects(sd.submitOrder("q"), (e: unknown) => e instanceof StardustError && e.status === 400 && /already-used/.test(e.message));
-  await assert.rejects(sd.orderStatus("nope"), (e: unknown) => e instanceof StardustError && e.status === 404);
+  await assert.rejects(sd.submitOrder("q"), (e: unknown) => e instanceof StargrainError && e.status === 400 && /already-used/.test(e.message));
+  await assert.rejects(sd.orderStatus("nope"), (e: unknown) => e instanceof StargrainError && e.status === 404);
 
   const down = (async () => {
     throw new TypeError("fetch failed");
   }) as unknown as typeof fetch;
-  await assert.rejects(new Stardust({ apiBase: "http://core.test", fetch: down }).summary(), (e: unknown) => e instanceof StardustError && e.status === 0);
+  await assert.rejects(new Stargrain({ apiBase: "http://core.test", fetch: down }).summary(), (e: unknown) => e instanceof StargrainError && e.status === 0);
 });

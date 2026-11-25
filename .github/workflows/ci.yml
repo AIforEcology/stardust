@@ -13,7 +13,7 @@ jobs:
   python:
     # Pinned: ubuntu-latest is now Ubuntu 26.04, which setup-python has no Python 3.9 build for.
     # Core, providers-service and intel still support 3.9, so test them on 24.04 until that's dropped.
-    # The SDK (aifore-stardust) needs 3.10+, so it's tested on 3.10 (its floor) and 3.12, not 3.9.
+    # The SDK (aifore-stargrain) needs 3.10+, so it's tested on 3.10 (its floor) and 3.12, not 3.9.
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false

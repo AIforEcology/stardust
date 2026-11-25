@@ -1,4 +1,4 @@
-"""Stardust client: queues usage events and sends them to Stardust Core in the background.
+"""Stargrain client: queues usage events and sends them to Core in the background.
 
 Recording never blocks or raises in the caller's code path (spec §15: no perceptible
 latency; never a blocked user action). Events are buffered in memory and retried with
@@ -23,12 +23,12 @@ from urllib.parse import quote as _quote, urlencode
 
 from .extract import Usage, extract
 from .otel import DEFAULT_OPERATION, Call, OtelEmitter, event_id_for_span
-from .results import DailySummary, Order, Quote, StardustError, Summary
+from .results import DailySummary, Order, Quote, StargrainError, Summary
 
-log = logging.getLogger("stardust_sdk")
+log = logging.getLogger("stargrain")
 
 DEFAULT_API_BASE = "https://core.aifore.org"
-AUTH_WARNING = "Stardust: API key missing or invalid; events are being dropped"
+AUTH_WARNING = "Stargrain: API key missing or invalid; events are being dropped"
 
 # (method, url, body or None, timeout, headers) -> (status, response body)
 Transport = Callable[[str, str, Optional[bytes], float, Dict[str, str]], Tuple[int, bytes]]
@@ -78,14 +78,15 @@ def _iso(value: TimeArg) -> Optional[str]:
     return value.isoformat()
 
 
-class Stardust:
-    """Report AI usage to Stardust Core.
+class Stargrain:
+    """Report AI usage to Core.
 
-    >>> stardust = Stardust(region="us-east-1")             # hosted Core, key from STARDUST_API_KEY
-    >>> stardust.record_response(anthropic_message)       # or instrument(client, stardust)
+    >>> stargrain = Stargrain(region="us-east-1")             # hosted Core, key from STARGRAIN_API_KEY
+    >>> stargrain.record_response(anthropic_message)       # or instrument(client, stargrain)
 
-    ``api_base`` defaults to ``STARDUST_API_BASE``, else https://core.aifore.org. ``api_key``
-    defaults to ``STARDUST_API_KEY`` and is sent as ``Authorization: Bearer <key>``.
+    ``api_base`` defaults to ``STARGRAIN_API_BASE``, else https://core.aifore.org. ``api_key``
+    defaults to ``STARGRAIN_API_KEY`` and is sent as ``Authorization: Bearer <key>``.
+    The older ``STARDUST_API_BASE`` and ``STARDUST_API_KEY`` names are still read as fallbacks.
 
     ``otel=True`` (or a TracerProvider) also emits an OpenTelemetry GenAI span per call.
     ``api_base=None`` with ``otel=True`` sends nothing directly: spans travel through
@@ -112,13 +113,13 @@ class Stardust:
         otel: Any = False,
     ):
         if api_base is _UNSET:
-            api_base = os.environ.get("STARDUST_API_BASE") or DEFAULT_API_BASE
+            api_base = os.environ.get("STARGRAIN_API_BASE") or os.environ.get("STARDUST_API_BASE") or DEFAULT_API_BASE
         if api_base is None and not otel:
-            raise ValueError("Stardust needs api_base, otel, or both")
+            raise ValueError("Stargrain needs api_base, otel, or both")
         self.api_base: Optional[str] = api_base.rstrip("/") if api_base else None
         self.url = self.api_base + "/v1/events" if self.api_base else None
         # Kept private and out of repr, logs and exceptions.
-        key = api_key or os.environ.get("STARDUST_API_KEY") or None
+        key = api_key or os.environ.get("STARGRAIN_API_KEY") or os.environ.get("STARDUST_API_KEY") or None
         self.__api_key: Optional[_Secret] = _Secret(key) if key else None
         self._auth_warned = False
         self._otel: Optional[OtelEmitter] = None
@@ -137,12 +138,12 @@ class Stardust:
         self._flushing = 0
         self.dropped = 0
         if self.url:
-            self._worker = threading.Thread(target=self._run, name="stardust-sdk", daemon=True)
+            self._worker = threading.Thread(target=self._run, name="stargrain-sdk", daemon=True)
             self._worker.start()
             atexit.register(self.close, 2.0)
 
     def __repr__(self) -> str:
-        return (f"Stardust(api_base={self.api_base!r}, api_key={'set' if self.__api_key else 'unset'}, "
+        return (f"Stargrain(api_base={self.api_base!r}, api_key={'set' if self.__api_key else 'unset'}, "
                 f"region={self.region!r}, enabled={self.enabled!r})")
 
     @property
@@ -189,7 +190,7 @@ class Stardust:
                 self.record_usage(usage, region=region)
             return usage
         except Exception:  # noqa: BLE001 - metering must never break the caller
-            log.exception("Stardust could not read usage from a response")
+            log.exception("Stargrain could not read usage from a response")
             return None
 
     def start_call(self, provider: str, operation: str, model: Optional[str], region: Optional[str] = None) -> Call:
@@ -236,7 +237,7 @@ class Stardust:
         with self._cond:
             if len(self._buffer) == self._buffer.maxlen:
                 self.dropped += 1  # deque drops the oldest
-                log.warning("Stardust buffer full; dropping the oldest event")
+                log.warning("Stargrain buffer full; dropping the oldest event")
             self._buffer.append(event)
             self._cond.notify()
 
@@ -266,7 +267,7 @@ class Stardust:
             self._closed = True
             self._cond.notify_all()
         if self._buffer:
-            log.warning("Stardust closed with %d unsent events", len(self._buffer))
+            log.warning("Stargrain closed with %d unsent events", len(self._buffer))
 
     # --- worker ------------------------------------------------------------------
 
@@ -301,14 +302,14 @@ class Stardust:
             status, body = self._transport("POST", self.url, json.dumps(event).encode(), self.timeout,
                                            self._headers(True))
         except (OSError, urllib.error.URLError) as e:
-            log.debug("Stardust Core unreachable (%s); will retry", type(e).__name__)
+            log.debug("Core unreachable (%s); will retry", type(e).__name__)
             return False, True
         if 200 <= status < 300:
             if self.on_result:
                 try:
                     self.on_result(json.loads(body))
                 except Exception:  # noqa: BLE001
-                    log.exception("Stardust on_result callback failed")
+                    log.exception("Stargrain on_result callback failed")
             return True, False
         if status >= 500 or status == 429:
             return False, True
@@ -320,15 +321,15 @@ class Stardust:
                 log.warning(AUTH_WARNING)
             return False, False
         # 4xx: the event itself is bad; retrying won't help.
-        log.warning("Stardust Core rejected an event (%s): %s", status, body[:500])
+        log.warning("Core rejected an event (%s): %s", status, body[:500])
         return False, False
 
-    # --- reading results and remediation (user-initiated: these raise StardustError) ----------
+    # --- reading results and remediation (user-initiated: these raise StargrainError) ----------
 
     def _request(self, method: str, path: str, body: Optional[Dict[str, Any]] = None,
                  query: Optional[Dict[str, Any]] = None) -> Any:
         if not self.api_base:
-            raise StardustError(0, "this Stardust client has no api_base, so it can't call Core")
+            raise StargrainError(0, "this Stargrain client has no api_base, so it can't call Core")
         url = self.api_base + path
         q = {k: v for k, v in (query or {}).items() if v is not None}
         if q:
@@ -337,7 +338,7 @@ class Stardust:
         try:
             status, raw = self._transport(method, url, data, self.timeout, self._headers(data is not None))
         except (OSError, urllib.error.URLError) as e:
-            raise StardustError(0, f"could not reach Stardust Core at {self.api_base} ({type(e).__name__})") from None
+            raise StargrainError(0, f"could not reach Core at {self.api_base} ({type(e).__name__})") from None
         try:
             payload = json.loads(raw) if raw else None
         except ValueError:
@@ -347,7 +348,7 @@ class Stardust:
             reason = payload.get("reason") if isinstance(payload, dict) else None
             if status == 401 and not detail:
                 detail = "API key missing or invalid"
-            raise StardustError(status, str(detail or raw[:200].decode("utf-8", "replace") or f"HTTP {status}"),
+            raise StargrainError(status, str(detail or raw[:200].decode("utf-8", "replace") or f"HTTP {status}"),
                                 reason)
         return payload
 

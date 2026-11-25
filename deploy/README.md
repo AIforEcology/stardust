@@ -196,7 +196,7 @@ docker compose exec core sh -c 'curl -s -X POST -H "X-Stardust-Admin-Token: $STA
   localhost:8080/v1/admin/keys'
 ```
 
-Each developer gets their own organization id, so they only see their own test data. Live keys are issued the same way without `"sandbox": true`, per subscriber, once they're ready. Check a deploy end to end with a sandbox key: `STARDUST_API_KEY=sdk_… python3 scripts/e2e_sandbox.py` (see [`docs/developers.md`](../docs/developers.md)).
+Each developer gets their own organization id, so they only see their own test data. Live keys are issued the same way without `"sandbox": true`, per subscriber, once they're ready. Check a deploy end to end with a sandbox key: `STARGRAIN_API_KEY=sdk_… python3 scripts/e2e_sandbox.py` (see [`docs/developers.md`](../docs/developers.md)).
 
 ## Backups
 

@@ -3,11 +3,11 @@ import threading
 
 import pytest
 
-from stardust_sdk import Stardust
+from stargrain import Stargrain
 
 
 class FakeCore:
-    """Stands in for Stardust Core's /v1/events. ``script`` is a list of statuses or exceptions."""
+    """Stands in for Core's /v1/events. ``script`` is a list of statuses or exceptions."""
 
     def __init__(self, script=None):
         self.script = list(script or [])
@@ -36,8 +36,8 @@ def core():
 
 
 @pytest.fixture
-def stardust(core):
-    sd = Stardust("http://core.test", region="us-east-1", transport=core)
+def stargrain(core):
+    sd = Stargrain("http://core.test", region="us-east-1", transport=core)
     yield sd
     sd.close(1)
 

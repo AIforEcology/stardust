@@ -3,10 +3,10 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# Distribution name on PyPI. The import name stays `stardust_sdk`, so existing code doesn't change.
-name = "aifore-stardust"
+# Distribution name on PyPI. The import name stays `stargrain`, so existing code doesn't change.
+name = "aifore-stargrain"
 version = "0.2.0"
-description = "Stardust SDK by AIforE: meter Anthropic, OpenAI and Gemini API usage (measured tokens), see its cost, energy, CO2e and water, and request remediation, via Stardust Core."
+description = "Stargrain SDK by AIforE: meter Anthropic, OpenAI and Gemini API usage (measured tokens), see its cost, energy, CO2e and water, and request remediation, via Core."
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "AI for Ecology (AIforE)" }]
@@ -32,7 +32,7 @@ Documentation = "https://github.com/AIforEcology/stardust/blob/main/docs/develop
 Changelog = "https://github.com/AIforEcology/stardust/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-# Emit OpenTelemetry GenAI spans: Stardust(otel=True)
+# Emit OpenTelemetry GenAI spans: Stargrain(otel=True)
 otel = ["opentelemetry-api>=1.20"]
 # Only needed to run the tests against the real vendor response types.
 dev = ["build>=1.2", "pytest>=8", "anthropic>=0.40", "openai>=1.50", "google-genai>=1.0", "opentelemetry-sdk>=1.20"]
@@ -41,7 +41,7 @@ dev = ["build>=1.2", "pytest>=8", "anthropic>=0.40", "openai>=1.50", "google-gen
 where = ["src"]
 
 [tool.setuptools.package-data]
-stardust_sdk = ["py.typed"]
+stargrain = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
