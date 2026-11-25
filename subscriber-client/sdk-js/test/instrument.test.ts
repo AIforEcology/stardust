@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 
 import { instrument } from "../src/instrument.ts";
-import { fakeCore, sse, stardustWith, vendorFetch } from "./helpers.ts";
+import { fakeCore, sse, stargrainWith, vendorFetch } from "./helpers.ts";
 
 const MESSAGE = {
   id: "msg_1", type: "message", role: "assistant", model: "claude-sonnet-5",
@@ -26,7 +26,7 @@ const anthropic = () => new Anthropic({ apiKey: "test", fetch: vendorFetch(MESSA
 
 test("anthropic create, stream and promise extras", async () => {
   const core = fakeCore();
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   const client = instrument(anthropic(), sd);
 
   const msg = await client.messages.create(ARGS);
@@ -59,7 +59,7 @@ test("API errors reach the caller and never become unhandled rejections", async 
         status: 500, headers: { "content-type": "application/json" },
       })) as unknown as typeof globalThis.fetch;
     const core = fakeCore();
-    const sd = stardustWith(core);
+    const sd = stargrainWith(core);
     const client = instrument(new Anthropic({ apiKey: "test", fetch: failing, maxRetries: 0 }), sd);
 
     await assert.rejects(client.messages.create(ARGS), Anthropic.InternalServerError);
@@ -74,7 +74,7 @@ test("API errors reach the caller and never become unhandled rejections", async 
 
 test("instrumenting twice meters once", async () => {
   const core = fakeCore();
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   const client = instrument(instrument(anthropic(), sd), sd);
   await client.messages.create(ARGS);
   await sd.flush(2000);
@@ -94,7 +94,7 @@ test("openai chat, stream with include_usage, and region override", async () => 
     "[DONE]",
   ], false);
   const core = fakeCore();
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   const client = instrument(new OpenAI({ apiKey: "test", fetch: vendorFetch(chat, stream), maxRetries: 0 }), sd, { region: "eastus" });
 
   const messages = [{ role: "user" as const, content: "hi" }];
@@ -123,7 +123,7 @@ test("gemini generateContent and generateContentStream", async () => {
     },
   };
   const core = fakeCore();
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   instrument(client, sd);
   await client.models.generateContent({ model: "gemini-2.5-flash" });
   for await (const _ of await client.models.generateContentStream({ model: "gemini-2.5-flash" })) {
@@ -134,6 +134,6 @@ test("gemini generateContent and generateContentStream", async () => {
 });
 
 test("unknown client is rejected", () => {
-  const sd = stardustWith(fakeCore());
+  const sd = stargrainWith(fakeCore());
   assert.throws(() => instrument({}, sd), TypeError);
 });

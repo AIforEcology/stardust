@@ -1,9 +1,9 @@
-# Stardust for developers
+# Stargrain SDKs for developers
 
-Stardust meters your app's AI usage and tells you what it cost and what it cost the planet: electricity, CO₂e and water, summed up as a short indicator code such as `B2-S`. It can also route the CO₂e to vetted carbon-removal providers. You add the SDK, point it at the hosted service at `https://core.aifore.org` with an API key, and keep your own LLM calls exactly as they are.
+The Stargrain SDKs (part of the Omnigauge Suite) meter your app's AI usage and tells you what it cost and what it cost the planet: electricity, CO₂e and water, summed up as a short indicator code such as `B2-S`. It can also route the CO₂e to vetted carbon-removal providers. You add the SDK, point it at the hosted service at `https://core.aifore.org` with an API key, and keep your own LLM calls exactly as they are.
 
-- **Python 3.10+:** [`aifore-stardust`](https://pypi.org/project/aifore-stardust/) ([README](../subscriber-client/sdk-python/README.md))
-- **JavaScript / TypeScript (Node 18+):** [`@aifore/stardust`](https://www.npmjs.com/package/@aifore/stardust) ([README](../subscriber-client/sdk-js/README.md))
+- **Python 3.10+:** [`aifore-stargrain`](https://pypi.org/project/aifore-stargrain/) ([README](../subscriber-client/sdk-python/README.md))
+- **JavaScript / TypeScript (Node 18+):** [`@aifore/stargrain`](https://www.npmjs.com/package/@aifore/stargrain) ([README](../subscriber-client/sdk-js/README.md))
 
 ## 1. Get a key
 
@@ -23,43 +23,43 @@ Keys carry scopes. A developer key normally has `ingest.write` (send usage), `re
 ## 2. Install, set the key, instrument your client
 
 ```bash
-pip install aifore-stardust          # or: npm i @aifore/stardust
-export STARDUST_API_KEY=sdk_...      # your key
+pip install aifore-stargrain          # or: npm i @aifore/stargrain
+export STARGRAIN_API_KEY=sdk_...      # your key
 ```
 
 ```python
 import anthropic
-from stardust_sdk import Stardust, instrument
+from stargrain import Stargrain, instrument
 
-stardust = Stardust(region="us-east-1")              # https://core.aifore.org, key from STARDUST_API_KEY
-client = instrument(anthropic.Anthropic(), stardust)  # OpenAI and Gemini clients work the same way
+stargrain = Stargrain(region="us-east-1")              # https://core.aifore.org, key from STARGRAIN_API_KEY
+client = instrument(anthropic.Anthropic(), stargrain)  # OpenAI and Gemini clients work the same way
 client.messages.create(model="claude-sonnet-5", max_tokens=1024, messages=[...])  # metered
 ```
 
 ```ts
 import Anthropic from "@anthropic-ai/sdk";
-import { Stardust, instrument } from "@aifore/stardust";
+import { Stargrain, instrument } from "@aifore/stargrain";
 
-const stardust = new Stardust({ region: "us-east-1" }); // key from STARDUST_API_KEY
-const client = instrument(new Anthropic(), stardust);
+const stargrain = new Stargrain({ region: "us-east-1" }); // key from STARGRAIN_API_KEY
+const client = instrument(new Anthropic(), stargrain);
 ```
 
-Metering never gets in your way: events are sent from the background, recording never throws, and if Core is unreachable events are buffered and retried. If your key is missing or wrong, the SDK logs one warning ("Stardust: API key missing or invalid; events are being dropped") and carries on without sending.
+Metering never gets in your way: events are sent from the background, recording never throws, and if Core is unreachable events are buffered and retried. If your key is missing or wrong, the SDK logs one warning ("Stargrain: API key missing or invalid; events are being dropped") and carries on without sending.
 
-`STARDUST_API_BASE` overrides the service URL, for example to run against your own Core.
+`STARGRAIN_API_BASE` overrides the service URL, for example to run against your own Core. The older `STARDUST_API_KEY` and `STARDUST_API_BASE` names still work as fallbacks.
 
 ## 3. Read your results
 
 ```python
-s = stardust.summary()              # or summary(since=..., until=...)
+s = stargrain.summary()              # or summary(since=..., until=...)
 print(s.cost_usd, s.energy_wh, s.co2e_g, s.water_ml, s.indicator_code)
-for day in stardust.summary_daily():
+for day in stargrain.summary_daily():
     print(day.day, day.co2e_g)
 ```
 
 ```ts
-const s = await stardust.summary();
-const days = await stardust.summaryDaily({ since: new Date("2026-11-01") });
+const s = await stargrain.summary();
+const days = await stargrain.summaryDaily({ since: new Date("2026-11-01") });
 ```
 
 Totals cover your key's organization (or user). With a sandbox key they cover your sandbox test data only, and the result says `sandbox: true`.
@@ -67,21 +67,21 @@ Totals cover your key's organization (or user). With a sandbox key they cover yo
 ## 4. Remediation (try it with a sandbox key)
 
 ```python
-quotes = stardust.request_quote(co2e_g=s.co2e_g)   # cheapest first
-order = stardust.submit_order(quotes[0])
-status = stardust.order_status(order)
+quotes = stargrain.request_quote(co2e_g=s.co2e_g)   # cheapest first
+order = stargrain.submit_order(quotes[0])
+status = stargrain.order_status(order)
 print(status.fulfillment_status, status.sandbox, status.notice)
 # fulfilled True Sandbox test order: no carbon was removed and no money moved.
 ```
 
 ```ts
-const [quote] = await stardust.requestQuote(s.co2e_g);
-const order = await stardust.submitOrder(quote);
-const status = await stardust.orderStatus(order);
+const [quote] = await stargrain.requestQuote(s.co2e_g);
+const order = await stargrain.submitOrder(quote);
+const status = await stargrain.orderStatus(order);
 ```
 
 - A quote is valid for 15 minutes and can be used once.
-- Unlike metering, these calls are ones you make on purpose, so they raise (`StardustError`) or reject on failure.
+- Unlike metering, these calls are ones you make on purpose, so they raise (`StargrainError`) or reject on failure.
 - Placing a live order with a real provider involves payment (`payment_ref`); talk to AIforE before you go live with remediation.
 
 ### Provider tiers
@@ -129,8 +129,8 @@ There's no per-key rate limit on the hosted service yet; please keep to what you
 [`scripts/e2e_sandbox.py`](../scripts/e2e_sandbox.py) runs the whole flow with both SDKs against any Core: it sends three metered events, checks the summary went up, then quotes, orders and polls a sandbox order to fulfilled, checking `sandbox: true` on the quote, order and certificate.
 
 ```bash
-STARDUST_API_KEY=sdk_... python3 scripts/e2e_sandbox.py          # Python SDK, against https://core.aifore.org
-STARDUST_API_KEY=sdk_... node scripts/e2e_sandbox.mjs            # JavaScript SDK (after npm run build in sdk-js)
+STARGRAIN_API_KEY=sdk_... python3 scripts/e2e_sandbox.py          # Python SDK, against https://core.aifore.org
+STARGRAIN_API_KEY=sdk_... node scripts/e2e_sandbox.mjs            # JavaScript SDK (after npm run build in sdk-js)
 ```
 
 ## More

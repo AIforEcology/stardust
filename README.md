@@ -41,7 +41,7 @@ The purple **subscriber credit path** is a design concept, not yet in the spec: 
 
 ## Status: Phase 1, with SDKs for developers
 
-**SDKs, v0.2 (MVP):** developers can meter their own app's AI usage against hosted Core with an API key, read back cost, energy, CO₂e, water and the indicator code, and try remediation with a sandbox key: `pip install aifore-stardust` or `npm i @aifore/stardust`. Start with the [developer guide](docs/developers.md).
+**SDKs, v0.2 (MVP):** developers can meter their own app's AI usage against hosted Core with an API key, read back cost, energy, CO₂e, water and the indicator code, and try remediation with a sandbox key: `pip install aifore-stargrain` or `npm i @aifore/stargrain`. Start with the [developer guide](docs/developers.md).
 
 The rest is the Phase 1 foundation (§16). The methodology factors are a **draft**, and some are placeholders awaiting review (see [`schema/README.md`](schema/README.md)). Core stores its data in a single SQLite file (see [the database design](docs/architecture/database.md)), and the extension's figures are estimates.
 

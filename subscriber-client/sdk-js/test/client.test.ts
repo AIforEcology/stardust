@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { fakeCore, stardustWith } from "./helpers.ts";
+import { fakeCore, stargrainWith } from "./helpers.ts";
 
 const U = { provider: "anthropic" as const, model: "claude-sonnet-5", tokensIn: 100, tokensOut: 20, tokensCachedIn: 50 };
 
 test("records and sends an event", async () => {
   const core = fakeCore();
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   sd.record(U);
   assert.equal(await sd.flush(2000), true);
   const [e] = core.events;
@@ -20,7 +20,7 @@ test("records and sends an event", async () => {
 
 test("onResult gets the enriched event", async () => {
   const results: unknown[] = [];
-  const sd = stardustWith(fakeCore(), { onResult: (r: unknown) => results.push(r) });
+  const sd = stargrainWith(fakeCore(), { onResult: (r: unknown) => results.push(r) });
   sd.record(U);
   await sd.flush(2000);
   assert.equal((results[0] as { indicator_code: string }).indicator_code, "B2-S");
@@ -28,7 +28,7 @@ test("onResult gets the enriched event", async () => {
 
 test("retries while Core is down, quickly during flush", async () => {
   const core = fakeCore(["down", 503, 200]);
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   sd.record(U);
   const start = Date.now();
   assert.equal(await sd.flush(5000), true);
@@ -39,7 +39,7 @@ test("retries while Core is down, quickly during flush", async () => {
 
 test("rejected events are dropped, not retried", async () => {
   const core = fakeCore([422]);
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   sd.record(U);
   assert.equal(await sd.flush(2000), true);
   assert.equal(core.calls, 1);
@@ -48,7 +48,7 @@ test("rejected events are dropped, not retried", async () => {
 
 test("flush times out while down and keeps the event", async () => {
   const core = fakeCore(Array(1000).fill("down"));
-  const sd = stardustWith(core);
+  const sd = stargrainWith(core);
   sd.record(U);
   assert.equal(await sd.flush(200), false);
   assert.equal(sd.pending, 1);
@@ -57,7 +57,7 @@ test("flush times out while down and keeps the event", async () => {
 
 test("bounded buffer drops the oldest", async () => {
   const core = fakeCore(Array(1000).fill("down"));
-  const sd = stardustWith(core, { maxBuffer: 3 });
+  const sd = stargrainWith(core, { maxBuffer: 3 });
   for (let i = 0; i < 6; i++) sd.record({ ...U, model: `m${i}` });
   assert.ok(sd.dropped >= 2);
   assert.ok(sd.pending <= 4);
@@ -66,10 +66,10 @@ test("bounded buffer drops the oldest", async () => {
 
 test("disabled records nothing; recordResponse never throws", async () => {
   const core = fakeCore();
-  const sd = stardustWith(core, { enabled: false });
+  const sd = stargrainWith(core, { enabled: false });
   sd.record(U);
   assert.equal(await sd.flush(100), true);
   assert.equal(core.calls, 0);
   const weird = { get usage() { throw new Error("boom"); }, type: "message" };
-  assert.equal(stardustWith(core).recordResponse(weird, { provider: "anthropic" }), undefined);
+  assert.equal(stargrainWith(core).recordResponse(weird, { provider: "anthropic" }), undefined);
 });

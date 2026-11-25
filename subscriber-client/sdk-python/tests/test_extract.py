@@ -3,7 +3,7 @@ import google.genai.types as gt
 import openai.types.chat as oc
 from openai.types.responses import Response
 
-from stardust_sdk.extract import detect_provider, extract, from_anthropic, from_gemini, from_openai
+from stargrain.extract import detect_provider, extract, from_anthropic, from_gemini, from_openai
 
 
 def test_anthropic_counts_cache_reads_and_writes_as_input():

@@ -1,10 +1,10 @@
-// OpenTelemetry output (spec §11). Pass `tracer` to `new Stardust({ tracer })` and every
+// OpenTelemetry output (spec §11). Pass `tracer` to `new Stargrain({ tracer })` and every
 // metered call also becomes a GenAI client span ("chat claude-sonnet-5", gen_ai.*
 // attributes), timed across the real call. Only types are imported from
 // @opentelemetry/api, so the SDK has no runtime dependency on it.
 //
 // When an event is also sent directly, its event_id is derived from the span's ids exactly
-// as Stardust Core derives it for incoming spans, so it is counted once.
+// as Core derives it for incoming spans, so it is counted once.
 
 import { createHash } from "node:crypto";
 
@@ -47,7 +47,7 @@ function clean(attrs: Record<string, unknown>): Record<string, string | number |
   return out;
 }
 
-/** Internal hooks a Call needs from the Stardust client. */
+/** Internal hooks a Call needs from the Stargrain client. */
 export interface CallHost {
   readonly tracer?: Tracer;
   readonly enabled: boolean;
@@ -77,7 +77,7 @@ export class Call {
           }),
         });
       } catch (e) {
-        console.warn("[stardust] could not start a span", e);
+        console.warn("[stargrain] could not start a span", e);
       }
     }
   }
@@ -108,7 +108,7 @@ export class Call {
         }
         this.span.end();
       } catch (e) {
-        console.warn("[stardust] could not end a span", e);
+        console.warn("[stargrain] could not end a span", e);
       }
     }
     if (usage) this.host.queueUsage(usage, this.region, ids);

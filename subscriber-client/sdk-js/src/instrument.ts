@@ -1,6 +1,6 @@
 // Auto-instrument Anthropic, OpenAI and Google Gen AI clients.
 //
-// `instrument(client, stardust)` wraps the client's generation methods in place, so every
+// `instrument(client, stargrain)` wraps the client's generation methods in place, so every
 // call is metered, including streams. The vendor's own return values come back (with
 // promise extras like `.withResponse()` still available), and a metering failure never
 // breaks the API call.
@@ -10,19 +10,19 @@
 //   report usage when you pass stream_options: { include_usage: true }.
 // - @google/genai: models.generateContent and models.generateContentStream
 //
-// With `new Stardust({ tracer })` each call also gets an OpenTelemetry GenAI client span
+// With `new Stargrain({ tracer })` each call also gets an OpenTelemetry GenAI client span
 // that starts with the call and ends when the response (or the stream's last chunk)
 // arrives. Don't combine that with another GenAI instrumentation of the same client, or
 // each call is traced (and metered) twice.
 
-import type { Stardust } from "./client.ts";
+import type { Stargrain } from "./client.ts";
 import { fromAnthropic, fromGemini, fromOpenAI, type Provider, type Usage } from "./extract.ts";
 import type { Call } from "./otel.ts";
 
 type AnyFn = (...args: unknown[]) => unknown;
 type Extractor = (r: unknown, model?: string) => Usage | undefined;
 
-const INSTRUMENTED = Symbol.for("stardust.instrumented");
+const INSTRUMENTED = Symbol.for("stargrain.instrumented");
 
 interface Accumulator {
   feed(event: unknown): void;
@@ -90,7 +90,7 @@ function proxyStream<T extends object>(stream: T, acc: Accumulator, call: Call):
         try {
           acc.feed(event);
         } catch (e) {
-          console.warn("[stardust] could not read a stream event", e);
+          console.warn("[stargrain] could not read a stream event", e);
         }
         yield event;
       }
@@ -125,7 +125,7 @@ function keepExtras<T extends object>(original: T, chained: Promise<unknown>): P
 function wrap(
   owner: Record<string, unknown> | undefined,
   method: string,
-  stardust: Stardust,
+  stargrain: Stargrain,
   provider: Provider,
   operation: string,
   extractor: Extractor,
@@ -147,14 +147,14 @@ function wrap(
       }
       call.finish(extractor(result, model));
     } catch (e) {
-      console.warn("[stardust] metering failed", e);
+      console.warn("[stargrain] metering failed", e);
       call.finish(undefined);
     }
     return result;
   };
 
   const wrapper = function (this: unknown, ...args: unknown[]) {
-    const call = stardust.startCall(provider, operation, field(args[0], "model") as string | undefined, region);
+    const call = stargrain.startCall(provider, operation, field(args[0], "model") as string | undefined, region);
     let result: unknown;
     try {
       result = original.apply(this ?? owner, args);
@@ -186,19 +186,19 @@ function wrap(
 type Client = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 /** Meter every generation call made through `client`. Returns the same client. */
-export function instrument<T extends object>(client: T, stardust: Stardust, options: { region?: string } = {}): T {
+export function instrument<T extends object>(client: T, stargrain: Stargrain, options: { region?: string } = {}): T {
   const c = client as Client;
   const { region } = options;
   if (typeof c.messages?.create === "function" && !c.chat) {
-    wrap(c.messages, "create", stardust, "anthropic", "chat", fromAnthropic, region);
+    wrap(c.messages, "create", stargrain, "anthropic", "chat", fromAnthropic, region);
   } else if (typeof c.chat?.completions?.create === "function") {
-    wrap(c.chat.completions, "create", stardust, "openai", "chat", fromOpenAI, region);
-    wrap(c.responses, "create", stardust, "openai", "chat", fromOpenAI, region);
+    wrap(c.chat.completions, "create", stargrain, "openai", "chat", fromOpenAI, region);
+    wrap(c.responses, "create", stargrain, "openai", "chat", fromOpenAI, region);
   } else if (typeof c.models?.generateContent === "function") {
-    wrap(c.models, "generateContent", stardust, "google", "generate_content", fromGemini, region);
-    wrap(c.models, "generateContentStream", stardust, "google", "generate_content", fromGemini, region, true);
+    wrap(c.models, "generateContent", stargrain, "google", "generate_content", fromGemini, region);
+    wrap(c.models, "generateContentStream", stargrain, "google", "generate_content", fromGemini, region, true);
   } else {
-    throw new TypeError("Stardust can't instrument this client: expected an Anthropic, OpenAI or Google Gen AI client");
+    throw new TypeError("Stargrain can't instrument this client: expected an Anthropic, OpenAI or Google Gen AI client");
   }
   return client;
 }

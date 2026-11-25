@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from stardust_sdk import Order, Quote, Stardust, StardustError, Summary
-from stardust_sdk.client import AUTH_WARNING, DEFAULT_API_BASE
+from stargrain import Order, Quote, Stargrain, StargrainError, Summary
+from stargrain.client import AUTH_WARNING, DEFAULT_API_BASE
 
 
 KEY = "sdk_0123456789abcdef_s3cr3t-value-that-must-never-leak"
@@ -15,13 +15,13 @@ KEY = "sdk_0123456789abcdef_s3cr3t-value-that-must-never-leak"
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    monkeypatch.delenv("STARDUST_API_KEY", raising=False)
-    monkeypatch.delenv("STARDUST_API_BASE", raising=False)
+    for name in ("STARGRAIN_API_KEY", "STARGRAIN_API_BASE", "STARDUST_API_KEY", "STARDUST_API_BASE"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def test_key_is_sent_as_bearer_header(make_core):
     core = make_core()
-    sd = Stardust("http://core.test", api_key=KEY, transport=core)
+    sd = Stargrain("http://core.test", api_key=KEY, transport=core)
     sd.record("anthropic", "claude-sonnet-5", 10, 5)
     assert sd.flush(2)
     assert core.headers[0]["authorization"] == f"Bearer {KEY}"
@@ -30,7 +30,7 @@ def test_key_is_sent_as_bearer_header(make_core):
 
 def test_no_key_sends_no_header(make_core):
     core = make_core()
-    sd = Stardust("http://core.test", transport=core)
+    sd = Stargrain("http://core.test", transport=core)
     sd.record("anthropic", "claude-sonnet-5", 10, 5)
     assert sd.flush(2)
     assert "authorization" not in core.headers[0]
@@ -38,9 +38,9 @@ def test_no_key_sends_no_header(make_core):
 
 
 def test_key_and_base_from_environment(monkeypatch, make_core):
-    monkeypatch.setenv("STARDUST_API_KEY", KEY)
+    monkeypatch.setenv("STARGRAIN_API_KEY", KEY)
     core = make_core()
-    sd = Stardust("http://core.test", transport=core)
+    sd = Stargrain("http://core.test", transport=core)
     sd.record("anthropic", "claude-sonnet-5", 10, 5)
     assert sd.flush(2)
     assert core.headers[0]["authorization"] == f"Bearer {KEY}"
@@ -48,20 +48,36 @@ def test_key_and_base_from_environment(monkeypatch, make_core):
 
 
 def test_api_base_defaults_to_hosted_core_and_env_overrides(monkeypatch, make_core):
-    sd = Stardust(transport=make_core())
+    sd = Stargrain(transport=make_core())
     assert sd.url == DEFAULT_API_BASE + "/v1/events"
     sd.close(0)
-    monkeypatch.setenv("STARDUST_API_BASE", "http://override.test/")
-    sd = Stardust(transport=make_core())
+    monkeypatch.setenv("STARGRAIN_API_BASE", "http://override.test/")
+    sd = Stargrain(transport=make_core())
     assert sd.url == "http://override.test/v1/events"
+    sd.close(0)
+
+
+def test_older_stardust_environment_names_still_work(monkeypatch, make_core):
+    monkeypatch.setenv("STARDUST_API_KEY", KEY)
+    monkeypatch.setenv("STARDUST_API_BASE", "http://legacy.test")
+    core = make_core()
+    sd = Stargrain(transport=core)
+    assert sd.url == "http://legacy.test/v1/events"
+    sd.record("anthropic", "claude-sonnet-5", 10, 5)
+    assert sd.flush(2)
+    assert core.headers[0]["authorization"] == f"Bearer {KEY}"
+    sd.close(1)
+    monkeypatch.setenv("STARGRAIN_API_BASE", "http://new.test")
+    sd = Stargrain(transport=make_core())
+    assert sd.url == "http://new.test/v1/events"
     sd.close(0)
 
 
 @pytest.mark.parametrize("status", [401, 403])
 def test_auth_failure_warns_once_and_does_not_retry(status, caplog, make_core):
     core = make_core([status, status, status])
-    sd = Stardust("http://core.test", api_key=KEY, transport=core)
-    with caplog.at_level(logging.DEBUG, logger="stardust_sdk"):
+    sd = Stargrain("http://core.test", api_key=KEY, transport=core)
+    with caplog.at_level(logging.DEBUG, logger="stargrain"):
         for _ in range(3):
             sd.record("anthropic", "claude-sonnet-5", 10, 5)  # never raises
         assert sd.flush(2)
@@ -74,7 +90,7 @@ def test_auth_failure_warns_once_and_does_not_retry(status, caplog, make_core):
 
 def test_network_errors_and_5xx_still_retry(make_core):
     core = make_core([OSError("down"), 503, 200])
-    sd = Stardust("http://core.test", api_key=KEY, transport=core)
+    sd = Stargrain("http://core.test", api_key=KEY, transport=core)
     sd.record("anthropic", "claude-sonnet-5", 10, 5)
     assert sd.flush(5)
     assert core.calls == 3 and len(core.events) == 1
@@ -83,8 +99,8 @@ def test_network_errors_and_5xx_still_retry(make_core):
 
 def test_key_never_appears_in_logs_repr_or_errors(caplog, make_core):
     core = make_core([401, 422, OSError("down"), 200])
-    sd = Stardust("http://core.test", api_key=KEY, transport=core)
-    with caplog.at_level(logging.DEBUG, logger="stardust_sdk"):
+    sd = Stargrain("http://core.test", api_key=KEY, transport=core)
+    with caplog.at_level(logging.DEBUG, logger="stargrain"):
         for _ in range(3):
             sd.record("anthropic", "claude-sonnet-5", 10, 5)
         sd.flush(5)
@@ -95,8 +111,8 @@ def test_key_never_appears_in_logs_repr_or_errors(caplog, make_core):
     def unauthorized(*_):
         return 401, b'{"detail": "invalid API key", "reason": "unauthorized"}'
 
-    sd2 = Stardust("http://core.test", api_key=KEY, transport=unauthorized)
-    with pytest.raises(StardustError) as e:
+    sd2 = Stargrain("http://core.test", api_key=KEY, transport=unauthorized)
+    with pytest.raises(StargrainError) as e:
         sd2.summary()
     assert e.value.status == 401 and e.value.reason == "unauthorized"
     assert KEY not in str(e.value) and KEY not in repr(e.value)
@@ -141,7 +157,7 @@ ORDER = {"remediation_order_id": "22222222-2222-4222-8222-222222222222", "quote_
 
 def api(responses):
     fake = FakeApi(responses)
-    return Stardust("http://core.test", api_key=KEY, transport=fake), fake
+    return Stargrain("http://core.test", api_key=KEY, transport=fake), fake
 
 
 def test_summary_and_daily():
@@ -182,10 +198,10 @@ def test_quote_order_and_status():
 def test_helper_errors_raise():
     sd, _ = api({("POST", "/v1/remediation/orders"): (400, {"detail": "unknown or already-used quote"}),
                  ("GET", "/v1/remediation/orders/x"): (404, {"detail": "unknown order"})})
-    with pytest.raises(StardustError, match="already-used") as e:
+    with pytest.raises(StargrainError, match="already-used") as e:
         sd.submit_order("q")
     assert e.value.status == 400
-    with pytest.raises(StardustError) as e:
+    with pytest.raises(StargrainError) as e:
         sd.order_status("x")
     assert e.value.status == 404
     sd.close(0)
@@ -193,8 +209,8 @@ def test_helper_errors_raise():
     def down(*_):
         raise OSError("connection refused")
 
-    sd = Stardust("http://core.test", transport=down)
-    with pytest.raises(StardustError) as e:
+    sd = Stargrain("http://core.test", transport=down)
+    with pytest.raises(StargrainError) as e:
         sd.summary()
     assert e.value.status == 0
     sd.close(0)
@@ -203,6 +219,6 @@ def test_helper_errors_raise():
 def test_helpers_need_api_base():
     from opentelemetry.sdk.trace import TracerProvider
 
-    sd = Stardust(None, otel=TracerProvider())
-    with pytest.raises(StardustError, match="no api_base"):
+    sd = Stargrain(None, otel=TracerProvider())
+    with pytest.raises(StargrainError, match="no api_base"):
         sd.summary()
