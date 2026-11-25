@@ -1,8 +1,8 @@
 name: Release SDKs
 
 # Push a tag to publish an SDK:
-#   sdk-py-v0.2.0  -> PyPI  aifore-stardust     (subscriber-client/sdk-python)
-#   sdk-js-v0.2.0  -> npm   @aifore/stardust    (subscriber-client/sdk-js)
+#   sdk-py-v0.2.0  -> PyPI  aifore-stargrain     (subscriber-client/sdk-python)
+#   sdk-js-v0.2.0  -> npm   @aifore/stargrain    (subscriber-client/sdk-js)
 # The tag must match the package's version. Each SDK is built and tested first; only then does a
 # separate job publish it, with trusted publishing (OpenID Connect). No publishing tokens are stored
 # anywhere: PyPI and npm trust this repository and this workflow file instead (see docs/developers.md).
@@ -41,7 +41,7 @@ jobs:
       - name: Check the built package
         run: |
           pip install --force-reinstall dist/*.whl
-          python -c "import stardust_sdk, importlib.metadata as m; assert stardust_sdk.__version__ == m.version('aifore-stardust'), 'version mismatch'"
+          python -c "import stargrain, importlib.metadata as m; assert stargrain.__version__ == m.version('aifore-stargrain'), 'version mismatch'"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: python-dist
@@ -51,7 +51,7 @@ jobs:
   python-publish:
     needs: python-build
     runs-on: ubuntu-latest
-    # Matches the environment named in PyPI's trusted publisher for aifore-stardust.
+    # Matches the environment named in PyPI's trusted publisher for aifore-stargrain.
     environment: pypi
     permissions:
       id-token: write
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: js-package
-          path: subscriber-client/sdk-js/aifore-stardust-*.tgz
+          path: subscriber-client/sdk-js/aifore-stargrain-*.tgz
           if-no-files-found: error
 
   js-publish:
@@ -108,4 +108,4 @@ jobs:
           name: js-package
       # npm trusted publishing (OIDC) needs npm 11.5.1 or later; Node 24 ships with it.
       - run: npm --version
-      - run: npm publish ./aifore-stardust-*.tgz --provenance --access public
+      - run: npm publish ./aifore-stargrain-*.tgz --provenance --access public

@@ -50,11 +50,11 @@ new_key() {
 status=0
 if [ "$which" = all ] || [ "$which" = py ]; then
   key="$(new_key)"; mask "$key"
-  STARDUST_API_BASE="$base" STARDUST_API_KEY="$key" "$PY" scripts/e2e_sandbox.py || status=1
+  STARGRAIN_API_BASE="$base" STARGRAIN_API_KEY="$key" "$PY" scripts/e2e_sandbox.py || status=1
 fi
 if [ "$which" = all ] || [ "$which" = js ]; then
   key="$(new_key)"; mask "$key"
-  STARDUST_API_BASE="$base" STARDUST_API_KEY="$key" node scripts/e2e_sandbox.mjs || status=1
+  STARGRAIN_API_BASE="$base" STARGRAIN_API_KEY="$key" node scripts/e2e_sandbox.mjs || status=1
 fi
 
 # A live key must never see the sandbox provider.

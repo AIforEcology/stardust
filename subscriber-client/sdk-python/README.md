@@ -1,6 +1,6 @@
-# Stardust Python SDK (`aifore-stardust`)
+# Stargrain Python SDK (`aifore-stargrain`)
 
-Meter Anthropic, OpenAI and Gemini API usage, see what it cost and what it cost the planet (electricity, CO₂e, water, and an indicator code such as `B2-S`), and route the CO₂e to vetted carbon-removal providers, through [Stardust Core](https://github.com/AIforEcology/stardust/blob/main/middleware/README.md). Token counts come from each API's own usage data, so they are measured, not estimated (spec §12.1). A project of [AI for Ecology](https://aifore.org).
+Meter Anthropic, OpenAI and Gemini API usage, see what it cost and what it cost the planet (electricity, CO₂e, water, and an indicator code such as `B2-S`), and route the CO₂e to vetted carbon-removal providers, through [AIforE Core](https://github.com/AIforEcology/stardust/blob/main/middleware/README.md). Token counts come from each API's own usage data, so they are measured, not estimated (spec §12.1). A project of [AI for Ecology](https://aifore.org).
 
 - **Python 3.10+.** No dependencies: standard library only.
 - **Never in your way:** events send from a background thread. Recording never blocks or raises, and a metering bug never breaks your API call.
@@ -13,41 +13,41 @@ Meter Anthropic, OpenAI and Gemini API usage, see what it cost and what it cost 
 2. **Install:**
 
    ```bash
-   pip install aifore-stardust
+   pip install aifore-stargrain
    ```
 3. **Set the key:**
 
    ```bash
-   export STARDUST_API_KEY=sdk_...
+   export STARGRAIN_API_KEY=sdk_...
    ```
 4. **Instrument your client:**
 
    ```python
    import anthropic
-   from stardust_sdk import Stardust, instrument
+   from stargrain import Stargrain, instrument
 
-   stardust = Stardust(region="us-east-1")             # https://core.aifore.org, key from STARDUST_API_KEY
-   client = instrument(anthropic.Anthropic(), stardust)
+   stargrain = Stargrain(region="us-east-1")             # https://core.aifore.org, key from STARGRAIN_API_KEY
+   client = instrument(anthropic.Anthropic(), stargrain)
 
    client.messages.create(model="claude-sonnet-5", max_tokens=1024, messages=[...])  # metered
    ```
 5. **Read the summary:**
 
    ```python
-   stardust.flush(5)                       # a short script: wait for events to send
-   s = stardust.summary()
+   stargrain.flush(5)                       # a short script: wait for events to send
+   s = stargrain.summary()
    print(s.cost_usd, s.energy_wh, s.co2e_g, s.water_ml, s.indicator_code)
    ```
 6. **Try remediation with a sandbox key:**
 
    ```python
-   [quote, *_] = stardust.request_quote(co2e_g=s.co2e_g)
-   order = stardust.submit_order(quote)
-   print(stardust.order_status(order).notice)
+   [quote, *_] = stargrain.request_quote(co2e_g=s.co2e_g)
+   order = stargrain.submit_order(quote)
+   print(stargrain.order_status(order).notice)
    # Sandbox test order: no carbon was removed and no money moved.
    ```
 
-The import name is `stardust_sdk` (the PyPI name is `aifore-stardust`).
+The import name is `stargrain` (the PyPI name is `aifore-stargrain`).
 
 ## Auto-instrument a client
 
@@ -64,24 +64,24 @@ The import name is `stardust_sdk` (the PyPI name is `aifore-stardust`).
 ## Record manually
 
 ```python
-stardust.record_response(message)                     # auto-detects Anthropic / OpenAI / Gemini, SDK objects or raw JSON
-stardust.record("anthropic", "claude-sonnet-5", tokens_in=1200, tokens_out=300, tokens_cached_in=800)
+stargrain.record_response(message)                     # auto-detects Anthropic / OpenAI / Gemini, SDK objects or raw JSON
+stargrain.record("anthropic", "claude-sonnet-5", tokens_in=1200, tokens_out=300, tokens_cached_in=800)
 ```
 
 ## OpenTelemetry
 
-Pass `otel=True` to use your app's global tracer provider, or pass a `TracerProvider`. Each metered call then also becomes a standard GenAI client span, for example `chat claude-sonnet-5` with `gen_ai.*` attributes, timed across the real call (including streams). It nests under whatever span is active and flows through your own OTel pipeline. This needs `pip install "aifore-stardust[otel]"`.
+Pass `otel=True` to use your app's global tracer provider, or pass a `TracerProvider`. Each metered call then also becomes a standard GenAI client span, for example `chat claude-sonnet-5` with `gen_ai.*` attributes, timed across the real call (including streams). It nests under whatever span is active and flows through your own OTel pipeline. This needs `pip install "aifore-stargrain[otel]"`.
 
 ```python
-stardust = Stardust(otel=True)          # direct to Core + spans
-stardust = Stardust(None, otel=True)    # spans only: your collector forwards them to Core
+stargrain = Stargrain(otel=True)          # direct to Core + spans
+stargrain = Stargrain(None, otel=True)    # spans only: your collector forwards them to Core
 ```
 
 Direct events reuse the span's ids, so an event that reaches Core both ways is counted once, and Core's `stardust.impact` span lands in the same trace. Don't also enable a separate GenAI instrumentation for the same client, or each call is traced twice. The span attributes are listed in [`schema/otel-attributes.md`](https://github.com/AIforEcology/stardust/blob/main/schema/otel-attributes.md).
 
 ## Reading results and remediation
 
-These mirror Core's REST API and are separate from metering. Because you call them on purpose, they raise `StardustError` (with `.status` and `.reason`) when something goes wrong.
+These mirror Core's REST API and are separate from metering. Because you call them on purpose, they raise `StargrainError` (with `.status` and `.reason`) when something goes wrong.
 
 | Method | Calls | Returns |
 |---|---|---|
@@ -95,12 +95,12 @@ These mirror Core's REST API and are separate from metering. Because you call th
 
 ## Options
 
-`Stardust(api_base=<default>, *, api_key=None, user_id=None, org_id=None, region=None, enabled=True, max_buffer=10_000, timeout=5.0, on_result=None, otel=False)`
+`Stargrain(api_base=<default>, *, api_key=None, user_id=None, org_id=None, region=None, enabled=True, max_buffer=10_000, timeout=5.0, on_result=None, otel=False)`
 
-- `api_base`: Core's URL. Defaults to `STARDUST_API_BASE`, else `https://core.aifore.org`. `None` sends nothing directly (needs `otel`).
-- `api_key`: sent as `Authorization: Bearer <key>`. Defaults to `STARDUST_API_KEY`. It never appears in logs, `repr()` or errors. If Core refuses it (401 or 403), the SDK logs one warning, "Stardust: API key missing or invalid; events are being dropped", and drops events without retrying. Network errors and 5xx are retried as usual.
+- `api_base`: Core's URL. Defaults to `STARGRAIN_API_BASE`, else `https://core.aifore.org`. `None` sends nothing directly (needs `otel`).
+- `api_key`: sent as `Authorization: Bearer <key>`. Defaults to `STARGRAIN_API_KEY`. It never appears in logs, `repr()` or errors. If Core refuses it (401 or 403), the SDK logs one warning, "Stargrain: API key missing or invalid; events are being dropped", and drops events without retrying. Network errors and 5xx are retried as usual.
 
-- `region`: the processing region, which picks the grid factors (e.g. `us-east-1`, `eu-north-1`). `instrument(client, stardust, region=...)` overrides it per client.
+- `region`: the processing region, which picks the grid factors (e.g. `us-east-1`, `eu-north-1`). `instrument(client, stargrain, region=...)` overrides it per client.
 - `on_result`: called with Core's enriched event (indicator code, cost, CO₂e…) for each event sent.
 - `flush(timeout)` waits for the queue to drain; `close()` flushes and stops. Both also run at interpreter exit (2 s limit).
 

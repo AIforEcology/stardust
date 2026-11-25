@@ -11,11 +11,11 @@ from typing import Any, Dict, Optional, Type, TypeVar
 T = TypeVar("T")
 
 
-class StardustError(Exception):
+class StargrainError(Exception):
     """A user-initiated call to Core failed. ``status`` is the HTTP status (0: Core unreachable)."""
 
     def __init__(self, status: int, message: str, reason: Optional[str] = None):
-        super().__init__(f"Stardust Core: {message}" + (f" (HTTP {status})" if status else ""))
+        super().__init__(f"Core: {message}" + (f" (HTTP {status})" if status else ""))
         self.status, self.message, self.reason = status, message, reason
 
 

@@ -1,4 +1,4 @@
-// Queues usage events and sends them to Stardust Core in the background.
+// Queues usage events and sends them to Core in the background.
 // Recording never blocks or throws in the caller's code path (spec §15), and events are
 // buffered and retried with backoff while Core is unreachable (§15 offline resilience).
 
@@ -10,20 +10,20 @@ import {
   type DailySummary,
   type Order,
   type Quote,
-  StardustError,
+  StargrainError,
   type Summary,
 } from "./results.ts";
 
 export const DEFAULT_API_BASE = "https://core.aifore.org";
-export const AUTH_WARNING = "Stardust: API key missing or invalid; events are being dropped";
+export const AUTH_WARNING = "Stargrain: API key missing or invalid; events are being dropped";
 
-export interface StardustOptions {
+export interface StargrainOptions {
   /**
-   * Stardust Core URL. Defaults to `STARDUST_API_BASE`, else https://core.aifore.org.
+   * Core URL. Defaults to `STARGRAIN_API_BASE` (or the older `STARDUST_API_BASE`), else https://core.aifore.org.
    * `null` sends nothing directly (with `tracer`: spans only, via your collector).
    */
   apiBase?: string | null;
-  /** API key, sent as `Authorization: Bearer <key>`. Defaults to `STARDUST_API_KEY`. */
+  /** API key, sent as `Authorization: Bearer <key>`. Defaults to `STARGRAIN_API_KEY` (or the older `STARDUST_API_KEY`). */
   apiKey?: string;
   /** An OpenTelemetry tracer: each metered call also becomes a GenAI client span. */
   tracer?: Tracer;
@@ -64,7 +64,7 @@ function isoWithOffset(d: Date): string {
   );
 }
 
-export class Stardust implements CallHost {
+export class Stargrain implements CallHost {
   readonly url: string | null;
   readonly apiBase: string | null;
   readonly tracer?: Tracer;
@@ -72,7 +72,7 @@ export class Stardust implements CallHost {
   // A true private field: never in JSON.stringify, util.inspect or console.log output.
   readonly #apiKey: string | undefined;
   private authWarned = false;
-  private readonly opts: Omit<StardustOptions, "apiKey">;
+  private readonly opts: Omit<StargrainOptions, "apiKey">;
   private readonly fetchImpl: typeof fetch;
   private readonly buffer: UsageEvent[] = [];
   private sending = false;
@@ -82,13 +82,13 @@ export class Stardust implements CallHost {
   private flushing = 0;
   private closed = false;
 
-  constructor(opts: StardustOptions = {}) {
+  constructor(opts: StargrainOptions = {}) {
     const { apiKey, ...rest } = opts;
     this.opts = { enabled: true, maxBuffer: 10_000, timeoutMs: 5_000, ...rest };
-    if (opts.apiBase === null && !opts.tracer) throw new Error("Stardust needs apiBase, tracer, or both");
-    this.apiBase = opts.apiBase === null ? null : (opts.apiBase ?? env("STARDUST_API_BASE") ?? DEFAULT_API_BASE).replace(/\/+$/, "");
+    if (opts.apiBase === null && !opts.tracer) throw new Error("Stargrain needs apiBase, tracer, or both");
+    this.apiBase = opts.apiBase === null ? null : (opts.apiBase ?? env("STARGRAIN_API_BASE") ?? env("STARDUST_API_BASE") ?? DEFAULT_API_BASE).replace(/\/+$/, "");
     this.url = this.apiBase === null ? null : `${this.apiBase}/v1/events`;
-    this.#apiKey = apiKey || env("STARDUST_API_KEY");
+    this.#apiKey = apiKey || (env("STARGRAIN_API_KEY") ?? env("STARDUST_API_KEY"));
     this.tracer = opts.tracer;
     this.fetchImpl = opts.fetch ?? globalThis.fetch.bind(globalThis);
   }
@@ -164,7 +164,7 @@ export class Stardust implements CallHost {
     if (this.buffer.length >= (this.opts.maxBuffer ?? 10_000)) {
       this.buffer.shift();
       this.dropped++;
-      console.warn("[stardust] buffer full; dropping the oldest event");
+      console.warn("[stargrain] buffer full; dropping the oldest event");
     }
     this.buffer.push(event);
     this.kick();
@@ -177,7 +177,7 @@ export class Stardust implements CallHost {
       if (usage) this.record(usage, { region: options.region });
       return usage;
     } catch (e) {
-      console.warn("[stardust] could not read usage from a response", e);
+      console.warn("[stargrain] could not read usage from a response", e);
       return undefined;
     }
   }
@@ -207,7 +207,7 @@ export class Stardust implements CallHost {
     await this.flush(timeoutMs);
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
-    if (this.buffer.length) console.warn(`[stardust] closed with ${this.buffer.length} unsent events`);
+    if (this.buffer.length) console.warn(`[stargrain] closed with ${this.buffer.length} unsent events`);
   }
 
   private kick(now = false): void {
@@ -268,7 +268,7 @@ export class Stardust implements CallHost {
         try {
           this.opts.onResult((await res.json()) as Record<string, unknown>);
         } catch (e) {
-          console.warn("[stardust] onResult failed", e);
+          console.warn("[stargrain] onResult failed", e);
         }
       }
       return false;
@@ -283,14 +283,14 @@ export class Stardust implements CallHost {
       }
       return false;
     }
-    console.warn(`[stardust] Core rejected an event (${res.status}): ${(await res.text()).slice(0, 500)}`);
+    console.warn(`[stargrain] Core rejected an event (${res.status}): ${(await res.text()).slice(0, 500)}`);
     return false;
   }
 
-  // --- reading results and remediation (user-initiated: these reject with StardustError) ------
+  // --- reading results and remediation (user-initiated: these reject with StargrainError) ------
 
   private async request<T>(method: string, path: string, body?: unknown, query?: Record<string, string | undefined>): Promise<T> {
-    if (!this.apiBase) throw new StardustError(0, "this Stardust client has no apiBase, so it can't call Core");
+    if (!this.apiBase) throw new StargrainError(0, "this Stargrain client has no apiBase, so it can't call Core");
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(query ?? {})) if (v != null) q.set(k, v);
     const url = `${this.apiBase}${path}${q.size ? `?${q}` : ""}`;
@@ -303,7 +303,7 @@ export class Stardust implements CallHost {
         signal: AbortSignal.timeout(this.opts.timeoutMs ?? 5_000),
       });
     } catch (e) {
-      throw new StardustError(0, `could not reach Stardust Core at ${this.apiBase} (${(e as Error)?.name ?? "error"})`);
+      throw new StargrainError(0, `could not reach Core at ${this.apiBase} (${(e as Error)?.name ?? "error"})`);
     }
     const text = await res.text();
     let payload: unknown;
@@ -315,7 +315,7 @@ export class Stardust implements CallHost {
     if (!res.ok) {
       const p = (payload ?? {}) as { detail?: unknown; reason?: string };
       const detail = typeof p.detail === "string" ? p.detail : res.status === 401 ? "API key missing or invalid" : text.slice(0, 200) || `HTTP ${res.status}`;
-      throw new StardustError(res.status, detail, p.reason);
+      throw new StargrainError(res.status, detail, p.reason);
     }
     return payload as T;
   }

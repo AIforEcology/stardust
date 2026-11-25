@@ -4,7 +4,7 @@ import { test } from "node:test";
 import Anthropic from "@anthropic-ai/sdk";
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 
-import { Stardust } from "../src/client.ts";
+import { Stargrain } from "../src/client.ts";
 import { instrument } from "../src/instrument.ts";
 import { eventIdForSpan } from "../src/otel.ts";
 import { fakeCore, sse, vendorFetch } from "./helpers.ts";
@@ -34,7 +34,7 @@ test("event ids match Core's derivation (same as Python uuid5)", () => {
 test("GenAI span per call, linked to the direct event", async () => {
   const { exporter, tracer } = tracing();
   const core = fakeCore();
-  const sd = new Stardust({ apiBase: "http://core.test", fetch: core.fetch, tracer, region: "us-east-1", orgId: "0b5f6f0e-8a52-4a8e-9f0b-7c1d2e3f4a5b" });
+  const sd = new Stargrain({ apiBase: "http://core.test", fetch: core.fetch, tracer, region: "us-east-1", orgId: "0b5f6f0e-8a52-4a8e-9f0b-7c1d2e3f4a5b" });
   const client = instrument(new Anthropic({ apiKey: "test", fetch: vendorFetch(MESSAGE, STREAM), maxRetries: 0 }), sd);
   await client.messages.create(ARGS);
   await sd.flush(2000);
@@ -59,7 +59,7 @@ test("GenAI span per call, linked to the direct event", async () => {
 
 test("span stays open until the stream ends; tracer-only mode sends nothing directly", async () => {
   const { exporter, tracer } = tracing();
-  const sd = new Stardust({ apiBase: null, tracer });
+  const sd = new Stargrain({ apiBase: null, tracer });
   const client = instrument(new Anthropic({ apiKey: "test", fetch: vendorFetch(MESSAGE, STREAM), maxRetries: 0 }), sd);
   const stream = await client.messages.create({ ...ARGS, stream: true });
   const it = stream[Symbol.asyncIterator]();
@@ -74,7 +74,7 @@ test("span stays open until the stream ends; tracer-only mode sends nothing dire
 test("API errors mark the span and record no usage", async () => {
   const { exporter, tracer } = tracing();
   const core = fakeCore();
-  const sd = new Stardust({ apiBase: "http://core.test", fetch: core.fetch, tracer });
+  const sd = new Stargrain({ apiBase: "http://core.test", fetch: core.fetch, tracer });
   const failing = (async () => new Response(JSON.stringify({ type: "error", error: { type: "api_error", message: "down" } }), {
     status: 500, headers: { "content-type": "application/json" },
   })) as unknown as typeof fetch;
@@ -90,7 +90,7 @@ test("API errors mark the span and record no usage", async () => {
 
 test("manual record emits a span with the semconv provider name", () => {
   const { exporter, tracer } = tracing();
-  const sd = new Stardust({ apiBase: null, tracer });
+  const sd = new Stargrain({ apiBase: null, tracer });
   sd.record({ provider: "google", model: "gemini-2.5-flash", tokensIn: 100, tokensOut: 10 });
   const [span] = exporter.getFinishedSpans();
   assert.equal(span.name, "generate_content gemini-2.5-flash");
@@ -98,8 +98,8 @@ test("manual record emits a span with the semconv provider name", () => {
 });
 
 test("needs apiBase or tracer; disabled emits no spans", () => {
-  assert.throws(() => new Stardust({ apiBase: null }));
+  assert.throws(() => new Stargrain({ apiBase: null }));
   const { exporter, tracer } = tracing();
-  new Stardust({ apiBase: null, tracer, enabled: false }).record({ provider: "openai", model: "gpt-4o", tokensIn: 1, tokensOut: 1 });
+  new Stargrain({ apiBase: null, tracer, enabled: false }).record({ provider: "openai", model: "gpt-4o", tokensIn: 1, tokensOut: 1 });
   assert.equal(exporter.getFinishedSpans().length, 0);
 });

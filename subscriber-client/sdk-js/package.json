@@ -1,7 +1,7 @@
 {
-  "name": "@aifore/stardust",
+  "name": "@aifore/stargrain",
   "version": "0.2.0",
-  "description": "Stardust SDK by AIforE: meter Anthropic, OpenAI and Gemini API usage (measured tokens), see its cost, energy, CO2e and water, and request remediation, via Stardust Core.",
+  "description": "Stargrain SDK by AIforE: meter Anthropic, OpenAI and Gemini API usage (measured tokens), see its cost, energy, CO2e and water, and request remediation, via Core.",
   "license": "Apache-2.0",
   "author": "AI for Ecology (AIforE)",
   "homepage": "https://aifore.org",

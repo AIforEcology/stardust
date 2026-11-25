@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""End-to-end check of the Python SDK against a Stardust Core, with a sandbox key.
+"""End-to-end check of the Python SDK against a Core, with a sandbox key.
 
-    STARDUST_API_KEY=sdk_... python3 scripts/e2e_sandbox.py      # STARDUST_API_BASE defaults to hosted Core
+    STARGRAIN_API_KEY=sdk_... python3 scripts/e2e_sandbox.py      # STARGRAIN_API_BASE defaults to hosted Core
 
 1. Sends 3 metered events from recorded fake usage (no real LLM call).
 2. Reads the summary and checks the totals went up.
@@ -9,7 +9,7 @@
 4. Checks "sandbox": true on the quote, the order and the certificate.
 
 Refuses to run with a live key, so it can never place a real order. Exits non-zero on any failure.
-Uses the installed aifore-stardust, or the SDK in this repository if it isn't installed.
+Uses the installed aifore-stargrain, or the SDK in this repository if it isn't installed.
 """
 
 from __future__ import annotations
@@ -21,10 +21,10 @@ import uuid
 from pathlib import Path
 
 try:
-    from stardust_sdk import Stardust, StardustError
+    from stargrain import Stargrain, StargrainError
 except ImportError:  # run from a clone without installing
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "subscriber-client" / "sdk-python" / "src"))
-    from stardust_sdk import Stardust, StardustError
+    from stargrain import Stargrain, StargrainError
 
 # Recorded usage, shaped like the vendors' own API responses (usage only; no prompt or reply text).
 ANTHROPIC_MESSAGE = {"type": "message", "model": "claude-sonnet-4-5", "role": "assistant",
@@ -40,12 +40,12 @@ def check(ok: bool, what: str) -> None:
 
 
 def main() -> int:
-    if not os.environ.get("STARDUST_API_KEY"):
-        print("Set STARDUST_API_KEY to a sandbox key (and STARDUST_API_BASE for a Core other than the hosted one).")
+    if not os.environ.get("STARGRAIN_API_KEY"):
+        print("Set STARGRAIN_API_KEY to a sandbox key (and STARGRAIN_API_BASE for a Core other than the hosted one).")
         return 2
     accepted = []
-    sd = Stardust(region="us-east-1", on_result=accepted.append)
-    print(f"Stardust Core: {sd.api_base} (Python SDK)")
+    sd = Stargrain(region="us-east-1", on_result=accepted.append)
+    print(f"Core: {sd.api_base} (Python SDK)")
 
     before = sd.summary()
     if not before.sandbox:
@@ -96,6 +96,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except StardustError as e:
+    except StargrainError as e:
         print(f"  FAIL  {e}")
         sys.exit(1)
